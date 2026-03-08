@@ -1,0 +1,26 @@
+---
+import { API_BASE_URL } from '../../config';
+
+export const prerender = false;
+
+const upstream = `${API_BASE_URL}/master.html${Astro.url.search ?? ''}`;
+const res = await fetch(upstream);
+const ct = res.headers.get('content-type') || 'text/html; charset=utf-8';
+let body = await res.text();
+
+const earlyTabScript =
+  '<script>(function(){if(window.showTab)return;window.showTab=function(name,btn){try{document.querySelectorAll(".tab-content").forEach(function(el){el.style.display="none";});document.querySelectorAll(".tab-btn").forEach(function(b){b.classList.remove("active");});var target=document.getElementById("tab-"+name);if(target)target.style.display="block";if(btn)btn.classList.add("active");}catch(e){console.error(e);}};})();</' +
+  'script>';
+body = body.replace(/<body([^>]*)>/i, `<body$1>${earlyTabScript}`);
+
+const backendOrigin = API_BASE_URL.replace(/\/$/, '');
+body = body.replaceAll(`${backendOrigin}/favicon.ico`, '/favicon.svg');
+body = body.replaceAll(backendOrigin, '');
+body = body.replace(/\/\$\{shop\.slug\}\/admin\.html/g, '/admin/${shop.slug}/login');
+body = body.replaceAll('onclick="showTab(', 'onclick="window.showTab(');
+
+return new Response(body, {
+  status: res.status,
+  headers: { 'Content-Type': ct },
+});
+---

@@ -1,0 +1,66 @@
+
+> meituan-astro@0.0.1 dev D:\ai\meituan\meituanAstro
+> astro dev
+
+[2m18:09:15[22m [34m[@astrojs/cloudflare][39m Enabling sessions with Cloudflare KV with the "SESSION" KV binding.
+[2m18:09:15[22m [34m[@astrojs/cloudflare][39m If you see the error "Invalid binding `SESSION`" in your build output, you need to add the binding to your wrangler config file.
+[33m[1m18:09:15[22m [WARN] [adapter][39m Cloudflare does not support sharp at runtime. However, you can configure `imageService: "compile"` to optimize images with sharp on prerendered pages during build time.
+Using vars defined in .env
+[2m18:09:16[22m [34m[types][39m Generated [2m1ms[22m
+[2m18:09:16[22m [34m[content][39m Syncing content
+[2m18:09:16[22m [34m[content][39m Synced content
+
+[42m[1m astro [22m[49m [32mv5.17.2[39m [2mready in[22m 3024 [2mms[22m
+
+[2m┃[22m Local    [36mhttp://localhost:3000/[39m
+[2m┃[22m Network  [2muse --host to expose[22m
+
+[2m18:09:16[22m [32mwatching for file changes...[39m
+[2m18:09:18[22m [34m[200][39m /api/stream/01 [2m783ms[22m
+[2m18:09:18[22m [34m[200][39m /api/stream/01 [2m659ms[22m
+[2m18:09:18[22m [34m[200][39m /admin/01 [2m430ms[22m
+[2m18:09:19[22m [34m[200][39m /api/stream/01 [2m106ms[22m
+[2m18:09:20[22m [34m[200][39m /api/admin/rate [2m49ms[22m
+[2m18:09:20[22m [34m[200][39m /api/admin/stats [2m69ms[22m
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+[2m18:14:45[22m [34m[200][39m /01 [2m463ms[22m
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+[2m18:14:47[22m [34m[200][39m /01 [2m313ms[22m
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+[2m18:15:04[22m [34m[200][39m /01 [2m325ms[22m
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+[2m18:15:07[22m [34m[200][39m /01 [2m250ms[22m
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+[2m18:15:07[22m [34m[200][39m /01 [2m302ms[22m
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+[2m18:15:07[22m [34m[200][39m /01 [2m239ms[22m
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+[2m18:15:08[22m [34m[200][39m /01 [2m232ms[22m
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+⏰ 营业时间设置: { enabled: true, open: '08:00', close: '03:00', msg: 'Closed' } -> open: 08:00 close: 03:00
+[CartModal] isShopOpen: true total.count: 0
+[2m18:15:08[22m [34m[200][39m /01 [2m236ms[22m
+[2m18:15:19[22m [34m[200][39m /01/manifest.webmanifest [2m2ms[22m
+ ELIFECYCLE  Command failed with exit code 3221225786.

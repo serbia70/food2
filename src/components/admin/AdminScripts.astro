@@ -1,0 +1,2364 @@
+---
+const { shopId, shopSlug, tableConfig, settings, brokerIp, shop } = Astro.props;
+---
+<script src="/vendor/mqttws31.min.js" is:inline></script>
+<script define:vars={{ shopId, shopSlug, tableConfig, settings, brokerIp, shop }} is:inline>
+  window.shopId = shopId;
+  window.shopSlug = shopSlug;
+  window.tableConfig = tableConfig;
+  window.currentSettings = settings;
+  window.brokerIp = brokerIp;
+  window.mqttSecret = shop ? shop.mqtt_secret : 'default';
+</script>
+
+<script is:inline>
+  if (!window.__adminHandlers) {
+    window.__adminHandlers = {};
+  }
+  if (!window.__adminPendingActions) {
+    window.__adminPendingActions = [];
+  }
+
+  if (!window.__adminFetchWrapped) {
+    const __rawFetch = window.fetch.bind(window);
+    window.fetch = async function(input, init) {
+      const reqInit = init ? { ...init } : {};
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      const isAdminApi = url.startsWith('/api/admin/');
+
+      if (isAdminApi) {
+        const headers = new Headers(reqInit.headers || {});
+        if (!headers.has('Authorization')) {
+          try {
+            const token = localStorage.getItem('token') || '';
+            if (token) headers.set('Authorization', `Bearer ${token}`);
+          } catch {}
+        }
+        reqInit.headers = headers;
+      }
+
+      const res = await __rawFetch(input, reqInit);
+      if (isAdminApi && res.status === 401) {
+        try {
+          localStorage.removeItem('token');
+        } catch {}
+        location.href = `/admin/${window.shopSlug}/login`;
+      }
+      return res;
+    };
+    window.__adminFetchWrapped = true;
+  }
+
+  if (!window.__adminActionDelegationInstalled) {
+    const flushPendingActions = () => {
+      const pending = Array.isArray(window.__adminPendingActions)
+        ? window.__adminPendingActions
+        : [];
+      if (!pending.length) return;
+
+      const remained = [];
+      pending.forEach((job) => {
+        const fn = getHandler(job.fnName);
+        if (typeof fn === 'function') {
+          try {
+            fn(...(Array.isArray(job.args) ? job.args : []));
+          } catch (e) {
+            console.error('[AdminAction] Pending action failed:', job.fnName, e);
+          }
+        } else {
+          remained.push(job);
+        }
+      });
+      window.__adminPendingActions = remained.slice(-30);
+    };
+
+    const getHandler = (fnName) => {
+      const registry = window.__adminHandlers || {};
+      const fromRegistry = registry[fnName];
+      if (typeof fromRegistry === 'function') return fromRegistry;
+
+      const fromWindow = window[fnName];
+      if (typeof fromWindow === 'function') {
+        registry[fnName] = fromWindow;
+        window.__adminHandlers = registry;
+        return fromWindow;
+      }
+      return null;
+    };
+
+    const invoke = (fnName, ...args) => {
+      const fn = getHandler(fnName);
+      if (typeof fn !== 'function') {
+        const pending = Array.isArray(window.__adminPendingActions)
+          ? window.__adminPendingActions
+          : [];
+        pending.push({ fnName, args, createdAt: Date.now() });
+        window.__adminPendingActions = pending.slice(-30);
+
+        if (!window.__adminPendingHintShownAt || Date.now() - window.__adminPendingHintShownAt > 1500) {
+          window.__adminPendingHintShownAt = Date.now();
+          console.log(`[AdminAction] Queued action until handler ready: ${fnName}`);
+        }
+        return;
+      }
+      fn(...args);
+    };
+
+    document.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const actionEl = target.closest('[data-admin-action]');
+      if (!(actionEl instanceof HTMLElement)) return;
+
+      event.preventDefault();
+
+      const action = actionEl.dataset.adminAction || '';
+      const table = actionEl.dataset.table || '';
+      const orderId = Number(actionEl.dataset.orderId || '0');
+      const toInt = (value) => Number.parseInt(String(value || '0'), 10) || 0;
+
+      switch (action) {
+        case 'show-tab':
+          invoke('showTab', actionEl.dataset.tabName || 'tables');
+          break;
+        case 'enable-audio':
+          invoke('enableAudio');
+          break;
+        case 'test-sound':
+          invoke('testSound');
+          break;
+        case 'reload-page':
+          location.reload();
+          break;
+        case 'system-control':
+          invoke('systemControl', actionEl.dataset.command || 'reboot');
+          break;
+        case 'logout':
+          invoke('logout');
+          break;
+        case 'open-create-category':
+          invoke('openCreateCategoryModal');
+          break;
+        case 'localize-images':
+          invoke('localizeImages');
+          break;
+        case 'move-category':
+          invoke('moveCategory', toInt(actionEl.dataset.categoryId), actionEl.dataset.direction || 'up');
+          break;
+        case 'delete-category':
+          invoke('delCategory', toInt(actionEl.dataset.categoryId), toInt(actionEl.dataset.productCount));
+          break;
+        case 'move-product':
+          invoke('moveProduct', toInt(actionEl.dataset.productId), actionEl.dataset.direction || 'up', toInt(actionEl.dataset.categoryId));
+          break;
+        case 'open-edit-product':
+          invoke('openEditModal', event, toInt(actionEl.dataset.productId), toInt(actionEl.dataset.categoryId));
+          break;
+        case 'delete-product':
+          invoke('delProd', toInt(actionEl.dataset.productId));
+          break;
+        case 'trigger-upload':
+          invoke('triggerUpload', actionEl.dataset.targetInput || '');
+          break;
+        case 'add-product':
+          invoke('addProd', toInt(actionEl.dataset.shopId), toInt(actionEl.dataset.categoryId));
+          break;
+        case 'reservation-filter':
+          invoke('setReservationDateFilter', actionEl.dataset.mode || 'today');
+          break;
+        case 'load-reservations':
+          invoke('loadReservations');
+          break;
+        case 'print-reservation':
+          invoke('printReservation', toInt(actionEl.dataset.reservationId));
+          break;
+        case 'update-reservation-status':
+          invoke('updateReservationStatus', toInt(actionEl.dataset.reservationId), actionEl.dataset.status || 'pending');
+          break;
+        case 'add-zone':
+          invoke('addZone');
+          break;
+        case 'remove-zone':
+          invoke('removeZone', toInt(actionEl.dataset.zoneIndex));
+          break;
+        case 'save-table-config':
+          invoke('saveTableConfig', event);
+          break;
+        case 'save-location':
+          invoke('saveLocation');
+          break;
+        case 'fetch-rate':
+          invoke('fetchRate');
+          break;
+        case 'update-shop-name':
+          invoke('updateShopName');
+          break;
+        case 'open-logo-upload': {
+          const input = document.getElementById('shop-logo-input');
+          if (input instanceof HTMLInputElement) input.click();
+          break;
+        }
+        case 'update-shop-category':
+          invoke('updateShopCategory');
+          break;
+        case 'update-mqtt-secret':
+          invoke('updateMqttSecret');
+          break;
+        case 'load-order-stats':
+          invoke('loadOrderStats');
+          break;
+        case 'archive-old-orders':
+          invoke('archiveOldOrders');
+          break;
+        case 'delete-archived-orders':
+          invoke('deleteArchivedOrders');
+          break;
+        case 'save-delivery-type':
+          invoke('saveDeliveryType');
+          break;
+        case 'remove-driver':
+          invoke('removeDriver', toInt(actionEl.dataset.driverIndex));
+          break;
+        case 'add-driver':
+          invoke('addDriver');
+          break;
+        case 'load-stats':
+          invoke('loadStats');
+          break;
+        case 'import-data':
+          invoke('importData');
+          break;
+        case 'export-data':
+          invoke('exportData');
+          break;
+        case 'update-password':
+          invoke('updatePassword', event);
+          break;
+        case 'close-edit-modal':
+          invoke('closeEditModal');
+          break;
+        case 'save-edit-product':
+          invoke('saveEditProd');
+          break;
+        case 'confirm-delivery':
+          invoke('confirmDelivery');
+          break;
+        case 'close-delivery-modal':
+          invoke('closeDeliveryModal');
+          break;
+        case 'select-driver':
+          invoke('selectDriver', actionEl, toInt(actionEl.dataset.driverIndex));
+          break;
+        case 'close-create-category-modal': {
+          const modal = document.getElementById('create-cat-modal');
+          if (modal) modal.style.display = 'none';
+          break;
+        }
+        case 'save-new-category':
+          invoke('saveNewCategory');
+          break;
+        case 'add-item-to-order':
+          invoke('addItemToOrder');
+          break;
+        case 'change-item-qty':
+          invoke('changeItemQty', actionEl.dataset.itemKey || '', toInt(actionEl.dataset.delta));
+          break;
+        case 'remove-order-item':
+          invoke('removeOrderItem', actionEl.dataset.itemKey || '');
+          break;
+        case 'close-order-edit-modal':
+          invoke('closeOrderEditModal');
+          break;
+        case 'print-current-order':
+          invoke('printOrder');
+          break;
+        case 'save-order-edit':
+          invoke('saveOrderEdit');
+          break;
+        case 'close-order-modal':
+          invoke('closeOrderModal');
+          break;
+        case 'close-checkout-modal':
+          invoke('closeCheckoutModal');
+          break;
+        case 'confirm-checkout':
+          invoke('confirmCheckout');
+          break;
+        case 'close-remarks-modal':
+          invoke('closeRemarksModal');
+          break;
+        case 'save-remarks':
+          invoke('saveRemarks');
+          break;
+        case 'close-details-modal':
+          invoke('closeDetailsModal');
+          break;
+        case 'table-order':
+          invoke('handleTableOrder', table);
+          break;
+        case 'table-checkout':
+          invoke('handleTableCheckout', table);
+          break;
+        case 'table-modify':
+          invoke('handleModify', table);
+          break;
+        case 'table-remarks':
+          invoke('handleTableRemarks', table);
+          break;
+        case 'approve-table-reviews':
+          invoke('approveTableReviews', table);
+          break;
+        case 'reject-table-reviews':
+          invoke('rejectTableReviews', table);
+          break;
+        case 'table-print':
+          invoke('handlePrintTable', table);
+          break;
+        case 'open-delivery':
+          invoke('openDeliveryModal', orderId);
+          break;
+        case 'mark-paid':
+          invoke('markPaid', orderId);
+          break;
+        case 'open-reject':
+          invoke('openRejectModal', orderId);
+          break;
+        case 'order-remarks':
+          invoke('handleTableRemarks', null, orderId);
+          break;
+        case 'edit-order': {
+          const trigger = document.querySelector(`[data-oid="${orderId}"]`);
+          invoke('handleEditOrder', trigger);
+          break;
+        }
+        case 'print-order':
+          invoke('printOrder', orderId);
+          break;
+        default:
+          break;
+      }
+    });
+
+    document.addEventListener('submit', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLFormElement)) return;
+
+      if (target.id === 'settings-form') {
+        event.preventDefault();
+        invoke('saveSettings', event);
+        return;
+      }
+
+      if (target.id === 'password-form') {
+        event.preventDefault();
+        invoke('updatePassword', event);
+      }
+    });
+
+    document.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      if (target instanceof HTMLSelectElement && target.dataset.adminChange === 'sound-mode') {
+        invoke('changeSoundMode', target.value);
+        return;
+      }
+
+      if (target instanceof HTMLSelectElement && target.dataset.adminChange === 'edit-category') {
+        invoke('toggleNewCat');
+        return;
+      }
+
+      if (target instanceof HTMLInputElement && target.id === 'shop-logo-input') {
+        invoke('uploadShopLogo', target);
+        return;
+      }
+
+      if (target instanceof HTMLInputElement && target.dataset.adminChange === 'global-file-upload') {
+        invoke('handleFileUpload', event);
+        return;
+      }
+
+      if (target instanceof HTMLInputElement && target.dataset.adminZoneInput === '1') {
+        invoke(
+          'updateZone',
+          Number.parseInt(target.dataset.zoneIndex || '0', 10) || 0,
+          target.dataset.zoneField || 'name',
+          target.value,
+        );
+      }
+    });
+
+    document.addEventListener(
+      'error',
+      (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLImageElement)) return;
+        const fallback = target.dataset.fallbackSrc;
+        if (!fallback) return;
+        if (target.dataset.fallbackApplied === '1') return;
+        target.dataset.fallbackApplied = '1';
+        target.src = fallback;
+      },
+      true,
+    );
+
+    window.addEventListener('admin:handlers-registered', flushPendingActions);
+    window.addEventListener('load', flushPendingActions);
+    flushPendingActions();
+
+    window.__adminActionDelegationInstalled = true;
+  }
+
+  // ============================================
+  // MQTT & Audio Logic
+  // ============================================
+
+  let client;
+  const isSecure = window.location.protocol === 'https:';
+
+  function getMqttTopic() {
+    return `restaurant/${window.shopSlug}/${window.mqttSecret || 'default'}/order`;
+  }
+
+  window.initMqtt = function() {
+    if (window.__adminMqttInitInFlight) {
+      return;
+    }
+    // prevent duplicate init
+    if (window.mqttClient && (window.mqttClient.connected || window.mqttClient.connecting)) {
+      console.log('[MQTT] Already connected or connecting, skip init');
+      return;
+    }
+    if (typeof Paho === 'undefined') {
+      console.error('[MQTT] Paho client not loaded');
+      return;
+    }
+
+    window.__adminMqttInitInFlight = true;
+
+    const clientId = 'admin_' + window.shopSlug + '_' + Math.random().toString(16).slice(2, 8);
+
+    // smarter connection strategy
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const rawBroker = window.brokerIp || 'mqtt.serbia70.com';
+    const mqttUser = (window.currentSettings && window.currentSettings.mqtt_username) || '';
+    const mqttPass = (window.currentSettings && window.currentSettings.mqtt_password) || '';
+
+    // core routing:
+    // 1) if broker contains serbia70.com, use remote 443/wss path
+    // 2) otherwise treat as local broker for development
+    const isRemoteProd = rawBroker.includes('serbia70.com');
+
+    // local dev: prefer WS + 8083 for local broker
+    // if local page connects remote broker, keep remote strategy
+
+    const finalHost = isRemoteProd ? 'mqtt.serbia70.com' : rawBroker;
+    const finalPort = isRemoteProd ? 443 : (isLocal ? 8083 : 8083);
+    const finalPath = isRemoteProd ? '/mqtt' : '/mqtt';
+    const finalSSL = isRemoteProd ? true : false; // local dev does not use SSL
+
+    window.__mqttConnectStartedAt = performance.now();
+    console.log(`[MQTT] Connecting to ${finalSSL ? 'wss' : 'ws'}://${finalHost}:${finalPort}${finalPath} (isLocal: ${isLocal}, isRemoteProd: ${isRemoteProd})`);
+    client = new Paho.MQTT.Client(finalHost, Number(finalPort), finalPath || '/', clientId);
+
+    // Expose client globally for other scripts (like table-management.js)
+    window.mqttClient = client;
+
+    client.onConnectionLost = onConnectionLost;
+    client.onMessageArrived = onMessageArrived;
+
+    const options = {
+      useSSL: finalSSL,
+      timeout: 5,
+      keepAliveInterval: 60,
+      ...(mqttUser ? { userName: mqttUser } : {}),
+      ...(mqttPass ? { password: mqttPass } : {}),
+      onSuccess: onConnect,
+      onFailure: (e) => {
+        window.__adminMqttInitInFlight = false;
+        console.log('MQTT connect failed', e);
+        updateMqttStatus('failed');
+        setTimeout(() => window.initMqtt && window.initMqtt(), 1000); // 1秒后重试
+      }
+    };
+    try {
+      client.connect(options);
+    } catch(e) {
+      window.__adminMqttInitInFlight = false;
+      console.error('MQTT Connect Error:', e);
+    }
+  }
+
+  // Expose getMqttTopic globally
+  window.getMqttTopic = getMqttTopic;
+
+  function onConnect() {
+    window.__adminMqttInitInFlight = false;
+    const startedAt = Number(window.__mqttConnectStartedAt || 0);
+    const elapsed = startedAt > 0 ? Math.round(performance.now() - startedAt) : -1;
+    if (elapsed >= 0) {
+      console.log(`MQTT Connected (${elapsed}ms)`);
+    } else {
+      console.log('MQTT Connected');
+    }
+    updateMqttStatus('connected');
+    if (client) client.connected = true; // Flag for external scripts
+
+    const topic = getMqttTopic();
+    client.subscribe(topic);
+    console.log('[MQTT] subscribed:', topic);
+    // also subscribe status channel for non-print system updates
+    // avoid printer event interference: listen status channel as well
+    const statusTopic = topic.replace('/order', '/status');
+    client.subscribe(statusTopic);
+    console.log('[MQTT] subscribed:', statusTopic);
+
+    // fallback topic: backend always publishes to shop/{shopId}/orders
+    if (window.shopId) {
+      const shopTopic = `shop/${window.shopId}/orders`;
+      client.subscribe(shopTopic);
+      console.log('[MQTT] subscribed:', shopTopic);
+    }
+  }
+
+  function onConnectionLost(responseObject) {
+    window.__adminMqttInitInFlight = false;
+    if (client) client.connected = false;
+    if (responseObject.errorCode !== 0) {
+      console.log("onConnectionLost:"+responseObject.errorMessage);
+      updateMqttStatus('disconnected');
+      setTimeout(() => window.initMqtt && window.initMqtt(), 1000); // 1秒后重试
+    }
+  }
+
+  function startRealtimeChannels() {
+    if (window.initMqtt) window.initMqtt();
+    if (window.initRealtimeStream && !window.__adminRealtimeStreamBootstrapped) {
+      window.__adminRealtimeStreamBootstrapped = true;
+      window.initRealtimeStream();
+    }
+  }
+
+  // Start MQTT as early as possible; stream can bootstrap later.
+  startRealtimeChannels();
+
+  // dedupe MQTT messages
+  const processedMessages = new Set();
+
+  function makeRealtimeEventKey(payload) {
+    const evt = String(payload?.event || payload?.type || '').toLowerCase();
+    if (!evt) return '';
+    const rid = payload?.reservation_id || payload?.reservationId || '';
+    const oid = payload?.order_id || payload?.id || payload?.order_no || '';
+    const status = payload?.status || '';
+    const keyId = rid || oid;
+    return `${evt}:${keyId}:${status}`;
+  }
+
+  function seenRealtimeEvent(payload) {
+    const key = makeRealtimeEventKey(payload);
+    if (!key) return false;
+    if (processedMessages.has(key)) return true;
+    processedMessages.add(key);
+    if (processedMessages.size > 120) {
+      const iter = processedMessages.values();
+      processedMessages.delete(iter.next().value);
+    }
+    return false;
+  }
+
+  function handleRealtimePayload(payload) {
+    if (!payload || typeof payload !== 'object') return;
+
+    if (
+      payload.event === 'new_reservation' ||
+      payload.type === 'new_reservation' ||
+      payload.event === 'reservation_status_update' ||
+      payload.type === 'reservation_status_update'
+    ) {
+      if (seenRealtimeEvent(payload)) return;
+      const isNewReservation = payload.event === 'new_reservation' || payload.type === 'new_reservation';
+      showToast(isNewReservation ? '收到新预约订单' : '预约状态已更新');
+
+      if (isNewReservation) {
+        queueSpeak('你有新预约订单，请及时处理。');
+      }
+
+      if (window.loadReservationStats) {
+        window.loadReservationStats();
+      }
+
+      if (window.loadReservations) {
+        window.loadReservations();
+      }
+      return;
+    }
+
+    // handle table status sync (silent refresh, no sound)
+    if ((payload.type === 'table_status_sync' || payload.type === 'table_checkout' || payload.event === 'table_status_sync' || payload.event === 'table_checkout')) {
+      console.log("[MQTT] Table Refresh Signal:", payload);
+      if (window.refreshOrderList) {
+        window.refreshOrderList();
+      }
+      // only refresh; do not enter new-order flow below
+      return;
+    }
+
+    // status/remarks updates should also refresh immediately
+    if (payload.event === 'status_update' || payload.type === 'status_update' || payload.event === 'remarks_update' || payload.type === 'remarks_update') {
+      if (seenRealtimeEvent(payload)) return;
+      if (window.refreshOrderList) {
+        window.refreshOrderList();
+      } else {
+        setTimeout(() => {
+          location.reload();
+        }, 800);
+      }
+      return;
+    }
+
+    // only process new-order style events
+    if ((payload.type === 'new_order' || payload.type === 'order' || payload.event === 'new_order' || payload.event === 'order')) {
+      if (seenRealtimeEvent(payload)) return;
+
+      // compatible fallback for very old payload format
+      const msgId = `${payload.order_id || payload.id || ''}_${payload.timestamp || Date.now()}`;
+      if (processedMessages.has(msgId)) {
+        console.log('[MQTT] duplicate message ignored:', msgId);
+        return;
+      }
+      processedMessages.add(msgId);
+      if (processedMessages.size > 120) {
+        const iter = processedMessages.values();
+        processedMessages.delete(iter.next().value);
+      }
+
+      console.log('New order received:', msgId);
+
+      // 1. 鏄剧ず鎻愮ず
+      showToast(payload.status === 'review_needed' ? '有加菜请求，等待审核' : '新订单来了');
+
+      // 2) play voice prompt immediately
+      playAudio(payload.status || 'pending', payload.order_type || 'dine_in');
+
+      // 3) refresh list with unified delayed strategy
+      if (window.refreshOrderList) {
+        window.refreshOrderList();
+      } else {
+        setTimeout(() => {
+          location.reload();
+        }, 3000);
+      }
+    }
+  }
+
+  function onMessageArrived(message) {
+    console.log("MQTT Msg:", message.payloadString);
+    try {
+      const payload = JSON.parse(message.payloadString);
+      handleRealtimePayload(payload);
+    } catch(e) { console.error(e); }
+  }
+
+  let realtimeSource;
+  let realtimeReconnectTimer;
+
+  window.initRealtimeStream = function() {
+    if (window.__adminRealtimeStreamInited) return;
+    window.__adminRealtimeStreamInited = true;
+
+    const connect = () => {
+      try {
+        if (realtimeSource) {
+          realtimeSource.close();
+          realtimeSource = null;
+        }
+
+        const streamUrl = `/api/stream/${encodeURIComponent(window.shopSlug)}`;
+        realtimeSource = new EventSource(streamUrl);
+
+        realtimeSource.addEventListener('update', (ev) => {
+          try {
+            const payload = JSON.parse(ev?.data || '{}');
+            handleRealtimePayload(payload);
+          } catch (e) {
+            console.error('[Realtime] invalid payload:', e);
+          }
+        });
+
+        realtimeSource.onerror = () => {
+          try {
+            if (realtimeSource) realtimeSource.close();
+          } catch {}
+          realtimeSource = null;
+
+          if (realtimeReconnectTimer) {
+            clearTimeout(realtimeReconnectTimer);
+          }
+          realtimeReconnectTimer = setTimeout(connect, 2000);
+        };
+      } catch (e) {
+        console.error('[Realtime] connect failed:', e);
+      }
+    };
+
+    connect();
+  }
+
+  function updateMqttStatus(status) {
+    const el = document.getElementById('mqtt-status-indicator');
+    if (!el) return;
+    if (status === 'connected') {
+      el.innerHTML = 'MQTT: 已连接';
+      el.style.background = '#e8f5e9';
+    } else if (status === 'disconnected' || status === 'failed') {
+      el.innerHTML = 'MQTT: 已断开';
+      el.style.color = '#c62828';
+      el.style.background = '#ffebee';
+    } else {
+      el.innerHTML = 'MQTT: 连接中...';
+    }
+  }
+
+  // Audio Logic
+  let audioCtx;
+  window.enableAudio = function() {
+    const hasAudio = window.AudioContext || window['webkitAudioContext'];
+    // @ts-ignore - webkitAudioContext for legacy browser support
+    if (!hasAudio) return alert('浏览器不支持音频 API');
+    // @ts-ignore
+    if (!audioCtx) audioCtx = new hasAudio()();
+
+    audioCtx.resume().then(() => {
+      const el = document.getElementById('sound-status');
+      if (el) {
+        el.classList.remove('status-off');
+        el.classList.add('status-on');
+        el.innerText = '声音已激活 (Active)';
+      }
+      // only play a short test beep
+      beep();
+    });
+  }
+
+  // voice queue and debounce
+  let lastSpeakTime = 0;
+  let speakQueue = [];
+  let isSpeaking = false;
+
+  function playAudio(status = 'pending', orderType = 'dine_in') {
+    const mode = document.getElementById('sound-mode')?.value || 'voice';
+    if (mode === 'voice') {
+      let text;
+      if (status === 'review_needed') {
+        text = '您有加菜请求，请及时审核。';
+      } else if (orderType === 'delivery') {
+        text = '您有新的外卖订单，请及时处理。';
+      } else {
+        text = '您有新的堂食订单，请及时处理。';
+      }
+      // use queue to avoid overlap
+      queueSpeak(text);
+    } else {
+      beep();
+    }
+  }
+
+  function queueSpeak(text) {
+    const now = Date.now();
+    // debounce: skip same text within 5s
+    if (now - lastSpeakTime < 5000 && speakQueue.includes(text)) {
+      console.log('[Speak] debounce skipped:', text);
+      return;
+    }
+
+    speakQueue.push(text);
+    if (!isSpeaking) {
+      processSpeakQueue();
+    }
+  }
+
+  async function processSpeakQueue() {
+    if (speakQueue.length === 0) {
+      isSpeaking = false;
+      return;
+    }
+
+    isSpeaking = true;
+    const text = speakQueue.shift();
+    lastSpeakTime = Date.now();
+
+    await speakWithPromise(text);
+
+    // play next after 1s gap
+    setTimeout(() => {
+      processSpeakQueue();
+    }, 1000);
+  }
+
+  function speakWithPromise(text) {
+    return new Promise((resolve) => {
+      if (!window.speechSynthesis) {
+        beep();
+        resolve();
+        return;
+      }
+
+      // 娓呴櫎涔嬪墠鐨勫唴瀹?
+      window.speechSynthesis.cancel();
+
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'zh-CN';
+      u.rate = 0.9;
+      u.pitch = 1.0;
+      u.volume = 1.0;
+
+      u.onend = () => resolve();
+      u.onerror = () => resolve();
+
+      // prefer Chinese voice if available
+      const voices = window.speechSynthesis.getVoices();
+      const zhVoice = voices.find(v => v.lang.includes('zh') || v.lang.includes('CN'));
+      if (zhVoice) u.voice = zhVoice;
+
+      // browser policies may block speech before user interaction
+      // best effort: do not block flow on speech failure
+      try {
+        window.speechSynthesis.speak(u);
+      } catch(e) {
+        console.warn('[Speak] playback failed:', e);
+        resolve();
+      }
+    });
+  }
+
+  function beep() {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.value = 800;
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+    osc.stop(audioCtx.currentTime + 0.5);
+  }
+
+  window.testSound = window.playAudio;
+
+  window.changeSoundMode = (val) => {
+    localStorage.setItem('adminSoundMode', val);
+    playAudio();
+  }
+
+  // System Control
+  window.systemControl = async function(action) {
+    if (!confirm(`确定执行 ${action} 操作吗？`)) return;
+    try {
+      // Mock or Real API
+      // await fetch('/api/system/' + action, { method: 'POST' });
+      alert('指令已发送: ' + action);
+    } catch(e) { alert('操作失败'); }
+  }
+
+  window.logout = function() {
+    document.cookie = 'admin_token=; Max-Age=0; path=/';
+    location.reload();
+  }
+
+  // image upload
+  window.compressImageForUpload = async function(originFile) {
+    if (!originFile || !originFile.type || !originFile.type.startsWith('image/')) return originFile;
+
+    const maxSide = 1200;
+    const quality = 0.82;
+
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(originFile);
+        const el = new Image();
+        el.onload = () => {
+          URL.revokeObjectURL(url);
+          resolve(el);
+        };
+        el.onerror = (err) => {
+          URL.revokeObjectURL(url);
+          reject(err);
+        };
+        el.src = url;
+      });
+
+      const w = Number(img.naturalWidth || img.width || 0);
+      const h = Number(img.naturalHeight || img.height || 0);
+      if (!w || !h) return originFile;
+
+      const scale = Math.min(1, maxSide / Math.max(w, h));
+      const targetW = Math.max(1, Math.round(w * scale));
+      const targetH = Math.max(1, Math.round(h * scale));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return originFile;
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', quality));
+      if (!blob) return originFile;
+
+      const baseName = originFile.name.includes('.')
+        ? originFile.name.replace(/\.[a-zA-Z0-9]+$/, '')
+        : originFile.name;
+      const nextName = baseName + '.webp';
+      return new File([blob], nextName, { type: 'image/webp' });
+    } catch {
+      return originFile;
+    }
+  }
+
+  window.triggerUpload = function(targetInputId) {
+    const fileInput = document.getElementById('global-file-input');
+    fileInput.dataset.target = targetInputId;
+    fileInput.click();
+  }
+
+  window.handleFileUpload = async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const targetId = e.target.dataset.target;
+    const targetInput = document.getElementById(targetId);
+
+    const originalValue = targetInput.value;
+    targetInput.value = '上传中...';
+    targetInput.disabled = true;
+
+    const uploadFile = await window.compressImageForUpload(file);
+    const formData = new FormData();
+    formData.append('file', uploadFile);
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        targetInput.value = data.url;
+        if (data.storage === 'local_fallback') {
+          showToast('图床异常，已回退本地保存');
+        } else {
+          showToast('图片上传成功');
+        }
+      } else {
+        alert('上传失败: ' + data.error);
+        targetInput.value = originalValue;
+      }
+    } catch (e) {
+      alert('网络错误');
+      targetInput.value = originalValue;
+    } finally {
+      targetInput.disabled = false;
+      e.target.value = ''; // reset file input
+    }
+  }
+
+  // 商品管理函数
+  window.openEditModal = function(event, id, categoryId) {
+    const row = event.target.closest('.prod-row');
+    document.getElementById('edit-id').value = id;
+    document.getElementById('edit-name').value = row.querySelector('.p-name').innerText;
+    document.getElementById('edit-sub').value = row.querySelector('.p-sub').innerText;
+    document.getElementById('edit-price').value = row.querySelector('input').value;
+    document.getElementById('edit-img').value = row.querySelector('img').src;
+    // default category selector to product's original category
+    const catSelect = document.getElementById('edit-cat');
+    if (catSelect && categoryId) {
+      catSelect.value = categoryId;
+    }
+    // reset new-category field display state
+    if (window.toggleNewCat) window.toggleNewCat();
+    document.getElementById('edit-modal').style.display = 'flex';
+  }
+
+  window.addProd = async function(rid, cid) {
+    const name = document.getElementById(`new-name-${cid}`).value;
+    const sub = document.getElementById(`new-sub-${cid}`).value;
+    const price = parseInt(document.getElementById(`new-price-${cid}`).value, 10) || 0;
+    const img = document.getElementById(`new-img-${cid}`).value;
+    const categoryId = parseInt(String(cid), 10) || 0;
+
+    if(!name || !price) return alert('名称和价格必填');
+    if (!categoryId) return alert('分类无效，请刷新页面后重试');
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category_id: categoryId, name, sub_name: sub, price, img })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || '创建失败');
+      }
+      location.reload();
+    } catch(e) { alert('保存失败: ' + (e?.message || e)); }
+  }
+
+  window.delProd = async function(id) {
+    if(!confirm('确定删除吗？')) return;
+    try {
+      const res = await fetch(`/api/admin/products/${encodeURIComponent(String(id))}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || '删除失败');
+      }
+      location.reload();
+    } catch(e) { alert('删除失败: ' + (e?.message || e)); }
+  }
+
+  // ============================================
+  // Tab Switching Logic
+  // ============================================
+  window.showTab = function(tabName) {
+    // Hide all contents
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active-content'));
+    // Show selected content
+    const selected = document.getElementById('tab-' + tabName);
+    if (selected) selected.classList.add('active-content');
+
+    // Update buttons
+    document.querySelectorAll('.tabs button').forEach(btn => btn.classList.remove('active'));
+    const btn = document.querySelector(`button[data-admin-action="show-tab"][data-tab-name="${tabName}"]`);
+    if (btn) btn.classList.add('active');
+
+    // Save to localStorage
+    localStorage.setItem('adminLastTab', tabName);
+
+    // Special handling for tables tab
+    // if (tabName === 'tables' && window.refreshOrderList) {
+    //   // Removing auto-refresh to prevent infinite loop on page load
+    //   // window.refreshOrderList();
+    // }
+
+    // Special handling for settings tab (render zones)
+    if (tabName === 'settings' && window.renderZones) {
+      window.renderZones();
+    }
+
+    if (tabName === 'reservations') {
+      if (window.loadReservationStats) window.loadReservationStats();
+      if (window.loadReservations) window.loadReservations();
+    }
+  }
+
+  // Restore last tab
+  document.addEventListener('DOMContentLoaded', () => {
+    const lastTab = localStorage.getItem('adminLastTab') || 'orders';
+    window.showTab(lastTab);
+  });
+
+  // ============================================
+  // Reservation Logic
+  // ============================================
+  window.loadReservationStats = async function() {
+    try {
+      const res = await fetch('/api/admin/reservation-stats');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'load stats failed');
+
+      document.getElementById('res-stat-total').innerText = String(data.today_total || 0);
+      document.getElementById('res-stat-pending').innerText = String(data.today_pending || 0);
+      document.getElementById('res-stat-confirmed').innerText = String(data.today_confirmed || 0);
+      document.getElementById('res-stat-completed').innerText = String(data.today_completed || 0);
+      document.getElementById('res-stat-cancelled').innerText = String(data.today_cancelled || 0);
+    } catch (err) {
+      console.error('Load reservation stats failed:', err);
+    }
+  }
+
+  window.loadReservations = async function() {
+    const list = document.getElementById('reservation-list');
+    if (!list) return;
+
+    const date = document.getElementById('reservation-date')?.value || '';
+    const status = document.getElementById('reservation-status')?.value || '';
+    const q = new URLSearchParams();
+    if (date) q.set('date', date);
+    if (status) q.set('status', status);
+
+    list.innerHTML = '<div style="padding:12px; color:#666;">加载中...</div>';
+
+    try {
+      const res = await fetch(`/api/admin/reservations${q.toString() ? `?${q.toString()}` : ''}`);
+      const data = await res.json().catch(() => []);
+      if (!res.ok) throw new Error(data.error || 'load reservations failed');
+
+      const rows = Array.isArray(data) ? data : [];
+      if (rows.length === 0) {
+        list.innerHTML = '<div style="padding:12px; background:#f8f9fa; border:1px solid #eee; border-radius:8px; color:#666;">暂无预约记录</div>';
+        return;
+      }
+
+      const statusRank = (s) => (s === 'completed' || s === 'cancelled' ? 1 : 0);
+      rows.sort((a, b) => {
+        const ra = statusRank(String(a?.status || 'pending'));
+        const rb = statusRank(String(b?.status || 'pending'));
+        if (ra !== rb) return ra - rb;
+
+        const ta = new Date(String(a?.reservation_time || '')).getTime() || 0;
+        const tb = new Date(String(b?.reservation_time || '')).getTime() || 0;
+        if (ra === 0) return ta - tb;
+        return tb - ta;
+      });
+
+      list.innerHTML = rows.map((r) => {
+        const ts = String(r.reservation_time || '').replace('T', ' ').slice(0, 16);
+        let itemPreview = '到店再点';
+        try {
+          const parsed = JSON.parse(String(r.items_json || '[]'));
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            itemPreview = parsed
+              .map((it) => `${it.name || '菜品'} x${Number(it.quantity || 1)}`)
+              .slice(0, 3)
+              .join('、');
+          }
+        } catch {}
+
+        const statusText =
+          r.status === 'confirmed' ? '已确认' :
+          r.status === 'completed' ? '已完成' :
+          r.status === 'cancelled' ? '已取消' : '待确认';
+        const isFinal = r.status === 'completed' || r.status === 'cancelled';
+        const cardStyle = isFinal
+          ? 'border:1px solid #d9dee5; border-radius:10px; padding:12px; background:#f3f5f7; color:#7a8594;'
+          : 'border:1px solid #e6edf5; border-radius:10px; padding:12px; background:#fff;';
+        const statusExtra = isFinal ? 'style="background:#9ea7b3;color:#fff;"' : '';
+
+        const deliveryPrintBtn = r.dine_type === 'delivery'
+          ? `<button class="btn-xs" style="background:#6c757d;color:#fff;" data-admin-action="print-reservation" data-reservation-id="${Number(r.id || 0)}">打印送餐单</button>`
+          : '';
+
+        return `
+          <div style="${cardStyle}">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+              <div style="font-weight:700; color:#1f2d3d;">${ts}</div>
+              <span class="status-tag status-${r.status || 'pending'}" ${statusExtra}>${statusText}</span>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:6px; color:#44566c; font-size:13px;">
+              <div>手机号: ${r.customer_phone || '-'}</div>
+              <div>人数: ${Number(r.guest_count || 0)} 人</div>
+              <div>方式: ${r.dine_type === 'takeout' ? '自取' : r.dine_type === 'delivery' ? '送餐' : '堂食'}</div>
+              <div>姓名: ${r.customer_name || '-'}</div>
+            </div>
+            <div style="margin-top:8px; font-size:13px; color:#4a5d73;">预点菜品: ${itemPreview}</div>
+            <div style="margin-top:6px; font-size:13px; color:#4a5d73;">备注: ${r.remarks || '-'}</div>
+            ${isFinal
+              ? `<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center;">
+                  <div style="font-size:12px; color:#8a94a1;">已结束记录，系统会在3天后自动清理</div>
+                  ${deliveryPrintBtn}
+                </div>`
+              : `<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+                  <button class="btn-xs btn-blue" data-admin-action="update-reservation-status" data-reservation-id="${Number(r.id || 0)}" data-status="confirmed">确认</button>
+                  <button class="btn-xs btn-green" data-admin-action="update-reservation-status" data-reservation-id="${Number(r.id || 0)}" data-status="completed">完成</button>
+                  <button class="btn-xs btn-red" data-admin-action="update-reservation-status" data-reservation-id="${Number(r.id || 0)}" data-status="cancelled">取消</button>
+                  ${deliveryPrintBtn}
+                </div>`}
+          </div>
+        `;
+      }).join('');
+    } catch (err) {
+      list.innerHTML = `<div style="padding:12px; background:#ffebee; border:1px solid #ffcdd2; border-radius:8px; color:#c62828;">加载失败: ${err?.message || err}</div>`;
+    }
+  }
+
+  window.setReservationDateFilter = function(mode) {
+    const dateInput = document.getElementById('reservation-date');
+    if (!dateInput) return;
+    if (mode === 'today') {
+      dateInput.value = new Date().toISOString().slice(0, 10);
+    } else {
+      dateInput.value = '';
+    }
+    if (window.loadReservations) window.loadReservations();
+  }
+
+  window.updateReservationStatus = async function(id, status) {
+    if (!id || !status) return;
+    try {
+      const res = await fetch('/api/admin/reservations', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'update reservation failed');
+      showToast('预约状态已更新');
+      window.loadReservationStats();
+      window.loadReservations();
+    } catch (err) {
+      alert('更新失败: ' + (err?.message || err));
+    }
+  }
+
+  window.printReservation = async function(id) {
+    if (!id) return;
+    try {
+      showToast('正在发送预约打印指令...');
+      const res = await fetch('/api/admin/reservations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'print' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'print reservation failed');
+      showToast('预约打印指令已发送');
+    } catch (err) {
+      alert('打印失败: ' + (err?.message || err));
+    }
+  }
+
+  // ============================================
+  // Category & Product Logic
+  // ============================================
+  window.toggleNewCat = function() {
+    const val = document.getElementById('edit-cat').value;
+    const newCatFields = document.getElementById('new-cat-fields');
+    if (newCatFields) {
+      newCatFields.style.display = (val === 'new') ? 'block' : 'none';
+    }
+  }
+
+  window.openCreateCategoryModal = function() {
+    document.getElementById('create-cat-name').value = '';
+    document.getElementById('create-cat-sub').value = '';
+    document.getElementById('create-cat-modal').style.display = 'flex';
+  }
+
+  window.saveNewCategory = async function() {
+    const name = document.getElementById('create-cat-name').value;
+    const sub = document.getElementById('create-cat-sub').value;
+
+    if (!name) return alert('请输入分类名称');
+    try {
+      const res = await fetch('/api/admin/categories', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          sub_name: sub,
+        })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        showToast('分类已创建');
+        // prefer refreshMenuList over full reload
+        if (window.refreshMenuList) await window.refreshMenuList();
+        else location.reload();
+      } else {
+        alert('创建失败: ' + (data.error || '未知错误'));
+      }
+    } catch(e) {
+      alert('网络错误');
+    }
+  }
+
+  window.closeEditModal = function() {
+    document.getElementById('edit-modal').style.display = 'none';
+  }
+
+  window.saveEditProd = async function() {
+    const id = Number(document.getElementById('edit-id').value || 0);
+    const name = document.getElementById('edit-name').value;
+    const sub_name = document.getElementById('edit-sub').value;
+    const price = Number(document.getElementById('edit-price').value || 0);
+    const img = document.getElementById('edit-img').value;
+    const stock = Number(document.getElementById('edit-stock').value || 0);
+
+    let catId = document.getElementById('edit-cat').value;
+
+    if (!id) return alert('商品ID无效');
+    if (!name || !price || price <= 0) return alert('名称和价格必填');
+    // Handle new category
+    if (catId === 'new') {
+      const newName = document.getElementById('new-cat-name').value;
+      const newSub = document.getElementById('new-cat-sub').value;
+      if (!newName) return alert('请输入新分类名称');
+
+      try {
+        const res = await fetch('/api/admin/categories', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: newName,
+            sub_name: newSub,
+          })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error('Create category failed');
+        catId = Number(data.id || 0);
+      } catch(e) {
+        return alert('创建分类失败: ' + e.message);
+      }
+    }
+
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          name,
+          sub_name,
+          price,
+          img,
+          stock,
+          category_id: Number(catId || 0),
+        }),
+      });
+      const data = await res.json();
+      if(data.success) {
+        showToast('修改成功');
+        closeEditModal();
+        if (window.refreshMenuList) await window.refreshMenuList();
+        else location.reload();
+      } else {
+        alert('修改失败: ' + (data.error || 'unknown error'));
+      }
+    } catch(e) { alert('网络错误'); }
+  }
+
+  window.moveCategory = async function(id, direction) {
+    const dir = direction === -1 || direction === '-1' ? 'up' : direction === 1 || direction === '1' ? 'down' : direction;
+    try {
+      const res = await fetch(`/api/admin/categories/${encodeURIComponent(String(id))}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ direction: dir })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || 'move category failed');
+      }
+      if (window.refreshMenuList) await window.refreshMenuList();
+      else location.reload();
+      showToast('分类排序已更新');
+    } catch (e) {
+      alert('分类排序失败: ' + (e?.message || e));
+    }
+  }
+
+  window.delCategory = async function(id, productCount) {
+    const count = Number(productCount || 0);
+    const warning = count > 0
+      ? `该分类下有 ${count} 个菜品，删除分类会同时删除这些菜品。\n确定继续吗？`
+      : '确定删除该分类吗？';
+    if (!confirm(warning)) return;
+
+    try {
+      const res = await fetch(`/api/admin/categories/${encodeURIComponent(String(id))}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || 'delete category failed');
+      }
+      if (window.refreshMenuList) await window.refreshMenuList();
+      else location.reload();
+      showToast('分类已删除');
+    } catch (e) {
+      alert('删除分类失败: ' + (e?.message || e));
+    }
+  }
+
+  window.moveProduct = async function(id, direction, cid) {
+    const dir = direction === -1 || direction === '-1' ? 'up' : direction === 1 || direction === '1' ? 'down' : direction;
+    try {
+      const res = await fetch(`/api/admin/products/${encodeURIComponent(String(id))}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ direction: dir, cid: Number(cid) })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || 'move product failed');
+      }
+      if (window.refreshMenuList) await window.refreshMenuList();
+      else location.reload();
+      showToast('菜品排序已更新');
+    } catch (e) {
+      alert('菜品排序失败: ' + (e?.message || e));
+    }
+  }
+
+  // ============================================
+  // Driver & Payment Logic
+  // ============================================
+  window.addDriver = function() {
+    const name = document.getElementById('new-driver-name').value.trim();
+    const phone = document.getElementById('new-driver-phone').value.trim();
+    if (!name || !phone) return alert('请填写姓名和电话');
+
+    let drivers = [];
+    try {
+      drivers = JSON.parse(document.getElementById('drivers-json').value || '[]');
+    } catch(e) { drivers = []; }
+
+    const exists = drivers.some(d => d.name === name && d.phone === phone);
+    if (exists) {
+        return alert('骑手已存在');
+    }
+
+    drivers.push({ name, phone });
+    document.getElementById('drivers-json').value = JSON.stringify(drivers);
+
+    saveSettings();
+  }
+
+  window.removeDriver = function(index) {
+    if (!confirm('确认删除该骑手？')) return;
+    const drivers = JSON.parse(document.getElementById('drivers-json').value || '[]');
+    drivers.splice(index, 1);
+    document.getElementById('drivers-json').value = JSON.stringify(drivers);
+    saveSettings();
+  }
+
+  window.submitPayment = async function(event, amount) {
+    if (!confirm(`Confirm payment of ${amount} RSD?\n\nAfter submit, wait for admin approval.`)) return;
+
+    const btn = event.target;
+    const originalText = btn.innerText;
+    btn.innerText = '提交中...';
+    btn.disabled = true;
+
+    try {
+      const newSettings = { ...window.currentSettings };
+      newSettings.last_payment_request = {
+        amount: amount,
+        date: new Date().toISOString(),
+        status: 'pending'
+      };
+
+      await window.persistAdminSettings(newSettings);
+      alert('提交成功。等待管理员批准。');
+    } catch(e) {
+      alert('网络错误');
+      btn.innerText = originalText;
+      btn.disabled = false;
+    }
+  }
+
+  window.approveRenew = async function(amount) {
+    if (!confirm(`Confirm received payment ${amount} RSD and approve renewal?\nThis will extend validity by 30 days.`)) return;
+
+    try {
+      const res = await fetch('/api/admin/renew/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amount
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert('已批准。店铺有效期已延长。');
+      } else {
+        alert('操作失败: ' + data.error);
+      }
+    } catch(e) {
+      console.error(e);
+      alert('网络错误');
+    }
+  }
+
+  window.rejectRenew = async function() {
+    if (!confirm('确定要拒绝该续费请求吗？')) return;
+
+    try {
+      const newSettings = { ...window.currentSettings };
+      newSettings.last_payment_request.status = 'rejected';
+
+      await window.persistAdminSettings(newSettings);
+      alert('请求已拒绝。');
+    } catch(e) {
+      alert('网络错误');
+    }
+  }
+
+  window.saveMasterSettings = async function() {
+    const alipay = document.getElementById('master-alipay').value;
+    const wechat = document.getElementById('master-wechat').value;
+
+    try {
+      const res = await fetch('/api/admin/settings/master', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          alipay_qr: alipay,
+          wechat_qr: wechat,
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('设置已保存');
+        location.reload();
+      } else {
+        alert('保存失败');
+      }
+    } catch(e) {
+      alert('网络错误');
+    }
+  }
+
+  // ============================================
+  // Delivery Modal Logic
+  // ============================================
+  let currentDeliveryOrderId = null;
+  let selectedDriverIndex = null;
+
+  window.openDeliveryModal = async function(orderId) {
+    currentDeliveryOrderId = orderId;
+    selectedDriverIndex = null;
+    document.getElementById('temp-driver-name').value = '';
+    document.getElementById('temp-driver-phone').value = '';
+
+    const list = document.getElementById('driver-select-list');
+    list.innerHTML = '<div style="text-align:center;">加载中...</div>';
+
+    try {
+      const res = await fetch('/api/admin/riders');
+      const data = await res.json();
+
+      if (data.success && data.riders.length > 0) {
+        window.globalRiders = data.riders;
+
+        list.innerHTML = data.riders.map((d, idx) => {
+          let statusColor = '#9e9e9e';
+          let statusText = '离线';
+          if (d.status === 'available') { statusColor = '#4caf50'; statusText = '空闲'; }
+          if (d.status === 'busy') { statusColor = '#ff9800'; statusText = '忙碌'; }
+
+          return `
+            <div class="driver-option" data-admin-action="select-driver" data-driver-index="${idx}" style="padding:10px; border:1px solid #eee; margin-bottom:5px; border-radius:4px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <span style="font-weight:bold;">${d.name}</span>
+                <span style="font-size:12px; color:#666; margin-left:5px;">${d.phone}</span>
+              </div>
+              <span style="font-size:12px; color:white; background:${statusColor}; padding:2px 6px; border-radius:4px;">${statusText}</span>
+            </div>
+          `}).join('');
+      } else {
+        list.innerHTML = '<div style="color:#999; text-align:center;">暂无注册骑手，请先注册骑手</div>';
+        window.globalRiders = [];
+      }
+    } catch(e) {
+      list.innerHTML = '<div style="color:red; text-align:center;">加载失败</div>';
+    }
+
+    document.getElementById('delivery-modal').style.display = 'flex';
+  }
+
+  window.closeDeliveryModal = function() {
+    document.getElementById('delivery-modal').style.display = 'none';
+    currentDeliveryOrderId = null;
+  }
+
+  window.selectDriver = function(el, index) {
+    document.querySelectorAll('.driver-option').forEach(d => {
+      d.style.borderColor = '#eee';
+      d.style.backgroundColor = '#fff';
+    });
+    el.style.borderColor = '#2196f3';
+    el.style.backgroundColor = '#e3f2fd';
+    selectedDriverIndex = index;
+
+    document.getElementById('temp-driver-name').value = '';
+    document.getElementById('temp-driver-phone').value = '';
+  }
+
+  window.confirmDelivery = function() {
+    if (!currentDeliveryOrderId) return;
+
+    let driverName = '';
+    let driverPhone = '';
+
+    const tempName = document.getElementById('temp-driver-name').value.trim();
+    const tempPhone = document.getElementById('temp-driver-phone').value.trim();
+
+    if (tempName && tempPhone) {
+      driverName = tempName;
+      driverPhone = tempPhone;
+    } else if (selectedDriverIndex !== null) {
+      const drivers = window.globalRiders || [];
+      if (drivers[selectedDriverIndex]) {
+        driverName = drivers[selectedDriverIndex].name;
+        driverPhone = drivers[selectedDriverIndex].phone;
+      }
+    }
+
+    if (!driverName || !driverPhone) {
+      return alert('请选择骑手或输入骑手信息');
+    }
+
+    // Assume updateOrderStatus is defined in admin-orders.js or similar
+    if (window.updateOrderStatus) {
+      window.updateOrderStatus(currentDeliveryOrderId, 'delivering', { name: driverName, phone: driverPhone });
+    } else {
+      console.error('updateOrderStatus not defined');
+    }
+    // @ts-ignore
+    window.closeDeliveryModal();
+  }
+
+  // ============================================
+  // Zone & Table Logic
+  // ============================================
+  window.renderZones = function() {
+    const container = document.getElementById('zones-container');
+    if (!container || !window.tableConfig) return;
+
+    container.innerHTML = window.tableConfig.map((zone, idx) => `
+      <div class="zone-item" style="display:flex; gap:10px; align-items:center; margin-bottom:10px; padding:10px; border:1px solid #eee; background:#f9f9f9; border-radius:4px;">
+        <div style="flex:2;">
+          <label style="font-size:12px; color:#666;">区域名称</label>
+          <input type="text" value="${zone.name}" placeholder="可留空（仅显示 1号桌）" data-admin-zone-input="1" data-zone-index="${idx}" data-zone-field="name" style="width:100%; padding:5px; border:1px solid #ddd; border-radius:4px;">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:12px; color:#666;">前缀</label>
+          <input type="text" value="${zone.prefix || ''}" placeholder="例如 A" data-admin-zone-input="1" data-zone-index="${idx}" data-zone-field="prefix" style="width:100%; padding:5px; border:1px solid #ddd; border-radius:4px;">
+        </div>
+        <div style="width:100px;">
+          <label style="font-size:12px; color:#666;">数量</label>
+          <input type="number" value="${zone.count}" data-admin-zone-input="1" data-zone-index="${idx}" data-zone-field="count" style="width:100%; padding:5px; border:1px solid #ddd; border-radius:4px;">
+        </div>
+        <div style="align-self:flex-end;">
+          <button type="button" data-admin-action="remove-zone" data-zone-index="${idx}" style="background:#ff5252; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer;">删除</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  window.addZone = function() {
+    if (!window.tableConfig) window.tableConfig = [];
+    window.tableConfig.push({ name: '', count: 5, prefix: '' });
+    renderZones();
+  }
+
+  window.removeZone = function(idx) {
+    if (!confirm('确定删除这个区域吗？')) return;
+    if (!Array.isArray(window.tableConfig)) window.tableConfig = [];
+    window.tableConfig.splice(idx, 1);
+    renderZones();
+  }
+
+  window.updateZone = function(idx, field, value) {
+    if (field === 'count') value = parseInt(value) || 0;
+    window.tableConfig[idx][field] = value;
+  }
+
+  window.saveTableConfig = async function(e) {
+    const btn = e?.target || document.querySelector('#tab-settings .btn-save');
+    const originalText = btn?.innerText || '';
+    if (btn) {
+      btn.innerText = '保存中...';
+      btn.disabled = true;
+    }
+
+    try {
+      const requestBody = {
+        restaurantId: window.shopId,
+        table_config: { zones: window.tableConfig }
+      };
+      const res = await fetch('/api/admin/settings/table-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (!window.currentSettings) window.currentSettings = {};
+        window.currentSettings.table_config = { zones: window.tableConfig };
+        window.currentSettings.tables = window.tableConfig;
+        alert('桌台配置已保存，页面将刷新生效。');
+        location.reload();
+      } else {
+        alert('保存失败: ' + data.error);
+      }
+    } catch(error) {
+      alert('网络错误');
+    } finally {
+      if (btn) {
+        btn.innerText = originalText;
+        btn.disabled = false;
+      }
+    }
+  }
+
+  // ============================================
+  // Settings Logic
+  // ============================================
+  window.persistAdminSettings = async function(nextSettings) {
+    const res = await fetch('/api/admin/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(nextSettings),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error || data.success === false) {
+      throw new Error(data.error || '保存失败');
+    }
+    window.currentSettings = nextSettings;
+    return data;
+  }
+
+  window.saveSettings = async function(e) {
+    if (e) e.preventDefault();
+    const form = e ? e.target : document.querySelector('#tab-settings form');
+    const fd = new FormData(form);
+    const newSettings = { ...window.currentSettings };
+    newSettings.currency = { ...newSettings.currency, rate: fd.get('rate'), wechat_qr: fd.get('wechat_qr') };
+    newSettings.delivery = { ...newSettings.delivery, fee: fd.get('fee'), free_threshold: fd.get('free_threshold'), zones: fd.get('zones') };
+    newSettings.hours = { ...newSettings.hours, open: fd.get('open'), close: fd.get('close'), enabled: true };
+    newSettings.contact = {
+      ...(newSettings.contact || {}),
+      phone: fd.get('contact_phone'),
+      map_url: fd.get('contact_map_url') || '',
+    };
+    newSettings.map_url = fd.get('contact_map_url') || '';
+    newSettings.telegram = { token: fd.get('tg_token'), chat_id: fd.get('tg_chat_id') };
+    if (Array.isArray(window.tableConfig)) {
+      newSettings.table_config = { zones: window.tableConfig };
+      newSettings.tables = window.tableConfig;
+    }
+
+    try {
+      let drivers = JSON.parse(fd.get('drivers_json') || '[]');
+      const uniqueDrivers = Array.from(new Map(drivers.map(item => [item.name + '|' + item.phone, item])).values());
+      newSettings.drivers = uniqueDrivers;
+    } catch(err) { newSettings.drivers = []; }
+
+    newSettings.holidays = {
+      closed_dates: fd.get('closed_dates') || '',
+      message: fd.get('holiday_message') || '',
+      enabled: document.getElementById('holiday-enabled')?.checked || false
+    };
+
+    try {
+      await window.persistAdminSettings(newSettings);
+      alert('保存成功');
+    } catch (e) {
+      alert('保存失败: ' + (e?.message || e));
+    }
+  }
+
+  window.saveLocation = async function() {
+    const city = document.getElementById('shop-city')?.value || '';
+    const zone = document.getElementById('shop-zone')?.value || '';
+    const address = document.getElementById('shop-address')?.value || '';
+    const mapUrl = document.getElementById('shop-map-url')?.value || '';
+    const next = {
+      ...window.currentSettings,
+      location: { city, zone, address, map_url: mapUrl },
+      contact: {
+        ...(window.currentSettings?.contact || {}),
+        map_url: mapUrl,
+      },
+      map_url: mapUrl,
+    };
+
+    try {
+      await window.persistAdminSettings(next);
+      showToast('位置信息已保存');
+    } catch (err) {
+      alert('保存失败: ' + (err?.message || err));
+    }
+  }
+
+  window.updateShopName = function() {
+    const val = document.getElementById('shop-name-input')?.value?.trim();
+    if (!val) return alert('请输入店铺名称');
+    const title = document.querySelector('.header h2');
+    if (title) {
+      const badge = title.querySelector('span');
+      title.childNodes[0].nodeValue = `⚙️ ${val} `;
+      if (badge) title.appendChild(badge);
+    }
+    showToast('名称已更新到当前页面。持久化请在总控修改。');
+  }
+
+  window.updateShopCategory = async function() {
+    const category = document.getElementById('shop-category-input')?.value || '';
+    const next = { ...window.currentSettings, shop_category: category };
+    try {
+      await window.persistAdminSettings(next);
+      showToast('分类设置已保存');
+    } catch (err) {
+      alert('保存失败: ' + (err?.message || err));
+    }
+  }
+
+  window.saveDeliveryType = async function() {
+    const deliveryType = document.getElementById('delivery-type')?.value || 'merchant';
+    const next = {
+      ...window.currentSettings,
+      delivery: {
+        ...(window.currentSettings?.delivery || {}),
+        type: deliveryType,
+      },
+    };
+    try {
+      await window.persistAdminSettings(next);
+      showToast('配送设置已保存');
+    } catch (err) {
+      alert('保存失败: ' + (err?.message || err));
+    }
+  }
+
+  window.updateMqttSecret = function() {
+    const nextSecret = document.getElementById('mqttSecretInput')?.value?.trim();
+    if (!nextSecret) return alert('请输入新的 Secret');
+    window.mqttSecret = nextSecret;
+    showToast('当前页面 MQTT Secret 已更新。持久化请在总控修改。');
+  }
+
+  window.uploadShopLogo = async function(input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+
+    const uploadFile = await window.compressImageForUpload(file);
+
+    const fd = new FormData();
+    fd.append('file', uploadFile);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !data.url) {
+        throw new Error(data.error || '上传失败');
+      }
+      const img = document.getElementById('shop-logo-preview');
+      if (img) img.src = data.url;
+
+      const next = { ...window.currentSettings, logo: data.url };
+      await window.persistAdminSettings(next);
+      showToast('Logo 上传成功');
+    } catch (err) {
+      alert('Logo 更新失败: ' + (err?.message || err));
+    } finally {
+      input.value = '';
+    }
+  }
+
+  window.updatePassword = async function(e) {
+    if (e) e.preventDefault();
+    const form = document.getElementById('password-form');
+    const fd = new FormData(form);
+    const newPassword = String(fd.get('new_password') || '').trim();
+    if (newPassword.length < 4) {
+      return alert('密码至少 4 位');
+    }
+
+    try {
+      const res = await fetch('/api/admin/settings/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_password: newPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || '更新失败');
+      }
+      alert('密码更新成功，请使用新密码重新登录');
+      const input = form?.querySelector('input[name="new_password"]');
+      if (input) input.value = '';
+    } catch (err) {
+      alert('密码更新失败: ' + (err?.message || err));
+    }
+  }
+
+  // ============================================
+  // Stats Logic
+  // ============================================
+  window.loadStats = async function() {
+    const start = document.getElementById('stats-start').value;
+    const end = document.getElementById('stats-end').value;
+    const orderType = document.getElementById('stats-type').value;
+    const shopId = window.shopId;
+    if(!start || !end) return alert('请选择日期');
+    const btn = document.querySelector('#tab-stats button.btn-blue');
+    if(btn) btn.innerText = '...';
+    try {
+      const res = await fetch(`/api/admin/stats?shopId=${shopId}&start=${start}&end=${end}&type=${orderType}`);
+      const data = await res.json();
+      if(data.success) {
+        document.getElementById('val-revenue').innerText = (data.stats.totalRevenue || 0).toLocaleString();
+        document.getElementById('val-orders').innerText = data.stats.totalOrders || 0;
+        const tbody = document.querySelector('#stats-table tbody');
+        tbody.innerHTML = '';
+        if(data.topItems.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center">暂无数据</td></tr>'; }
+        else {
+          data.topItems.forEach((item, idx) => {
+            const row = `<tr><td>${idx + 1}</td><td>${item.name}</td><td style="font-weight:bold; color:#2e7d32">${item.count}</td><td>${item.amount.toLocaleString()}</td></tr>`;
+            tbody.innerHTML += row;
+          });
+        }
+      } else { alert('查询失败: ' + data.error); }
+    } catch(e) { alert('网络错误'); }
+    if(btn) btn.innerText = '查询';
+  }
+
+  window.loadStatsQuiet = async function() {
+    const start = document.getElementById('stats-start').value;
+    const end = document.getElementById('stats-end').value;
+    const orderType = document.getElementById('stats-type')?.value || 'all';
+    const shopId = window.shopId;
+    if (!start || !end) return;
+
+    try {
+      const res = await fetch(`/api/admin/stats?shopId=${shopId}&start=${start}&end=${end}&type=${orderType}`);
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('val-revenue').innerText = (data.stats.totalRevenue || 0).toLocaleString();
+        document.getElementById('val-orders').innerText = data.stats.totalOrders || 0;
+        const tbody = document.querySelector('#stats-table tbody');
+        if (tbody) {
+          tbody.innerHTML = '';
+          if (data.topItems.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center">今日暂无订单</td></tr>';
+          } else {
+            data.topItems.forEach((item, idx) => {
+              tbody.innerHTML += `<tr><td>${idx + 1}</td><td>${item.name}</td><td style="font-weight:bold; color:#2e7d32">${item.count}</td><td>${item.amount.toLocaleString()}</td></tr>`;
+            });
+          }
+        }
+      }
+    } catch(e) {
+      console.error('Auto stats load error:', e);
+    }
+  }
+
+  // ============================================
+  // Utils
+  // ============================================
+  window.showToast = function(msg) {
+    const div = document.createElement('div');
+    div.style.cssText = 'position:fixed; top:20px; right:20px; background:#4caf50; color:white; padding:15px 25px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.2); z-index:9999; animation: slideIn 0.3s ease-out;';
+    div.innerText = msg;
+    document.body.appendChild(div);
+    setTimeout(() => { div.style.opacity = '0'; setTimeout(() => div.remove(), 300); }, 3000);
+  }
+
+  window.autoUpdateRate = async function() {
+    const today = new Date().toISOString().split('T')[0];
+
+    try {
+      const res = await fetch('/api/admin/rate');
+      const data = await res.json();
+      if(data.success) {
+        const rateInput = document.getElementById('rate-input');
+        const rateMsg = document.getElementById('rate-msg');
+
+        if (rateInput) rateInput.value = data.rate;
+        if (rateMsg) {
+          rateMsg.innerHTML = `<span style="color:#2e7d32; font-weight:bold;">今日汇率 (${data.date}): 1 CNY ≈ ${data.rate} RSD</span>`;
+        }
+
+        localStorage.setItem('lastRateUpdateDate', today);
+        console.log('rate auto-update success:', data.rate);
+      }
+    } catch(e) {
+      console.error('rate auto-update failed:', e);
+    }
+  }
+
+  // manual trigger for exchange rate fetch
+  window.fetchRateManually = function() {
+    console.log('Fetching rate manually...');
+    autoUpdateRate();
+  };
+  window.fetchRate = window.autoUpdateRate;
+
+  // ============================================
+  // Localize Images (download remote images to local storage)
+  // ============================================
+  window.localizeImages = async function(e) {
+    if (!confirm('Download all remote images to local server? This may take time.')) return;
+    const btn = e.target.closest('button');
+    const originalText = btn.innerText;
+    btn.innerText = '处理中...';
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/admin/localize-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopId: window.shopId })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert(
+          `Done.\nLocalized images: ${data.processed}` +
+            (data.errors ? `\nFailed: ${data.errors.length}` : ''),
+        );
+        location.reload();
+      } else {
+        alert('处理失败: ' + data.error);
+      }
+    } catch (e) {
+      alert('网络错误');
+    } finally {
+      btn.innerText = originalText;
+      btn.disabled = false;
+    }
+  }
+
+  // ============================================
+  // Order Edit Logic
+  // ============================================
+  let currentOrderItems = {};
+  let currentOrderId = null;
+
+  window.handleEditOrder = function(btn) {
+    const orderId = parseInt(btn.dataset.orderId);
+    const orderNo = btn.dataset.orderNo || '';
+    const itemsJson = btn.dataset.items || '{}';
+    const total = parseFloat(btn.dataset.total) || 0;
+
+    openOrderEditModal(orderId, orderNo, itemsJson, total);
+  }
+
+  window.openOrderEditModal = function(orderId, orderNo, itemsJson, _total) {
+    currentOrderId = orderId;
+    document.getElementById('order-edit-id').value = orderId;
+    document.getElementById('order-edit-no').innerText = '#' + (orderNo || '').slice(-4);
+
+    try {
+      if (typeof itemsJson === 'string') {
+        currentOrderItems = JSON.parse(itemsJson);
+      } else {
+        currentOrderItems = itemsJson || {};
+      }
+    } catch(e) {
+      console.error('Parse items error:', e, itemsJson);
+      currentOrderItems = {};
+    }
+
+    renderOrderItems();
+    document.getElementById('order-edit-modal').style.display = 'flex';
+  }
+
+  window.closeOrderEditModal = function() {
+    document.getElementById('order-edit-modal').style.display = 'none';
+    currentOrderItems = {};
+    currentOrderId = null;
+  }
+
+  function renderOrderItems() {
+    const container = document.getElementById('order-items-container');
+    let html = '<div class="order-items-list">';
+    let total = 0;
+
+    Object.entries(currentOrderItems).forEach(([key, item]) => {
+      const itemTotal = (item.price || 0) * (item.quantity || 1);
+      total += itemTotal;
+      html += `
+        <div class="order-item-row" data-key="${key}">
+          <div class="item-info">
+            <span class="item-name">${item.name}</span>
+            <span class="item-subname">${item.subName || ''}</span>
+          </div>
+          <div class="item-qty">
+            <button data-admin-action="change-item-qty" data-item-key="${key}" data-delta="-1">-</button>
+            <span>${item.quantity}</span>
+            <button data-admin-action="change-item-qty" data-item-key="${key}" data-delta="1">+</button>
+          </div>
+          <div class="item-price">${item.price} x ${item.quantity} = ${itemTotal}</div>
+          <button class="btn-del-item" data-admin-action="remove-order-item" data-item-key="${key}">删除</button>
+        </div>
+      `;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+    document.getElementById('order-edit-total').innerText = total.toLocaleString() + ' RSD';
+  }
+
+  window.changeItemQty = function(key, delta) {
+    if (!currentOrderItems[key]) return;
+    currentOrderItems[key].quantity = Math.max(1, (currentOrderItems[key].quantity || 1) + delta);
+    renderOrderItems();
+  }
+
+  window.removeOrderItem = function(key) {
+    if (!confirm('确定删除这个菜品吗？')) return;
+    delete currentOrderItems[key];
+    renderOrderItems();
+  }
+
+  window.addItemToOrder = function() {
+    const name = document.getElementById('add-item-name').value.trim();
+    const subName = document.getElementById('add-item-subname').value.trim();
+    const price = parseInt(document.getElementById('add-item-price').value) || 0;
+    const qty = parseInt(document.getElementById('add-item-qty').value) || 1;
+
+    if (!name) return alert('请输入菜品名');
+    if (price <= 0) return alert('请输入有效价格');
+    const key = 'manual_' + Date.now();
+    currentOrderItems[key] = {
+      name: name,
+      subName: subName,
+      price: price,
+      quantity: qty
+    };
+
+    document.getElementById('add-item-name').value = '';
+    document.getElementById('add-item-subname').value = '';
+    document.getElementById('add-item-price').value = '';
+    document.getElementById('add-item-qty').value = '1';
+
+    renderOrderItems();
+  }
+
+  window.saveOrderEdit = async function() {
+    if (!currentOrderId) return;
+
+    let newTotal = 0;
+    Object.values(currentOrderItems).forEach(item => {
+      newTotal += (item.price || 0) * (item.quantity || 1);
+    });
+
+    try {
+      const res = await fetch(`/api/admin/orders/${encodeURIComponent(String(currentOrderId))}/edit`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items_json: JSON.stringify(currentOrderItems),
+          total_amount: newTotal
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('订单更新成功');
+        closeOrderEditModal();
+        if (window.refreshOrderList) window.refreshOrderList();
+        else location.reload();
+      } else {
+        alert('修改失败: ' + (data.error || '未知错误'));
+      }
+    } catch(e) {
+      alert('网络错误');
+    }
+  }
+
+  window.printOrder = async function(orderId) {
+    const id = orderId || currentOrderId;
+    if (!id) return alert('无效订单ID');
+
+    try {
+      showToast('正在发送打印指令...');
+
+      const res = await fetch('/api/admin/reprint', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          orderId: id,
+          shopSlug: window.shopSlug
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        showToast('打印指令已发送');
+      } else {
+        alert('打印失败: ' + (data.error || '未知错误'));
+      }
+    } catch(e) {
+      console.error('Print error:', e);
+        alert('网络错误，无法连接服务器');
+    }
+  }
+
+  // ============================================
+  // Table Order Iframe Logic
+  // ============================================
+  // Logic moved to src/scripts/admin/table-management.js
+
+  window.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'ORDER_SUBMITTED') {
+      if (window.closeOrderModal) window.closeOrderModal();
+      if (event.data.tableId) {
+        showToast('桌号 ' + event.data.tableId + ' 订单已提交');
+      }
+      if (window.refreshOrderList) {
+        window.refreshOrderList();
+      }
+    }
+  });
+
+  window.importData = async function() {
+    const area = document.getElementById('import-area');
+    if (!area) return alert('未找到导入框');
+    const text = String(area.value || '').trim();
+    if (!text) return alert('请先粘贴JSON数据');
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      return alert('JSON格式无效');
+    }
+    if (!Array.isArray(data)) return alert('JSON必须是一个数组');
+
+    if (!confirm('导入将追加分类/商品。是否继续？')) return;
+
+    try {
+      let createdCategories = 0;
+      let createdProducts = 0;
+
+      for (const cat of data) {
+        const catName = String(cat?.category || '').trim();
+        if (!catName) continue;
+
+        const catRes = await fetch('/api/admin/categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: catName,
+            sub_name: String(cat?.category_sub || '')
+          })
+        });
+        const catJson = await catRes.json();
+        if (!catRes.ok || !catJson.success || !catJson.id) {
+          throw new Error(catJson?.error || ('create_category failed: ' + catName));
+        }
+        createdCategories++;
+
+        const items = Array.isArray(cat?.items) ? cat.items : [];
+        for (const item of items) {
+          const name = String(item?.name || '').trim();
+          const price = Number(item?.price || 0);
+          if (!name || !Number.isFinite(price) || price <= 0) continue;
+
+          const prodRes = await fetch('/api/admin/products', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              category_id: Number(catJson.id),
+              name,
+              sub_name: String(item?.subName || item?.sub_name || ''),
+              price: Math.round(price),
+              img: String(item?.img || item?.image || ''),
+            })
+          });
+          const prodJson = await prodRes.json();
+          if (!prodRes.ok || !prodJson.success) {
+            throw new Error(prodJson?.error || ('create_product failed: ' + name));
+          }
+          createdProducts++;
+        }
+      }
+
+      showToast('已导入: ' + createdCategories + ' 个分类, ' + createdProducts + ' 个商品');
+      if (window.refreshMenuList) await window.refreshMenuList();
+      else location.reload();
+    } catch (e) {
+      console.error('importData failed:', e);
+      alert('导入失败: ' + (e?.message || e));
+    }
+  }
+
+  window.exportData = async function() {
+    try {
+      const shopSlug = window.shopSlug || 'shop';
+      const menuRes = await fetch(`/${encodeURIComponent(shopSlug)}/menu`);
+      const menuData = await menuRes.json().catch(() => []);
+      const list = Array.isArray(menuData) ? menuData : [];
+      
+      if (list.length === 0) {
+        alert('导出失败：菜单为空');
+        return;
+      }
+
+      const grouped = list.map((cat) => ({
+        category: cat?.name || '',
+        category_sub: cat?.sub_name || '',
+        items: (Array.isArray(cat?.products) ? cat.products : []).map((p) => ({
+          name: p?.name || '',
+          subName: p?.sub_name || '',
+          price: Number(p?.price || 0),
+          img: p?.img || '',
+        })),
+      }));
+
+      const jsonText = JSON.stringify(grouped, null, 2);
+      const area = document.getElementById('import-area');
+      if (area) area.value = jsonText;
+
+      const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.href = url;
+      a.download = `menu-export-${shopSlug}-${ts}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      showToast('菜单已导出');
+    } catch (e) {
+      console.error('exportData failed:', e);
+      alert('导出失败: ' + (e?.message || e));
+    }
+  }
+  document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    const statsStart = document.getElementById('stats-start');
+    const statsEnd = document.getElementById('stats-end');
+    if (statsStart) statsStart.value = today;
+    if (statsEnd) statsEnd.value = today;
+
+    setTimeout(() => {
+      if (statsStart && statsEnd && statsStart.value && statsEnd.value) {
+        loadStatsQuiet();
+      }
+    }, 500);
+
+    if (window.checkLogin) checkLogin();
+    autoUpdateRate();
+
+    // MQTT & Sound Init
+    if (document.getElementById('sound-mode')) {
+      document.getElementById('sound-mode').value = localStorage.getItem('adminSoundMode') || 'voice';
+    }
+    // Ensure stream starts after all handlers are defined.
+    startRealtimeChannels();
+
+  });
+
+  // Logout function
+  window.logout = async function() {
+    if (confirm('确认退出登录吗？')) {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        location.href = `/admin/${window.shopSlug}/login`;
+      } catch (e) {
+        alert('退出失败，请重试');
+        document.cookie = 'admin_token=; Max-Age=0; path=/';
+        location.href = `/admin/${window.shopSlug}/login`;
+      }
+    }
+  }
+</script>
+<script>
+  import '../../scripts/admin/table-management.ts';
+  import '../../scripts/admin/orders.ts';
+</script>

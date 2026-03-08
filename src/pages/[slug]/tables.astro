@@ -1,0 +1,13 @@
+---
+export const prerender = false;
+
+const { slug } = Astro.params;
+if (!slug) {
+  return new Response('Not Found', { status: 404 });
+}
+
+const q = new URLSearchParams(Astro.url.searchParams);
+q.set('mode', 'tables');
+
+return Astro.rewrite(`/${encodeURIComponent(slug)}?${q.toString()}`);
+---

@@ -1,0 +1,290 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { API_BASE_URL, MASTER_TOKEN } from '../../../config';
+
+export const prerender = false;
+
+const { slug, order_no } = Astro.params;
+if (!slug || !order_no) return new Response('Not Found', { status: 404 });
+
+const parseJSON = <T = any>(raw: any, fallback: T): T => {
+  try {
+    if (typeof raw !== 'string' || raw.trim() === '') return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+let shopRes: Response;
+let orderRes: Response;
+let masterRes: Response | null;
+try {
+  [shopRes, orderRes, masterRes] = await Promise.all([
+    fetch(`${API_BASE_URL}/${encodeURIComponent(slug)}/info`),
+    fetch(`${API_BASE_URL}/${encodeURIComponent(slug)}/order/${encodeURIComponent(order_no)}`),
+    fetch(`${API_BASE_URL}/api/master/init`, {
+      headers: { Authorization: `Bearer ${MASTER_TOKEN}` },
+    }).catch(() => null as any),
+  ]);
+} catch {
+  return new Response('Upstream unavailable', { status: 503 });
+}
+
+if (!shopRes.ok || !orderRes.ok) {
+  return new Response('Not Found', { status: 404 });
+}
+
+let shop: any;
+let order: any;
+try {
+  shop = await shopRes.json();
+  order = await orderRes.json();
+} catch {
+  return new Response('Invalid upstream response', { status: 502 });
+}
+const settings = parseJSON<any>(shop?.settings, {});
+const masterData = masterRes && masterRes.ok ? await masterRes.json().catch(() => ({})) : {};
+const masterSettings = masterData?.settings || {};
+
+const phone =
+  String(settings?.contact?.phone || settings?.phone || shop?.phone || masterSettings?.footer_phone || '');
+
+const itemsRaw = parseJSON<any>(order?.items_json, [] as any);
+const items = Array.isArray(itemsRaw)
+  ? itemsRaw
+  : itemsRaw && typeof itemsRaw === 'object'
+    ? Object.values(itemsRaw)
+    : [];
+
+const statusMap: Record<string, string> = {
+  pending: '待处理 / Pending',
+  confirmed: '已接单 / Confirmed',
+  delivering: '配送中 / Delivering',
+  completed: '已完成 / Completed',
+  cancelled: '已取消 / Cancelled',
+  review_needed: '待审核 / Review Needed',
+};
+
+const statusKey = String(order?.status || '').toLowerCase();
+const statusText = statusMap[statusKey] || String(order?.status || '');
+
+let riderName = String(order?.courier_name || '').trim();
+let riderPhone = String(order?.courier_phone || '').trim();
+if ((!riderName || !riderPhone) && order?.delivery_info) {
+  const di = parseJSON<any>(order.delivery_info, null);
+  if (di) {
+    if (!riderName) riderName = String(di?.name || '').trim();
+    if (!riderPhone) riderPhone = String(di?.phone || '').trim();
+  }
+}
+
+const mqttBroker = String(settings?.mqtt_broker || masterSettings?.mqtt_broker || 'mqtt.serbia70.com');
+const mqttUsername = String(settings?.mqtt_username || masterSettings?.mqtt_username || '');
+const mqttPassword = String(settings?.mqtt_password || masterSettings?.mqtt_password || '');
+const mqttSecret = String(shop?.mqtt_secret || '');
+const shopId = Number(shop?.id || 0);
+const orderId = Number(order?.id || 0);
+
+const createdAt = String(order?.created_at || '').replace('T', ' ').replace('Z', '');
+const isDeliveryOrder = String(order?.order_type || '').toLowerCase() === 'delivery';
+const tableToken = String(order?.table_info || '').split(' ')[0] || '';
+const backUrl = `/${slug}`;
+const reorderUrl = isDeliveryOrder
+  ? `/${slug}?mode=delivery`
+  : tableToken
+    ? `/${slug}?table=${encodeURIComponent(tableToken)}`
+    : `/${slug}`;
+---
+
+<Layout title={`订单详情 - ${shop?.name || slug}`}>
+  <div class="wrap">
+    <div class="card">
+      <h1>订单详情 / Detalji porudzbine</h1>
+      <div class="line"><span>店铺 / Restoran:</span><b>{shop?.name || slug}</b></div>
+      <div class="line"><span>订单号 / Broj:</span><b>#{order?.order_no || order_no}</b></div>
+      <div class="line"><span>状态 / Status:</span><b id="order-status">{statusText}</b></div>
+      <div class="line"><span>下单时间 / Vreme:</span><b>{createdAt || '-'}</b></div>
+      <div class="line"><span>联系商家 / Kontakt:</span>{phone ? <a href={`tel:${phone}`}>{phone}</a> : <b>-</b>}</div>
+      {order?.table_info && <div class="line"><span>地址/桌号 / Adresa/Sto:</span><b>{order.table_info}</b></div>}
+
+      <h2>已点商品 / Stavke</h2>
+      <div class="items">
+        {items.length === 0 ? (
+          <div class="item empty">暂无商品明细</div>
+        ) : (
+          items.map((it: any) => {
+            const n = String(it?.name || it?.product_name || '商品');
+            const sub = String(it?.sub_name || it?.subName || '').trim();
+            const qty = Number(it?.quantity || it?.qty || 1);
+            const price = Number(it?.price || 0);
+            return (
+              <div class="item">
+                <div>
+                  <b>{n}</b>
+                  {sub && <span class="sub"> ({sub})</span>}
+                </div>
+                <div class="qty">x{qty}</div>
+                <div class="price">{price > 0 ? `${price} RSD` : '-'}</div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div class="total">结账金额 / Ukupno: <b id="order-total">{Number(order?.total_amount || 0)} RSD</b></div>
+
+      <div id="rider-card" class={`rider ${riderName || riderPhone ? '' : 'hide'}`}>
+        <h3>送餐员信息 / Dostavljac</h3>
+        <div id="rider-name">姓名: {riderName || '-'}</div>
+        <div id="rider-phone">
+          联系方式: {riderPhone ? <a href={`tel:${riderPhone}`}>{riderPhone}</a> : '-'}
+        </div>
+      </div>
+
+      <div class="tips">页面已启用 MQTT 实时同步，骑手接单后会自动更新。</div>
+    </div>
+  </div>
+
+  <div class="sticky-actions">
+    <a class="btn-back" href={backUrl}>返回店铺 / Nazad</a>
+    <a class="btn-reorder" href={reorderUrl}>再次下单 / Poruci ponovo</a>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" is:inline></script>
+  <script define:vars={{ slug, shopId, mqttSecret, mqttBroker, mqttUsername, mqttPassword, orderId, order_no }} is:inline>
+    (function () {
+      function parseBroker(raw) {
+        const v = String(raw || '').trim();
+        if (!v) return { host: 'mqtt.serbia70.com', port: 443, path: '/mqtt', useSSL: true };
+        if (v.startsWith('ws://') || v.startsWith('wss://')) {
+          try {
+            const u = new URL(v);
+            return {
+              host: u.hostname,
+              port: Number(u.port || (u.protocol === 'wss:' ? 443 : 80)),
+              path: u.pathname || '/mqtt',
+              useSSL: u.protocol === 'wss:',
+            };
+          } catch {}
+        }
+        if (v.indexOf('serbia70.com') !== -1) {
+          return { host: 'mqtt.serbia70.com', port: 443, path: '/mqtt', useSSL: true };
+        }
+        return { host: v, port: 8083, path: '/mqtt', useSSL: false };
+      }
+
+      function shouldRefresh(payload) {
+        const pid = Number((payload && (payload.order_id || payload.id)) || 0);
+        const pno = String((payload && payload.order_no) || '').trim();
+        if (pid > 0 && Number(orderId || 0) > 0 && pid === Number(orderId)) return true;
+        if (pno && pno === String(order_no || '')) return true;
+        return false;
+      }
+
+      function initMqtt() {
+        if (typeof Paho === 'undefined') {
+          setTimeout(initMqtt, 400);
+          return;
+        }
+
+        const b = parseBroker(mqttBroker);
+        const clientId = 'ov_' + String(slug || 's') + '_' + Math.random().toString(16).slice(2, 8);
+        const client = new Paho.MQTT.Client(b.host, Number(b.port), b.path || '/mqtt', clientId);
+
+        client.onConnectionLost = function () {
+          setTimeout(initMqtt, 3000);
+        };
+
+        client.onMessageArrived = function (m) {
+          try {
+            const payload = JSON.parse(m.payloadString || '{}');
+            if (shouldRefresh(payload)) {
+              window.location.reload();
+            }
+          } catch {}
+        };
+
+        const opts = {
+          useSSL: !!b.useSSL,
+          timeout: 5,
+          keepAliveInterval: 60,
+          onSuccess: function () {
+            if (Number(shopId) > 0) client.subscribe('shop/' + String(shopId) + '/orders');
+            if (String(slug || '').trim() && String(mqttSecret || '').trim()) {
+              client.subscribe('restaurant/' + String(slug) + '/' + String(mqttSecret) + '/order');
+              client.subscribe('restaurant/' + String(slug) + '/' + String(mqttSecret) + '/status');
+            }
+          },
+          onFailure: function () {
+            setTimeout(initMqtt, 5000);
+          },
+        };
+
+        if (String(mqttUsername || '').trim()) opts.userName = String(mqttUsername || '').trim();
+        if (String(mqttPassword || '').trim()) opts.password = String(mqttPassword || '');
+
+        client.connect(opts);
+      }
+
+      setTimeout(initMqtt, 200);
+    })();
+  </script>
+
+  <style is:inline>
+    .wrap { max-width: 760px; margin: 24px auto 110px; padding: 0 12px; }
+    .card { background: #fff; border: 1px solid #e9ecef; border-radius: 14px; padding: 18px; box-shadow: 0 6px 18px rgba(0,0,0,.05); }
+    h1 { margin: 0 0 12px; font-size: 22px; color: #243447; }
+    h2 { margin: 16px 0 10px; font-size: 18px; color: #334e68; }
+    .line { display: flex; gap: 10px; margin: 6px 0; color: #2f3e4e; align-items: baseline; }
+    .line span { color: #6b7c93; min-width: 160px; }
+    .items { border: 1px solid #eef2f7; border-radius: 10px; overflow: hidden; }
+    .item { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #f2f4f7; }
+    .item:last-child { border-bottom: none; }
+    .item.empty { display: block; color: #888; }
+    .sub { color: #7b8794; font-size: 13px; }
+    .qty, .price { color: #52606d; font-weight: 600; }
+    .total { margin-top: 14px; font-size: 18px; color: #1f2933; }
+    .rider { margin-top: 14px; padding: 12px; border-radius: 10px; background: #e8f4ff; border: 1px solid #b6d4fe; }
+    .rider.hide { display: none; }
+    .tips { margin-top: 12px; font-size: 13px; color: #6b7c93; }
+    .sticky-actions {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.96);
+      border-top: 1px solid #e6ebf1;
+      backdrop-filter: blur(4px);
+    }
+    .sticky-actions a {
+      text-decoration: none;
+      text-align: center;
+      padding: 12px 10px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 15px;
+      border: 1px solid transparent;
+    }
+    .sticky-actions .btn-back {
+      background: #f3f6fb;
+      color: #2f3e4e;
+      border-color: #d9e2ec;
+    }
+    .sticky-actions .btn-reorder {
+      background: linear-gradient(135deg, #4f7efc 0%, #3a67e4 100%);
+      color: #fff;
+    }
+    @media (max-width: 640px) {
+      .line { display: block; }
+      .line span { display: block; min-width: 0; }
+      .item { grid-template-columns: 1fr; }
+      .sticky-actions a { font-size: 14px; }
+    }
+  </style>
+</Layout>

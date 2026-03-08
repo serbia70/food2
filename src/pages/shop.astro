@@ -1,0 +1,553 @@
+---
+---
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>点餐</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-size: 16px;
+      color: #666;
+    }
+    .error {
+      padding: 40px;
+      text-align: center;
+      color: #ff4d4f;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="loading">正在加载...</div>
+  </div>
+  
+  <script>
+    import { API_BASE_URL } from '../config.ts';
+    const API_BASE = API_BASE_URL;
+    
+    // 从URL获取slug (格式: /shop-slug 或 /shop-slug/admin)
+    function getSlug() {
+      const path = window.location.pathname;
+      // 移除开头的 /
+      const cleanPath = path.replace(/^\//, '');
+      
+      // 排除系统保留路由
+      const reserved = ['admin', 'master', 'api', 'assets', '_astro', 'favicon.svg', 'shop'];
+      const firstPart = cleanPath.split('/')[0];
+      
+      if (reserved.includes(firstPart) || !firstPart) {
+        return null;
+      }
+
+      return firstPart;
+    }
+    
+    // 检查是否是后台页面
+    function isAdminPage() {
+      return window.location.pathname.includes('/admin');
+    }
+    
+    const SHOP_SLUG = getSlug();
+    
+    if (!SHOP_SLUG) {
+      console.log('Invalid shop slug');
+    } else {
+      // 开始加载店铺数据
+      initShop();
+    }
+    
+    // 状态管理
+    let shopInfo = null;
+    let categories = [];
+    let cart = {};
+    let currentCategory = 0;
+    
+    async function initShop() {
+      try {
+        // 获取店铺信息
+        const res = await fetch(`${API_BASE}/${SHOP_SLUG}/info`);
+        if (!res.ok) throw new Error('店铺不存在');
+        shopInfo = await res.json();
+        
+        // 获取菜单
+        const menuRes = await fetch(`${API_BASE}/${SHOP_SLUG}/menu`);
+        categories = await menuRes.json();
+        
+        render();
+      } catch (err) {
+        document.getElementById('app').innerHTML = `
+          <div style="padding: 40px; text-align: center;">
+            <h2>出错了</h2>
+            <p>${err.message}</p>
+            <p style="color: #999; margin-top: 10px;">Slug: ${SHOP_SLUG}</p>
+          </div>
+        `;
+      }
+    }
+    
+    // 渲染页面
+    function render() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <header class="header">
+          <h1>${shopInfo.name}</h1>
+          <p>${shopInfo.address || ''} ${shopInfo.phone || ''}</p>
+        </header>
+        
+        <div class="main-container">
+          <aside class="sidebar" id="sidebar">
+            <!-- 分类由JS填充 -->
+          </aside>
+          
+          <main class="product-list" id="product-list">
+            <!-- 商品由JS填充 -->
+          </main>
+        </div>
+        
+        <footer class="cart-bar">
+          <div class="cart-info">
+            <span class="cart-total">RSD ${getTotal()}</span>
+            <span class="cart-count">${getCount()} 件</span>
+          </div>
+          <button class="btn-submit" id="btn-checkout">去结算</button>
+        </footer>
+        
+        <div id="checkout-modal" class="modal" style="display: none;">
+          <div class="modal-content">
+            <h3>确认订单</h3>
+            <div id="order-items"></div>
+            <div class="form-group">
+              <label>桌号/配送信息</label>
+              <input type="text" id="table-info" placeholder="如: A01 或配送地址" />
+            </div>
+            <div class="form-group">
+              <label>备注</label>
+              <input type="text" id="remarks" placeholder="少盐/不要辣等" />
+            </div>
+            <div class="form-group">
+              <label>手机号</label>
+              <input type="tel" id="phone" placeholder="便于联系" />
+            </div>
+            <div class="modal-actions">
+              <button id="btn-cancel">取消</button>
+              <button class="btn-primary" id="btn-confirm">确认下单</button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      renderCategories();
+      renderProducts();
+      bindEvents();
+    }
+    
+    function renderCategories() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.innerHTML = categories.map((cat, idx) => `
+        <div class="sidebar-item ${idx === currentCategory ? 'active' : ''}" data-idx="${idx}">
+          ${cat.name}
+        </div>
+      `).join('');
+      
+      // 绑定分类点击事件
+      sidebar.querySelectorAll('.sidebar-item').forEach((item, idx) => {
+        item.addEventListener('click', () => {
+          currentCategory = idx;
+          renderCategories();
+          renderProducts();
+        });
+      });
+    }
+    
+    function renderProducts() {
+      const productList = document.getElementById('product-list');
+      const currentCat = categories[currentCategory];
+      
+      if (!currentCat) {
+        productList.innerHTML = '<div class="loading">暂无商品</div>';
+        return;
+      }
+      
+      productList.innerHTML = `
+        <div class="category-section">
+          <div class="category-header">${currentCat.name}</div>
+          ${currentCat.products?.map(product => `
+            <div class="product-item" data-id="${product.id}">
+              <img class="product-img" src="${product.img || '/placeholder.jpg'}" 
+                   alt="${product.name}" onerror="this.src='/placeholder.jpg'" />
+              <div class="product-info">
+                <div class="product-name">${product.name}</div>
+                <div class="product-sub">${product.sub_name || ''}</div>
+                <div class="product-price">RSD ${product.price}</div>
+              </div>
+              <div class="product-actions">
+                <button class="btn-decrease" data-action="decrease" data-id="${product.id}">-</button>
+                <span class="quantity">${cart[product.id] || 0}</span>
+                <button class="btn-increase" data-action="increase" data-id="${product.id}">+</button>
+              </div>
+            </div>
+          `).join('') || '<div style="padding: 20px; color: #999;">暂无商品</div>'}
+        </div>
+      `;
+      
+      // 绑定商品操作事件
+      productList.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const productId = parseInt(e.target.dataset.id);
+          const action = e.target.dataset.action;
+          
+          if (action === 'increase') {
+            cart[productId] = (cart[productId] || 0) + 1;
+          } else if (action === 'decrease') {
+            if (cart[productId] > 0) {
+              cart[productId]--;
+              if (cart[productId] === 0) delete cart[productId];
+            }
+          }
+          
+          renderProducts();
+          updateCartBar();
+        });
+      });
+    }
+    
+    function bindEvents() {
+      // 结算按钮
+      document.getElementById('btn-checkout').addEventListener('click', showCheckout);
+      
+      // 取消按钮
+      document.getElementById('btn-cancel').addEventListener('click', () => {
+        document.getElementById('checkout-modal').style.display = 'none';
+      });
+      
+      // 确认下单
+      document.getElementById('btn-confirm').addEventListener('click', submitOrder);
+    }
+    
+    function updateCartBar() {
+      document.querySelector('.cart-total').textContent = `RSD ${getTotal()}`;
+      document.querySelector('.cart-count').textContent = `${getCount()} 件`;
+    }
+    
+    function getTotal() {
+      let total = 0;
+      categories.forEach(cat => {
+        cat.products?.forEach(p => {
+          if (cart[p.id]) total += p.price * cart[p.id];
+        });
+      });
+      return total;
+    }
+    
+    function getCount() {
+      return Object.values(cart).reduce((a, b) => a + b, 0);
+    }
+    
+    function showCheckout() {
+      if (getCount() === 0) {
+        alert('请先选择商品');
+        return;
+      }
+      
+      const items = [];
+      categories.forEach(cat => {
+        cat.products?.forEach(p => {
+          if (cart[p.id]) {
+            items.push(`${p.name} x${cart[p.id]}`);
+          }
+        });
+      });
+      
+      document.getElementById('order-items').innerHTML = items.join('<br>');
+      document.getElementById('checkout-modal').style.display = 'flex';
+    }
+    
+    async function submitOrder() {
+      const tableInfo = document.getElementById('table-info').value;
+      const remarks = document.getElementById('remarks').value;
+      const phone = document.getElementById('phone').value;
+      
+      const items = [];
+      categories.forEach(cat => {
+        cat.products?.forEach(p => {
+          if (cart[p.id]) {
+            items.push({
+              product_id: p.id,
+              name: p.name,
+              price: p.price,
+              quantity: cart[p.id],
+              total: p.price * cart[p.id]
+            });
+          }
+        });
+      });
+      
+      try {
+        const res = await fetch(`${API_BASE}/${SHOP_SLUG}/order`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            table_info: tableInfo,
+            order_type: 'dine_in',
+            total_amount: getTotal(),
+            items: items,
+            remarks: remarks,
+            user_phone: phone
+          })
+        });
+        
+        if (!res.ok) throw new Error('下单失败');
+        
+        const result = await res.json();
+        alert('下单成功！订单号: ' + result.order_no);
+        cart = {};
+        document.getElementById('checkout-modal').style.display = 'none';
+        renderProducts();
+        updateCartBar();
+      } catch (err) {
+        alert('下单失败: ' + err.message);
+      }
+    }
+  </script>
+  
+  <style>
+    .header {
+      background: #fff;
+      padding: 15px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      z-index: 10;
+      flex-shrink: 0;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .header p {
+      margin: 5px 0 0;
+      font-size: 12px;
+      color: #666;
+    }
+    .main-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .sidebar {
+      width: 85px;
+      background: #f5f5f5;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+    .sidebar-item {
+      padding: 15px 10px;
+      font-size: 13px;
+      color: #666;
+      text-align: center;
+      border-left: 3px solid transparent;
+      cursor: pointer;
+    }
+    .sidebar-item.active {
+      background: #fff;
+      font-weight: bold;
+      color: #333;
+      border-left-color: #ffd101;
+    }
+    .product-list {
+      flex: 1;
+      background: #fff;
+      overflow-y: auto;
+      padding: 0 10px 80px 10px;
+    }
+    .category-header {
+      font-size: 14px;
+      font-weight: bold;
+      padding: 15px 0 10px;
+      color: #333;
+      position: sticky;
+      top: 0;
+      background: #fff;
+      z-index: 5;
+    }
+    .product-item {
+      display: flex;
+      padding: 10px 0;
+      border-bottom: 1px solid #f5f5f5;
+    }
+    .product-img {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 4px;
+      margin-right: 10px;
+      background: #f0f0f0;
+    }
+    .product-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .product-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: #333;
+    }
+    .product-sub {
+      font-size: 12px;
+      color: #999;
+    }
+    .product-price {
+      font-size: 16px;
+      font-weight: bold;
+      color: #ff6900;
+    }
+    .product-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .product-actions button {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: none;
+      background: #ffd101;
+      color: #333;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .quantity {
+      min-width: 24px;
+      text-align: center;
+      font-size: 14px;
+    }
+    .cart-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #333;
+      color: #fff;
+      padding: 12px 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 100;
+    }
+    .cart-total {
+      font-size: 18px;
+      font-weight: bold;
+      margin-right: 10px;
+    }
+    .cart-count {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    .btn-submit {
+      background: #ffd101;
+      color: #333;
+      border: none;
+      padding: 10px 25px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-content {
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      width: 100%;
+      max-width: 400px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .modal-content h3 {
+      margin-top: 0;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 5px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .modal-actions button {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid #ddd;
+      background: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .modal-actions .btn-primary {
+      background: #ffd101;
+      border-color: #ffd101;
+      color: #333;
+      font-weight: bold;
+    }
+    #order-items {
+      margin-bottom: 15px;
+      padding: 10px;
+      background: #f9f9f9;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+  </style>
+</body>
+</html>

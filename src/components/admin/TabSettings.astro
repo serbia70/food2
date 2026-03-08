@@ -1,0 +1,269 @@
+---
+const props: any = Astro.props;
+const { shop, settings, shopCategories, brokerIp, cities } = props;
+---
+<div id="tab-settings" class="tab-content" style="margin-top:0;">
+  <form id="settings-form">
+
+    <div class="settings-card">
+      <h3>🍽️ 桌台管理</h3>
+      <div style="background:#fff3e0; padding:10px; margin-bottom:10px; border-radius:4px; font-size:13px; color:#e65100;">
+        ⚠️ 修改桌台配置后，请刷新页面以生效。
+      </div>
+      <div id="zones-container">
+        <!-- Zones will be rendered here by JS -->
+      </div>
+      <div style="margin-top:15px; display:flex; gap:10px;">
+        <button type="button" class="btn-blue" data-admin-action="add-zone">➕ 添加区域</button>
+        <button type="button" class="btn-save" data-admin-action="save-table-config">💾 保存桌台设置</button>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>📍 店铺位置与配送范围</h3>
+      <div class="form-group">
+        <label>所在城市</label>
+        <select id="shop-city">
+          <option value="">请选择城市</option>
+          {Object.keys(cities || {}).map(c => <option value={c} selected={shop.city === c}>{c}</option>)}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>配送区域 (可填多个，用逗号隔开)</label>
+        <input id="shop-zone" value={shop.zone || ''} placeholder="例如: New Belgrade, Zemun" />
+      </div>
+      <div class="form-group">
+        <label>详细地址</label>
+        <input id="shop-address" value={shop.address || ''} placeholder="街道名称和门牌号" />
+      </div>
+      <div class="form-group">
+        <label>地图链接 (Google/Apple)</label>
+        <input
+          id="shop-map-url"
+          name="contact_map_url"
+          value={settings?.contact?.map_url || settings?.map_url || ''}
+          placeholder="https://maps.google.com/..."
+        />
+        <small style="color:#666; display:block; margin-top:5px;">用于客户端底部“地图”按钮跳转。</small>
+      </div>
+      <button type="button" class="btn-save" data-admin-action="save-location">保存位置信息</button>
+    </div>
+
+    <div class="settings-card">
+      <h3>💰 汇率与支付</h3>
+      <div class="form-group">
+        <label>微信二维码链接</label>
+        <input name="wechat_qr" value={settings.currency?.wechat_qr || ''} placeholder="https://..." />
+      </div>
+      <div class="rate-box">
+        <div class="form-group">
+          <label>基础汇率 (1 RSD = ? CNY)</label>
+          <div style="display:flex; gap:10px;">
+            <input id="rate-input" name="rate" value={settings.currency?.rate || ''} step="0.0001" />
+            <button type="button" data-admin-action="fetch-rate" style="white-space:nowrap;">🔄 获取</button>
+          </div>
+          <small id="rate-msg" style="color:#666;"></small>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>🏠 店铺基本信息</h3>
+      <div class="form-group">
+        <label>店铺名称</label>
+        <div style="display:flex; gap:10px;">
+          <input id="shop-name-input" value={shop.name} />
+          <button type="button" class="btn-blue" data-admin-action="update-shop-name">修改</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>店铺 Logo</label>
+        <div style="display:flex; gap:10px; align-items: center;">
+          <div style="width: 60px; height: 60px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
+            <img id="shop-logo-preview" src={shop.logo || 'https://dummyimage.com/100x100/eee/999?text=Logo'} style="width:100%; height:100%; object-fit:cover;" />
+          </div>
+          <div style="flex: 1;">
+            <input type="file" id="shop-logo-input" accept="image/*" style="display: none;" />
+            <button type="button" class="btn-blue" data-admin-action="open-logo-upload">上传新 Logo</button>
+            <div style="font-size: 12px; color: #999; margin-top: 5px;">建议尺寸: 200x200px, 支持 JPG/PNG</div>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>店铺分类</label>
+        <div style="display:flex; gap:10px;">
+          <select id="shop-category-input" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:4px;">
+            {/* @ts-ignore */}
+            {shopCategories.map((c: any) => (
+              <option value={c.id} selected={shop?.category === c.id}>{c.icon} {c.name}</option>
+            ))}
+          </select>
+          <button type="button" class="btn-blue" data-admin-action="update-shop-category">修改</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>联系电话</label>
+        <input name="contact_phone" value={settings?.contact?.phone || ''} placeholder="061..." />
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>🖨️ 打印机配置</h3>
+      <div style="background:#f8f9fa; padding:15px; border-radius:6px; font-size:13px; color:#555;">
+        <p><strong>Broker:</strong> {brokerIp}</p>
+        <p><strong>Topic:</strong> <code style="background:#eee; padding:2px 5px; color:#d63384;">restaurant/{shop?.slug || 'default'}/{shop?.mqtt_secret || 'default'}/order</code></p>
+
+        <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
+          <input type="text" id="mqttSecretInput" value={shop?.mqtt_secret || ''} placeholder="设置新的 Secret" style="padding:5px; border:1px solid #ddd; border-radius:4px;" />
+          <button type="button" data-admin-action="update-mqtt-secret" style="padding:5px 10px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer;">修改 Secret</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>🖨️ 打印设置</h3>
+      <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+        <input type="checkbox" name="print_on_checkout" id="print-on-checkout" checked={settings.print_on_checkout || false} style="width:auto;" />
+        <label for="print-on-checkout" style="margin:0;">结账时自动打印客户小票</label>
+      </div>
+      <small style="color:#666; display:block; margin-top:5px;">
+        开启后，点击"结账"按钮会自动打印客户小票。关闭后仅更新订单状态，不打印。
+      </small>
+    </div>
+
+    <div class="settings-card" style="border-left: 3px solid #2196f3;">
+      <h3>📋 订单数据管理</h3>
+
+      <div style="background:#f8f9fa; padding:15px; border-radius:6px; margin-bottom:15px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+          <span>已结账订单数:</span>
+          <strong id="completed-orders-count">-</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+          <span>已归档订单数:</span>
+          <strong id="archived-orders-count">-</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span>数据库大小:</span>
+          <strong id="db-size">-</strong>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>归档时间设置</label>
+        <select id="archive-months" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px;">
+          <option value="3">3个月前的订单</option>
+          <option value="6">6个月前的订单</option>
+          <option value="12">1年前的订单</option>
+        </select>
+        <small style="color:#666; display:block; margin-top:5px;">
+          归档后的订单不会显示在订单列表中，但数据仍保留在数据库中。
+        </small>
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:15px;">
+        <button type="button" class="btn-blue" data-admin-action="load-order-stats" style="flex:1;">
+          🔄 刷新统计
+        </button>
+        <button type="button" class="btn-blue" data-admin-action="archive-old-orders" style="flex:1;">
+          📦 归档旧订单
+        </button>
+      </div>
+
+      <div style="margin-top:15px; padding-top:15px; border-top:1px solid #e0e0e0;">
+        <p style="color:#d32f2f; font-weight:bold; margin-bottom:10px;">⚠️ 危险操作</p>
+        <button type="button" class="btn-del" data-admin-action="delete-archived-orders" style="width:100%;">
+          🗑️ 永久删除已归档订单
+        </button>
+        <small style="color:#999; display:block; margin-top:5px;">
+          删除前会自动备份到 backup/ 目录。此操作不可恢复，请谨慎操作！
+        </small>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>🤖 Telegram 通知</h3>
+      <div class="form-group">
+        <label>Bot Token</label>
+        <input name="tg_token" value={settings.telegram?.token || ''} placeholder="123456:ABC-DEF..." />
+      </div>
+      <div class="form-group">
+        <label>Chat ID</label>
+        <input name="tg_chat_id" value={settings.telegram?.chat_id || ''} placeholder="-100xxxxxx" />
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>🛵 配送设置</h3>
+      <div class="form-group">
+        <label>配送方式</label>
+        <select id="delivery-type" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+          <option value="merchant" selected={!shop.delivery_type || shop.delivery_type === 'merchant'}>🏪 商家配送</option>
+          <option value="platform" selected={shop.delivery_type === 'platform'}>🚀 平台配送</option>
+        </select>
+        <small style="color:#666; display:block; margin-top:5px;">商家配送：店铺自行安排配送人员。平台配送：由平台统一派单配送。</small>
+      </div>
+      <div class="form-group">
+        <label>外卖配送费 (RSD)</label>
+        <input name="fee" type="number" value={settings.delivery?.fee || ''} />
+      </div>
+      <div class="form-group">
+        <label>免运费门槛 (RSD)</label>
+        <input name="free_threshold" type="number" value={settings.delivery?.free_threshold || ''} />
+      </div>
+      <div class="form-group">
+        <label>配送区域</label>
+        <textarea name="zones" rows="3">{settings.delivery?.zones || ''}</textarea>
+      </div>
+      <button type="button" class="btn-save" data-admin-action="save-delivery-type">保存配送设置</button>
+    </div>
+
+    <div class="settings-card">
+      <h3>🛵 骑手管理</h3>
+      <div id="drivers-list" style="margin-bottom:15px;">
+        {/* 初始渲染由 JS 完成，或者这里直接渲染 */}
+        {(settings.drivers || []).map((d: any, idx: number) => (
+          <div class="driver-row" style="display:flex; justify-content:space-between; align-items:center; padding:8px; background:#f9f9f9; margin-bottom:5px; border-radius:4px;">
+            <span>{d.name} ({d.phone})</span>
+            <button type="button" class="btn-xs btn-red" data-admin-action="remove-driver" data-driver-index={idx}>删除</button>
+          </div>
+        ))}
+      </div>
+      <div style="display:flex; gap:10px;">
+        <input id="new-driver-name" placeholder="姓名" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:4px;" />
+        <input id="new-driver-phone" placeholder="电话" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:4px;" />
+        <button type="button" class="btn-blue" data-admin-action="add-driver">➕ 添加</button>
+      </div>
+      <input type="hidden" name="drivers_json" id="drivers-json" value={JSON.stringify(settings.drivers || [])} />
+    </div>
+
+    <div class="settings-card">
+      <h3>⏰ 营业时间</h3>
+      <div class="form-group">
+        <label>开门 / 关门</label>
+        <div style="display:flex; gap:10px">
+          <input name="open" type="time" value={settings.hours?.open || ''} />
+          <input name="close" type="time" value={settings.hours?.close || ''} />
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card" style="border-left: 3px solid #ff5722;">
+      <h3>🎌 节假日/休息日设置</h3>
+      <div class="form-group">
+        <label>全天不营业日期 (多个日期用逗号分隔，格式: YYYY-MM-DD)</label>
+        <input name="closed_dates" value={settings.holidays?.closed_dates || ''} placeholder="例如: 2024-12-25, 2024-01-01" />
+      </div>
+      <div class="form-group">
+        <label>休息提醒语 (客户端显示)</label>
+        <input name="holiday_message" value={settings.holidays?.message || ''} placeholder="例如: 休息中，明天恢复营业" />
+      </div>
+      <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+        <input type="checkbox" name="holiday_enabled" id="holiday-enabled" checked={settings.holidays?.enabled || false} style="width:auto;" />
+        <label for="holiday-enabled" style="margin:0;">启用节假日设置</label>
+      </div>
+    </div>
+
+    <button type="submit" class="btn-save">💾 保存所有设置</button>
+  </form>
+</div>

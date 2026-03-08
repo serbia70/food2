@@ -1,0 +1,178 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="超级管理员登录">
+  <div class="login-container">
+    <div class="login-card">
+      <h1>⚡ Master Admin</h1>
+      <p>超级总控台登录</p>
+
+      <form id="login-form">
+        <input type="password" id="password" placeholder="请输入超级密码" required />
+        <button type="submit">进入系统</button>
+      </form>
+
+      <div class="forgot-password">
+        <button type="button" onclick="showResetGuide()">🔑 忘记密码？</button>
+      </div>
+
+      <div id="reset-guide" class="reset-guide" style="display: none;">
+        <h3>密码重置指南</h3>
+        <p>如果您忘记了超级管理员密码，请按以下步骤重置：</p>
+        <ol>
+          <li>通过 SSH 登录到服务器</li>
+          <li>进入项目目录</li>
+          <li>运行命令: <code>npm run reset-master</code></li>
+          <li>密码将被重置为: <strong>admin123</strong></li>
+        </ol>
+        <button onclick="hideResetGuide()">关闭</button>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script is:inline>
+  // 检查是否已登录
+  if (localStorage.getItem('master_token') === 'master_token_valid') {
+    window.location.href = '/master';
+  }
+
+  document.getElementById('login-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const password = document.getElementById('password').value;
+
+    const res = await fetch('/api/master/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      localStorage.setItem('master_token', data.token);
+      window.location.href = '/master';
+    } else {
+      alert('密码错误');
+    }
+  };
+
+  function showResetGuide() {
+    document.getElementById('reset-guide').style.display = 'block';
+  }
+  function hideResetGuide() {
+    document.getElementById('reset-guide').style.display = 'none';
+  }
+</script>
+
+<style>
+  .login-container { 
+    height: 100vh; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    background: #2d3748; 
+  }
+  .login-card { 
+    background: #fff; 
+    padding: 40px; 
+    border-radius: 12px; 
+    width: 100%; 
+    max-width: 350px; 
+    text-align: center; 
+  }
+  h1 { 
+    margin: 0 0 10px 0; 
+    color: #1a202c; 
+  }
+  p { 
+    color: #718096; 
+    margin-bottom: 30px; 
+  }
+  input { 
+    width: 100%; 
+    padding: 12px; 
+    margin-bottom: 15px; 
+    border: 2px solid #e2e8f0; 
+    border-radius: 8px; 
+    box-sizing: border-box; 
+    font-size: 16px; 
+  }
+  button[type="submit"] { 
+    width: 100%; 
+    padding: 12px; 
+    background: #48bb78; 
+    color: #fff; 
+    border: none; 
+    border-radius: 8px; 
+    font-size: 16px; 
+    font-weight: bold; 
+    cursor: pointer; 
+  }
+  button[type="submit"]:hover { 
+    background: #38a169; 
+  }
+
+  .forgot-password { 
+    margin-top: 20px; 
+  }
+  .forgot-password button { 
+    background: transparent; 
+    color: #718096; 
+    font-size: 14px; 
+    font-weight: normal; 
+    padding: 8px;
+    border: none;
+    cursor: pointer;
+  }
+  .forgot-password button:hover { 
+    color: #4a5568; 
+    background: transparent; 
+  }
+
+  .reset-guide { 
+    margin-top: 20px; 
+    background: #f7fafc; 
+    padding: 20px; 
+    border-radius: 8px; 
+    text-align: left; 
+  }
+  .reset-guide h3 { 
+    margin: 0 0 10px 0; 
+    font-size: 16px; 
+    color: #2d3748; 
+  }
+  .reset-guide p { 
+    font-size: 14px; 
+    color: #4a5568; 
+    margin-bottom: 10px; 
+  }
+  .reset-guide ol { 
+    padding-left: 20px; 
+    font-size: 13px; 
+    color: #4a5568; 
+    margin-bottom: 15px; 
+  }
+  .reset-guide li { 
+    margin-bottom: 8px; 
+  }
+  .reset-guide code { 
+    background: #edf2f7; 
+    padding: 2px 6px; 
+    border-radius: 4px; 
+    font-family: monospace; 
+    color: #d53f8c; 
+  }
+  .reset-guide strong { 
+    color: #c53030; 
+  }
+  .reset-guide button { 
+    background: #e2e8f0; 
+    color: #4a5568; 
+    font-size: 13px; 
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+</style>

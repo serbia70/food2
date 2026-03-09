@@ -1,0 +1,5 @@
+---
+export const prerender = false;
+const q = Astro.url.search || '';
+return Astro.redirect(`/admin${q}`, 302);
+---

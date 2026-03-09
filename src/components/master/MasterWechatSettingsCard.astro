@@ -1,0 +1,56 @@
+---
+import type { MasterSettingsView } from '../../lib/master-settings-view';
+
+const { settings } = Astro.props as { settings: MasterSettingsView['wechat'] };
+---
+
+<section class="settings-card settings-card-wechat">
+  <div class="settings-head">
+    <div>
+      <div class="settings-title">微信联系设置</div>
+      <div class="settings-subtitle">管理默认微信号和联系二维码地址，方便前台与后台复用。</div>
+    </div>
+  </div>
+
+  <form class="settings-form" onsubmit="return window.submitMasterWechatSettings ? window.submitMasterWechatSettings(this) : false;">
+    <label>
+      <span>微信号</span>
+      <input name="wechatId" type="text" value={settings.wechatId} placeholder="例如：serbia70wx" />
+    </label>
+    <label>
+      <span>联系二维码地址</span>
+      <input name="wechatContactQr" type="text" value={settings.wechatContactQr} placeholder="https://..." />
+    </label>
+
+    <div class="settings-actions">
+      <button type="submit" class="settings-submit">保存微信联系设置</button>
+      <div id="master-wechat-settings-feedback" class="settings-feedback">这里只维护系统级联系方式，不处理实际图片上传。</div>
+    </div>
+  </form>
+</section>
+
+<style>
+  .settings-card {
+    background: #fff;
+    border: 1px solid #d7dee7;
+    border-left: 4px solid #16a34a;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+  }
+
+  .settings-head { margin-bottom: 14px; }
+  .settings-title { font-size: 20px; font-weight: 900; color: #0f172a; }
+  .settings-subtitle { margin-top: 4px; font-size: 13px; color: #64748b; }
+  .settings-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .settings-form label { display: grid; gap: 6px; }
+  .settings-form span { font-size: 12px; font-weight: 700; color: #475569; }
+  .settings-form input { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fff; }
+  .settings-actions { grid-column: 1 / -1; display: grid; gap: 8px; }
+  .settings-submit { border: none; border-radius: 10px; padding: 12px 16px; background: #16a34a; color: #fff; font-weight: 800; cursor: pointer; }
+  .settings-feedback { font-size: 12px; color: #64748b; }
+
+  @media (max-width: 860px) {
+    .settings-form { grid-template-columns: 1fr; }
+  }
+</style>

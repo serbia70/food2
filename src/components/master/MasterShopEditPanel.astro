@@ -1,0 +1,90 @@
+---
+---
+
+<div id="master-shop-edit-panel" class="side-shell" hidden>
+  <div class="side-backdrop" data-close-shop-edit></div>
+  <aside class="side-panel">
+    <div class="side-head">
+      <div>
+        <div class="side-title">编辑店铺</div>
+        <div class="side-subtitle">修改名称、套餐、提成计算方式和状态</div>
+      </div>
+      <button type="button" class="side-close" data-close-shop-edit>×</button>
+    </div>
+
+    <form id="master-shop-edit-form" class="side-form" onsubmit="return window.submitMasterShopEdit ? window.submitMasterShopEdit(this) : false;">
+      <input type="hidden" name="id" />
+      <label><span>店铺名称</span><input name="name" type="text" required /></label>
+      <label><span>Slug</span><input name="slug" type="text" required /></label>
+      <label><span>登录密码</span><input name="password" type="text" placeholder="留空表示不修改" /></label>
+      <label>
+        <span>套餐类型</span>
+        <select name="billingPlanType">
+          <option value="subscription">订阅版</option>
+          <option value="business">商务版</option>
+        </select>
+      </label>
+      <label>
+        <span>提成计算方式</span>
+        <select name="commissionType">
+          <option value="percentage">按百分比</option>
+          <option value="per_order">按单固定额</option>
+        </select>
+      </label>
+      <label><span>提成计算数值</span><input name="commissionValue" type="number" min="0.1" step="0.1" /></label>
+      <div class="side-feedback">这里只修改未来订单的提成计算规则，不会改变历史累计金额。</div>
+      <label>
+        <span>状态</span>
+        <select name="status">
+          <option value="active">营业中</option>
+          <option value="disabled">已停用</option>
+          <option value="expired">已过期</option>
+        </select>
+      </label>
+      <label>
+        <span>外卖</span>
+        <select name="enableDelivery">
+          <option value="1">开启</option>
+          <option value="0">关闭</option>
+        </select>
+      </label>
+      <label>
+        <span>堂食</span>
+        <select name="enableDineIn">
+          <option value="1">开启</option>
+          <option value="0">关闭</option>
+        </select>
+      </label>
+      <label>
+        <span>预约</span>
+        <select name="enableReservation">
+          <option value="1">开启</option>
+          <option value="0">关闭</option>
+        </select>
+      </label>
+
+      <div class="side-actions">
+        <button type="submit" class="side-submit">保存店铺修改</button>
+        <div id="master-shop-edit-feedback" class="side-feedback">保存后建议刷新当前列表确认结果。</div>
+      </div>
+    </form>
+  </aside>
+</div>
+
+<style>
+  .side-shell[hidden] { display: none; }
+  .side-shell { position: fixed; inset: 0; z-index: 95; }
+  .side-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.42); }
+  .side-panel { position: absolute; top: 0; right: 0; width: min(520px, 100%); height: 100%; background: #fff; box-shadow: -18px 0 50px rgba(15, 23, 42, 0.16); display: flex; flex-direction: column; }
+  .side-head { padding: 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; gap: 12px; }
+  .side-title { font-size: 22px; font-weight: 900; color: #0f172a; }
+  .side-subtitle { margin-top: 4px; color: #64748b; font-size: 13px; }
+  .side-close { border: none; background: #f8fafc; color: #334155; width: 36px; height: 36px; border-radius: 10px; cursor: pointer; font-size: 22px; }
+  .side-form { padding: 18px 20px 28px; overflow-y: auto; display: grid; gap: 12px; }
+  .side-form label { display: grid; gap: 6px; }
+  .side-form span { font-size: 12px; font-weight: 700; color: #475569; }
+  .side-form input, .side-form select { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fff; }
+  .side-actions { margin-top: 6px; display: grid; gap: 8px; }
+  .side-submit { border: none; background: #111827; color: #fff; padding: 12px 14px; border-radius: 12px; cursor: pointer; font-weight: 800; }
+  .side-feedback { font-size: 12px; color: #64748b; }
+</style>

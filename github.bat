@@ -11,7 +11,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-git push -f origin HEAD
+git push -u origin HEAD
 if errorlevel 1 (
   echo.
   echo [ERROR] git push failed. Fix the issue and re-run.

@@ -1,0 +1,24 @@
+<div id="tab-data" class="tab-content">
+  <div class="settings-card" style="border-left:4px solid #ff9800;">
+    <h3>数据导入</h3>
+    <p style="color:#666; margin-bottom:15px; font-size:14px;">粘贴JSON格式数据导入菜单（将分类/商品添加到当前菜单）</p>
+    <textarea
+      id="import-area"
+      rows="15"
+      style="width:100%; font-family:monospace; font-size:13px;"
+      placeholder={`[
+  {
+    "category": "主菜",
+    "category_sub": "热炒",
+    "items": []
+  }
+]`}
+    ></textarea>
+    <button class="btn-save btn-large" style="background:#ff9800; margin-top:15px; width:100%;" data-admin-action="import-data">
+      导入数据
+    </button>
+    <button class="btn-save btn-large" style="background:#1976d2; margin-top:10px; width:100%;" data-admin-action="export-data">
+      导出菜单
+    </button>
+  </div>
+</div>

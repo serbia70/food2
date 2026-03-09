@@ -3,7 +3,6 @@ dist/
 
 # dependencies
 node_modules/
-meituanGo
 
 # logs
 npm-debug.log*

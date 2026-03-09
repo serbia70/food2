@@ -1,0 +1,374 @@
+---
+import type { MasterShopView } from '../../lib/master-shop-view';
+
+const { shops = [] } = Astro.props as { shops: MasterShopView[] };
+
+const fmt = (value: number) => Number(value || 0).toLocaleString('zh-CN');
+
+function toneClass(tone: string) {
+  if (tone === 'billing-overdue') return 'row-billing-overdue';
+  if (tone === 'billing-warning') return 'row-billing-warning';
+  if (tone === 'expired') return 'row-expired';
+  if (tone === 'expiring') return 'row-expiring';
+  return '';
+}
+
+function billingBadgeClass(label: string) {
+  if (label === '逾期') return 'badge-billing badge-billing-overdue';
+  if (label === '预警') return 'badge-billing badge-billing-warning';
+  return 'badge-billing badge-billing-ok';
+}
+
+function expiryTagClass(label: string) {
+  if (label === '已过期') return 'tag-expired';
+  if (label === '即将到期') return 'tag-expiring';
+  return 'tag-normal';
+}
+---
+
+<section class="table-card">
+  <div class="table-head">
+    <div>
+      <div class="table-title">店铺管理</div>
+      <div class="table-subtitle">参考旧版 Master 控制台，优先恢复门店列表、状态、余额、营收与操作入口。</div>
+    </div>
+  </div>
+
+  <div class="toolbar" data-master-toolbar>
+    <label class="toolbar-field toolbar-search">
+      <span>搜索</span>
+      <input type="search" placeholder="按店铺名或 slug 搜索" data-master-filter-search />
+    </label>
+    <label class="toolbar-field">
+      <span>门店状态</span>
+      <select data-master-filter-status>
+        <option value="all">全部</option>
+        <option value="正常运营">正常运营</option>
+        <option value="外卖已锁定">外卖已锁定</option>
+        <option value="堂食点餐停止">堂食点餐停止</option>
+        <option value="外卖堂食均停止">外卖堂食均停止</option>
+        <option value="已停用">已停用</option>
+      </select>
+    </label>
+    <label class="toolbar-field">
+      <span>账单状态</span>
+      <select data-master-filter-billing>
+        <option value="all">全部</option>
+        <option value="正常">正常</option>
+        <option value="预警">预警</option>
+        <option value="逾期">逾期</option>
+      </select>
+    </label>
+    <label class="toolbar-field">
+      <span>排序</span>
+      <select data-master-sort>
+        <option value="revenue_desc">营业额从高到低</option>
+        <option value="orders_desc">订单数从高到低</option>
+        <option value="balance_desc">余额从高到低</option>
+        <option value="billing_desc">账单风险优先</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="table-wrap">
+    <table class="shop-table">
+      <thead>
+        <tr>
+          <th>店铺</th>
+          <th>门店状态</th>
+          <th>余额</th>
+          <th>今日数据 (外卖/堂食)</th>
+          <th>提成累计</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {shops.map((shop) => (
+          <tr
+            class={toneClass(shop.rowTone)}
+            data-master-shop-row
+            data-name={shop.name.toLowerCase()}
+            data-slug={shop.slug.toLowerCase()}
+            data-status={shop.statusLabel}
+            data-billing={shop.billingLabel}
+            data-billing-severity={String(shop.billingSeverity)}
+            data-revenue={String(shop.sortValueRevenue)}
+            data-orders={String(shop.sortValueOrders)}
+            data-balance={String(shop.sortValueBalance)}
+            data-delivery-locked={shop.isDeliveryLocked ? '1' : '0'}
+          >
+            <td>
+              <div class="shop-name-cell">
+                <div class="shop-name">{shop.name}</div>
+                <div class="shop-slug">slug: {shop.slug}</div>
+              </div>
+            </td>
+            <td>
+              <div class="shop-state-cell">
+                <span class="badge-status">{shop.shopStateLabel}</span>
+                {shop.shopStateReason ? <div class="state-subtext">{shop.shopStateReason}</div> : null}
+              </div>
+            </td>
+            <td>
+              <div class="billing-cell">
+                <div class="balance-text">{fmt(shop.balanceRsd)} RSD</div>
+              </div>
+            </td>
+            <td>
+              <div class="today-stats-cell">
+                <div class="stat-row delivery-row">
+                  <span class="stat-label delivery-label">外卖</span>
+                  <span class="stat-val">{fmt(shop.deliveryTodayOrders)} 单</span>
+                  <span class="stat-sep">/</span>
+                  <span class="stat-val">{fmt(shop.deliveryTodayRevenue)} RSD</span>
+                </div>
+                <div class="stat-row dine-in-row">
+                  <span class="stat-label dine-in-label">堂食</span>
+                  <span class="stat-val">{fmt(shop.dineInTodayOrders)} 单</span>
+                  <span class="stat-sep">/</span>
+                  <span class="stat-val">{fmt(shop.dineInTodayRevenue)} RSD</span>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div class="commission-main">{fmt(shop.monthCommissionRsd)} / {fmt(shop.totalCommissionRsd)} RSD</div>
+              <div class="commission-sub">月累计 / 总累计</div>
+            </td>
+            <td>
+              <div class="action-btns">
+                <button type="button" class="btn-sm btn-light" onclick={`window.openMasterShopEdit(${Number(shop.id || 0)})`}>编辑</button>
+                <button type="button" class="btn-sm btn-light" onclick={`window.openMasterShopTopup(${Number(shop.id || 0)})`}>充值</button>
+                <button type="button" class="btn-sm btn-dark" onclick={`window.impersonateMasterShop(${Number(shop.id || 0)})`}>后台</button>
+                <button type="button" class="btn-sm btn-light" onclick={`window.openMasterStorefront(${JSON.stringify(shop.copyStorefrontPath)})`}>打开前台</button>
+                <button type="button" class="btn-sm btn-danger" onclick={`window.deleteMasterShop(${Number(shop.id || 0)}, ${JSON.stringify(shop.name)})`}>删除</button>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<style>
+  .table-card {
+    background: #fff;
+    border: 1px solid #d7dee7;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
+  }
+
+  .table-head {
+    margin-bottom: 14px;
+  }
+
+  .table-title {
+    font-size: 22px;
+    font-weight: 900;
+    color: #0f172a;
+  }
+
+  .table-subtitle {
+    margin-top: 4px;
+    font-size: 13px;
+    color: #64748b;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .toolbar {
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .toolbar-field {
+    display: grid;
+    gap: 6px;
+  }
+
+  .toolbar-field span {
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+  }
+
+  .toolbar-field input,
+  .toolbar-field select {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: #fff;
+    font-size: 14px;
+  }
+
+  .shop-table {
+    width: 100%;
+    min-width: 980px;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  .today-stats-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .stat-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #334155;
+    line-height: 1.6;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+    min-width: 32px;
+    text-align: center;
+  }
+
+  .delivery-label {
+    background-color: #dbeafe;
+    color: #1e40af;
+  }
+
+  .dine-in-label {
+    background-color: #f1f5f9;
+    color: #64748b;
+  }
+
+  .stat-sep {
+    color: #cbd5e1;
+  }
+
+  .stat-val {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .delivery-row .stat-val {
+    color: #0f172a;
+  }
+
+  .dine-in-row .stat-val {
+    color: #64748b;
+  }
+
+  .shop-table th {
+    text-align: left;
+    padding: 12px 10px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #64748b;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .shop-table td {
+    padding: 14px 10px;
+    border-bottom: 1px solid #edf2f7;
+    vertical-align: middle;
+  }
+
+  .shop-name-cell {
+    display: grid;
+    gap: 4px;
+  }
+
+  .shop-name {
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .shop-slug {
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  .badge-status,
+  .badge-billing {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .badge-status {
+    background: #e0f2fe;
+    color: #075985;
+  }
+
+  .shop-state-cell {
+    display: grid;
+    gap: 6px;
+  }
+
+  .state-subtext {
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+
+  .balance-text,
+  .commission-sub {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  .commission-main {
+    font-weight: 800;
+    color: #1e293b;
+  }
+
+  .action-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .btn-sm {
+    border: none;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .btn-primary { background: #e0f2fe; color: #075985; }
+  .btn-dark { background: #111827; color: #fff; }
+  .btn-light { background: #f8fafc; color: #334155; border: 1px solid #dbe2ea; }
+  .btn-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+
+  .row-expired { background: #fff5f5; }
+  .row-expiring { background: #fffaf0; }
+  .row-billing-warning { box-shadow: inset 4px 0 0 #f59e0b; }
+  .row-billing-overdue { background: #fff1f2; box-shadow: inset 4px 0 0 #dc2626; }
+
+  @media (max-width: 1080px) {
+    .toolbar {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .toolbar {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

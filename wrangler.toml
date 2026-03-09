@@ -1,0 +1,12 @@
+name = "meituan-astro"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-02-13"
+
+[vars]
+PUBLIC_API_URL = "https://api.serbia70.com"
+PUBLIC_MQTT_BROKER = "wss://mqtt.serbia70.com:443/mqtt"
+
+PUBLIC_MASTER_TOKEN = "e2fa878eec9def46"
+PUBLIC_MQTT_USERNAME = "restaurant_user"
+PUBLIC_MQTT_PASSWORD = "restaurant_password_2024"
+

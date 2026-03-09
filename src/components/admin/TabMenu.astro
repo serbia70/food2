@@ -1,8 +1,16 @@
-﻿---
+---
 const { categories, products, shop } = Astro.props;
 ---
 <div id="tab-menu" class="tab-content">
-  <div style="margin-bottom:15px; text-align:right; display:flex; justify-content:flex-end; gap:10px;">
+  <div style="margin-bottom:15px; text-align:right; display:flex; justify-content:flex-end; gap:10px; align-items: center;">
+    <div class="layout-switcher" style="margin-right:auto; display:flex; gap:5px; background:#f0f2f5; padding:3px; border-radius:6px;">
+        <select id="admin-menu-layout-select" onchange="window.saveMenuLayout(this.value)" style="padding:5px 10px; border:none; background:transparent; font-size:13px; cursor:pointer; color:#333;">
+            <option value="image-2col">🖼️ 图文 (两列)</option>
+            <option value="image-1col">🖼️ 图文 (一列)</option>
+            <option value="text-2col">📝 文字 (两列)</option>
+            <option value="text-1col">📝 文字 (一列)</option>
+        </select>
+    </div>
     <button type="button" class="btn-blue" data-admin-action="open-create-category">➕ 新建分类 (New Category)</button>
     <button type="button" class="btn-blue" data-admin-action="localize-images">🔄 一键转存远程图片 (Localize Images)</button>
   </div>

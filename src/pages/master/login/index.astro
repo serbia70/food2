@@ -1,178 +1,214 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+
+if (Astro.cookies.get('master_token')?.value) {
+  return Astro.redirect('/master', 302);
+}
 ---
 
 <Layout title="超级管理员登录">
   <div class="login-container">
     <div class="login-card">
-      <h1>⚡ Master Admin</h1>
-      <p>超级总控台登录</p>
+      <h1><span>⚡</span> Master Admin</h1>
+      <p class="subtitle">超级总控台登录</p>
 
       <form id="login-form">
         <input type="password" id="password" placeholder="请输入超级密码" required />
-        <button type="submit">进入系统</button>
+        <button type="submit" id="submit-btn">进入系统</button>
+        <div id="error-msg" class="error-msg"></div>
       </form>
 
       <div class="forgot-password">
-        <button type="button" onclick="showResetGuide()">🔑 忘记密码？</button>
+        <button type="button" onclick="showResetGuide()">🔑 忘记密码?</button>
       </div>
 
-      <div id="reset-guide" class="reset-guide" style="display: none;">
+      <div id="reset-guide" class="reset-guide" style="display: none">
         <h3>密码重置指南</h3>
-        <p>如果您忘记了超级管理员密码，请按以下步骤重置：</p>
         <ol>
           <li>通过 SSH 登录到服务器</li>
           <li>进入项目目录</li>
           <li>运行命令: <code>npm run reset-master</code></li>
           <li>密码将被重置为: <strong>admin123</strong></li>
         </ol>
-        <button onclick="hideResetGuide()">关闭</button>
+        <button type="button" onclick="hideResetGuide()">关闭</button>
       </div>
     </div>
   </div>
-</Layout>
 
-<script is:inline>
-  // 检查是否已登录
-  if (localStorage.getItem('master_token') === 'master_token_valid') {
-    window.location.href = '/master';
-  }
+  <script is:inline>
+    const form = document.getElementById('login-form');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const password = document.getElementById('password').value;
+      const errorMsg = document.getElementById('error-msg');
+      const btn = document.getElementById('submit-btn');
 
-  document.getElementById('login-form').onsubmit = async (e) => {
-    e.preventDefault();
-    const password = document.getElementById('password').value;
+      errorMsg.textContent = '';
+      btn.disabled = true;
+      btn.textContent = '进入中...';
 
-    const res = await fetch('/api/master/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password })
+      try {
+        const res = await fetch('/api/master/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'admin', password }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data?.success || !data?.token) {
+          errorMsg.textContent = '密码错误';
+          btn.disabled = false;
+          btn.textContent = '进入系统';
+          return;
+        }
+
+        window.location.href = '/master';
+      } catch {
+        errorMsg.textContent = '网络错误';
+        btn.disabled = false;
+        btn.textContent = '进入系统';
+      }
     });
-    const data = await res.json();
 
-    if (data.success) {
-      localStorage.setItem('master_token', data.token);
-      window.location.href = '/master';
-    } else {
-      alert('密码错误');
+    window.showResetGuide = () => {
+      document.getElementById('reset-guide').style.display = 'block';
+    };
+
+    window.hideResetGuide = () => {
+      document.getElementById('reset-guide').style.display = 'none';
+    };
+  </script>
+
+  <style>
+    .login-container {
+      min-height: 100svh;
+      display: grid;
+      place-items: center;
+      background: #2f3e56;
+      padding: 20px;
+      box-sizing: border-box;
     }
-  };
-
-  function showResetGuide() {
-    document.getElementById('reset-guide').style.display = 'block';
-  }
-  function hideResetGuide() {
-    document.getElementById('reset-guide').style.display = 'none';
-  }
-</script>
-
-<style>
-  .login-container { 
-    height: 100vh; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    background: #2d3748; 
-  }
-  .login-card { 
-    background: #fff; 
-    padding: 40px; 
-    border-radius: 12px; 
-    width: 100%; 
-    max-width: 350px; 
-    text-align: center; 
-  }
-  h1 { 
-    margin: 0 0 10px 0; 
-    color: #1a202c; 
-  }
-  p { 
-    color: #718096; 
-    margin-bottom: 30px; 
-  }
-  input { 
-    width: 100%; 
-    padding: 12px; 
-    margin-bottom: 15px; 
-    border: 2px solid #e2e8f0; 
-    border-radius: 8px; 
-    box-sizing: border-box; 
-    font-size: 16px; 
-  }
-  button[type="submit"] { 
-    width: 100%; 
-    padding: 12px; 
-    background: #48bb78; 
-    color: #fff; 
-    border: none; 
-    border-radius: 8px; 
-    font-size: 16px; 
-    font-weight: bold; 
-    cursor: pointer; 
-  }
-  button[type="submit"]:hover { 
-    background: #38a169; 
-  }
-
-  .forgot-password { 
-    margin-top: 20px; 
-  }
-  .forgot-password button { 
-    background: transparent; 
-    color: #718096; 
-    font-size: 14px; 
-    font-weight: normal; 
-    padding: 8px;
-    border: none;
-    cursor: pointer;
-  }
-  .forgot-password button:hover { 
-    color: #4a5568; 
-    background: transparent; 
-  }
-
-  .reset-guide { 
-    margin-top: 20px; 
-    background: #f7fafc; 
-    padding: 20px; 
-    border-radius: 8px; 
-    text-align: left; 
-  }
-  .reset-guide h3 { 
-    margin: 0 0 10px 0; 
-    font-size: 16px; 
-    color: #2d3748; 
-  }
-  .reset-guide p { 
-    font-size: 14px; 
-    color: #4a5568; 
-    margin-bottom: 10px; 
-  }
-  .reset-guide ol { 
-    padding-left: 20px; 
-    font-size: 13px; 
-    color: #4a5568; 
-    margin-bottom: 15px; 
-  }
-  .reset-guide li { 
-    margin-bottom: 8px; 
-  }
-  .reset-guide code { 
-    background: #edf2f7; 
-    padding: 2px 6px; 
-    border-radius: 4px; 
-    font-family: monospace; 
-    color: #d53f8c; 
-  }
-  .reset-guide strong { 
-    color: #c53030; 
-  }
-  .reset-guide button { 
-    background: #e2e8f0; 
-    color: #4a5568; 
-    font-size: 13px; 
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-  }
-</style>
+    .login-card {
+      width: 100%;
+      max-width: 350px;
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+      text-align: center;
+      transform: none;
+    }
+    h1 {
+      margin: 0;
+      color: #0f2749;
+      font-size: 42px;
+      line-height: 1;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    h1 span {
+      font-size: 38px;
+      line-height: 1;
+    }
+    .subtitle {
+      color: #64748b;
+      margin: 16px 0 28px;
+      font-size: 16px;
+      line-height: 1;
+    }
+    input {
+      width: 100%;
+      padding: 14px;
+      margin-bottom: 14px;
+      border: 2px solid #d1d9e4;
+      border-radius: 10px;
+      box-sizing: border-box;
+      font-size: 16px;
+      background: #fff;
+    }
+    button[type='submit'] {
+      width: 100%;
+      padding: 14px;
+      background: #4cbc79;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    button[type='submit']:hover {
+      background: #3ea969;
+    }
+    .error-msg {
+      min-height: 20px;
+      margin-top: 10px;
+      color: #dc2626;
+      font-size: 14px;
+    }
+    .forgot-password {
+      margin-top: 14px;
+    }
+    .forgot-password button {
+      background: transparent;
+      border: none;
+      color: #64748b;
+      font-size: 14px;
+      cursor: pointer;
+      padding: 4px 0;
+    }
+    .forgot-password button:hover {
+      color: #475569;
+    }
+    .reset-guide {
+      margin-top: 16px;
+      text-align: left;
+      background: #f1f5f9;
+      border: 1px solid #dbe4ef;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 13px;
+      color: #334155;
+    }
+    .reset-guide h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #0f2749;
+    }
+    .reset-guide ol {
+      margin: 0 0 8px;
+      padding-left: 18px;
+    }
+    .reset-guide li {
+      margin-bottom: 5px;
+    }
+    .reset-guide code {
+      background: #e2e8f0;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .reset-guide button {
+      border: none;
+      border-radius: 6px;
+      background: #e2e8f0;
+      color: #334155;
+      cursor: pointer;
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    @media (max-width: 900px) {
+      .login-container {
+        place-items: center;
+        padding: 20px;
+      }
+      .login-card {
+        padding: 24px;
+        transform: none;
+      }
+    }
+  </style>
+</Layout>

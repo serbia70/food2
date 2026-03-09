@@ -72,7 +72,7 @@ export async function deleteArchivedOrders() {
 }
 
 if (typeof window !== "undefined") {
-  const registry = ((window as any).__adminHandlers ||= {});
+  const registry = (window.__adminHandlers ||= {});
 
   window.loadOrderStats = loadOrderStats;
   window.archiveOldOrders = archiveOldOrders;
@@ -97,9 +97,7 @@ if (typeof window !== "undefined") {
       });
       const data = await res.json();
       if (data.success) {
-        if ((window as any).showToast) {
-          (window as any).showToast("订单状态已更新");
-        }
+        if (window.showToast) window.showToast("订单状态已更新");
         if (window.refreshOrderList) window.refreshOrderList();
         else location.reload();
       } else {
@@ -123,9 +121,7 @@ if (typeof window !== "undefined") {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success !== false) {
-        if ((window as any).showToast) {
-          (window as any).showToast("结账成功");
-        }
+        if (window.showToast) window.showToast("结账成功");
         if (window.refreshOrderList) window.refreshOrderList();
         else location.reload();
       } else {

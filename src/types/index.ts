@@ -18,6 +18,11 @@ export interface Shop {
   enable_delivery?: number; // 0 or 1
   enable_dine_in?: number; // 0 or 1
   enable_reservation?: number; // 0 or 1
+  billing_plan_type?: "subscription" | "business";
+  billing_balance_rsd?: number;
+  delivery_charge_rsd?: number;
+  delivery_locked?: boolean;
+  delivery_lock_reason?: string;
   owner_user_id?: number;
   delivery_fee_settings?: string; // JSON string
   city?: string;
@@ -45,6 +50,7 @@ export interface Order {
   original_items_json?: string; // JSON string
   remarks_json?: string; // JSON string
   user_phone?: string;
+  scheduled_for?: string;
   created_at: string;
   updated_at?: string;
   is_deleted?: number; // 0 or 1

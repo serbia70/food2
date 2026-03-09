@@ -3,7 +3,7 @@ export const API_BASE_URL = 'https://api.serbia70.com';
 
 // Master auth token (frontend-visible by design for current flow)
 export const MASTER_TOKEN =
-  (import.meta as any).env?.PUBLIC_MASTER_TOKEN || 'master_token_valid';
+  (import.meta as any).env?.PUBLIC_MASTER_TOKEN || 'master-token';
 
 // MQTT config (avoid hardcoded credentials in pages)
 export const MQTT_BROKER =

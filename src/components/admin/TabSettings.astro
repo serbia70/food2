@@ -105,6 +105,13 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
         <label>联系电话</label>
         <input name="contact_phone" value={settings?.contact?.phone || ''} placeholder="061..." />
       </div>
+      <div class="form-group" style="display:flex; align-items:center; gap:10px; border-top:1px solid #eee; padding-top:15px; margin-top:10px;">
+        <input type="checkbox" name="menu_text_mode" id="menu-text-mode" checked={settings.menu_text_mode || false} style="width:auto;" />
+        <div style="display:flex; flex-direction:column;">
+          <label for="menu-text-mode" style="margin:0; font-weight:bold;">纯文字菜单模式 (Text-only Menu)</label>
+          <small style="color:#666; font-size:12px;">适用于没有图片素材的店铺。开启后，客户端和后台都将隐藏图片区域，排版更紧凑。</small>
+        </div>
+      </div>
     </div>
 
     <div class="settings-card">

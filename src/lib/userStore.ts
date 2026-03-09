@@ -106,3 +106,7 @@ export const clearUser = () => {
 export const getSessionToken = () => {
   return $sessionToken.get();
 };
+
+export const setSessionToken = (value: string | null) => {
+  $sessionToken.set(value);
+};

@@ -1,4 +1,5 @@
-﻿---
+---
+import { inferLegacySimpleHallNumber } from '../../lib/admin-table-ref';
 const { tableCardsData, activeDeliveryOrders, unmatchedDineInOrders = [], useSimpleHallLabel = false } = Astro.props;
 const simpleHallMaxCount = Array.isArray(tableCardsData) ? tableCardsData.length : 0;
 const belgradeTime = new Intl.DateTimeFormat('sr-RS', { timeZone: 'Europe/Belgrade', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -8,6 +9,23 @@ function formatBelgradeHHmm(v: any) {
   const d = new Date(raw.endsWith('Z') ? raw : `${raw}Z`);
   if (Number.isNaN(d.getTime())) return String(v).slice(11, 16);
   return belgradeTime.format(d);
+}
+
+function formatScheduledLabel(v: any) {
+  if (!v) return '';
+  const raw = String(v).trim();
+  if (!raw) return '';
+  const normalized = raw.replace(' ', 'T');
+  const d = new Date(normalized.endsWith('Z') ? normalized : `${normalized}Z`);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleString('sr-RS', {
+    timeZone: 'Europe/Belgrade',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 }
 
 function parseItems(raw: any): any[] {
@@ -32,19 +50,6 @@ function formatTableTitle(card: any) {
   if (num) return `${num}号桌`;
   if (zone) return zone;
   return String(card?.tableNum || '桌位');
-}
-
-function inferLegacySimpleHallNumber(raw: any, maxCount: number) {
-  const compact = String(raw || '').replace(/\s+/g, '').trim();
-  if (!compact || !/^区域\d+$/u.test(compact) || maxCount <= 0) return '';
-  let best = '';
-  for (let n = 1; n <= maxCount; n++) {
-    const s = String(n);
-    if (compact.endsWith(s) && s.length >= best.length) {
-      best = s;
-    }
-  }
-  return best;
 }
 
 function formatUnmatchedTableLabel(rawTableInfo: any) {
@@ -193,6 +198,11 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
               📍 {o.table_info}
               <span style="font-weight:normal; color:#666; margin-left:10px;">(Tel: {o.user_phone || '-'})</span>
             </div>
+            {o.scheduled_for && (
+              <div class="order-address-row" style="margin-top:-4px; margin-bottom:10px; color:#1565c0; font-size:13px;">
+                ⏰ 预约送达: {formatScheduledLabel(o.scheduled_for)}
+              </div>
+            )}
 
             <div class="order-items-list">
               {deliveryItems.map((i: any) => (
@@ -232,6 +242,10 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
                 )}
                 {o.status === 'delivering' && (
                   <button class="btn-xs" data-admin-action="mark-paid" data-order-id={o.id} style="background:#4caf50; color:white;">💰 完成结账</button>
+                )}
+
+                {o.user_phone && (
+                  <button onclick={`window.openChatForPhone('${o.user_phone}')`} title="发消息" style="height:24px; width:24px; font-size:12px; background:#0891b2; color:#fff; border:none; border-radius:4px; cursor:pointer;">💬</button>
                 )}
 
                 <button class="btn-action" data-admin-action="order-remarks" data-order-id={o.id} title="备注" style="height:24px; width:24px; font-size:12px;">🏷️</button>

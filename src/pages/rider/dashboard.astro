@@ -177,58 +177,124 @@ import Layout from '../../layouts/Layout.astro';
       });
 
       if (myOrders.length === 0) {
-        container.innerHTML = '<div class="empty-tip">暂无订单 / No Orders</div>';
+        const empty = document.createElement('div');
+        empty.className = 'empty-tip';
+        empty.textContent = '暂无订单 / No Orders';
+        container.replaceChildren(empty);
         return;
       }
 
-      container.innerHTML = myOrders.map((o) => {
+      const cards = myOrders.map((o) => {
         const items = parseItems(o.items_json);
-        const itemsHtml = items.map((i) => `<div class="item-row"><span>${i.name || ''}</span><span>x${i.quantity || 1}</span></div>`).join('');
         const address = o.table_info || '';
         const phone = o.user_phone || '';
         const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
         const canTake = (o.status === 'pending' || o.status === 'confirmed') && !o.courier_phone;
 
-        return `
-          <div class="order-card status-${o.status}">
-            <div class="card-header">
-              <span class="order-no">#${String(o.order_no || '').slice(-4)}</span>
-              <span class="order-time">${String(o.created_at || '').slice(11,16)}</span>
-            </div>
+        const card = document.createElement('div');
+        card.className = `order-card status-${o.status}`;
 
-            <div class="info-row">
-              <span class="icon">🏪</span>
-              <span class="text" style="font-weight:bold;">${o.shop_name || 'Shop'}</span>
-            </div>
-            <div class="info-row">
-              <span class="icon">📍</span>
-              <span class="text address">${address}</span>
-            </div>
-            <div class="info-row">
-              <span class="icon">📞</span>
-              <a href="tel:${phone}" class="text phone">${phone}</a>
-            </div>
+        const header = document.createElement('div');
+        header.className = 'card-header';
+        const orderNo = document.createElement('span');
+        orderNo.className = 'order-no';
+        orderNo.textContent = `#${String(o.order_no || '').slice(-4)}`;
+        const orderTime = document.createElement('span');
+        orderTime.className = 'order-time';
+        orderTime.textContent = String(o.created_at || '').slice(11, 16);
+        header.append(orderNo, orderTime);
 
-            <div class="items-box">${itemsHtml}</div>
-            <div class="card-footer">
-              <span class="total-price">${o.total_amount || 0} RSD</span>
-              <span style="font-size:12px; color:#999;">${o.status}</span>
-            </div>
+        const createInfoRow = (iconText, contentNode) => {
+          const row = document.createElement('div');
+          row.className = 'info-row';
+          const icon = document.createElement('span');
+          icon.className = 'icon';
+          icon.textContent = iconText;
+          row.append(icon, contentNode);
+          return row;
+        };
 
-            ${canTake ? `
-              <div class="action-btns">
-                <button onclick="takeOrder(${o.id})" class="btn-action btn-complete">🛵 接单配送</button>
-              </div>` : ''}
+        const shop = document.createElement('span');
+        shop.className = 'text';
+        shop.style.fontWeight = 'bold';
+        shop.textContent = o.shop_name || 'Shop';
+        const addr = document.createElement('span');
+        addr.className = 'text address';
+        addr.textContent = address;
+        const phoneLink = document.createElement('a');
+        phoneLink.href = `tel:${phone}`;
+        phoneLink.className = 'text phone';
+        phoneLink.textContent = phone;
 
-            ${o.status === 'delivering' ? `
-              <div class="action-btns">
-                <a href="tel:${phone}" class="btn-action btn-call">📓 联系客户</a>
-                <a href="${mapUrl}" target="_blank" class="btn-action btn-map">🗇️ 导航</a>
-                <button onclick="completeOrder(${o.id})" class="btn-action btn-complete">✅ 确认送达 & 收款</button>
-              </div>` : ''}
-          </div>
-        `;
-      }).join('');
+        const itemsBox = document.createElement('div');
+        itemsBox.className = 'items-box';
+        items.forEach((i) => {
+          const row = document.createElement('div');
+          row.className = 'item-row';
+          const name = document.createElement('span');
+          name.textContent = i.name || '';
+          const qty = document.createElement('span');
+          qty.textContent = `x${i.quantity || 1}`;
+          row.append(name, qty);
+          itemsBox.appendChild(row);
+        });
+
+        const footer = document.createElement('div');
+        footer.className = 'card-footer';
+        const total = document.createElement('span');
+        total.className = 'total-price';
+        total.textContent = `${o.total_amount || 0} RSD`;
+        const status = document.createElement('span');
+        status.style.fontSize = '12px';
+        status.style.color = '#999';
+        status.textContent = o.status;
+        footer.append(total, status);
+
+        card.append(
+          header,
+          createInfoRow('🏪', shop),
+          createInfoRow('📍', addr),
+          createInfoRow('📞', phoneLink),
+          itemsBox,
+          footer,
+        );
+
+        if (canTake) {
+          const actionWrap = document.createElement('div');
+          actionWrap.className = 'action-btns';
+          const button = document.createElement('button');
+          button.className = 'btn-action btn-complete';
+          button.type = 'button';
+          button.textContent = '🛵 接单配送';
+          button.addEventListener('click', () => window.takeOrder(o.id));
+          actionWrap.appendChild(button);
+          card.appendChild(actionWrap);
+        }
+
+        if (o.status === 'delivering') {
+          const actionWrap = document.createElement('div');
+          actionWrap.className = 'action-btns';
+          const call = document.createElement('a');
+          call.href = `tel:${phone}`;
+          call.className = 'btn-action btn-call';
+          call.textContent = '📓 联系客户';
+          const map = document.createElement('a');
+          map.href = mapUrl;
+          map.target = '_blank';
+          map.className = 'btn-action btn-map';
+          map.textContent = '🗇️ 导航';
+          const complete = document.createElement('button');
+          complete.type = 'button';
+          complete.className = 'btn-action btn-complete';
+          complete.textContent = '✅ 确认送达 & 收款';
+          complete.addEventListener('click', () => window.completeOrder(o.id));
+          actionWrap.append(call, map, complete);
+          card.appendChild(actionWrap);
+        }
+
+        return card;
+      });
+      container.replaceChildren(...cards);
     }
 
     window.takeOrder = async function(id) {

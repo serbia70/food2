@@ -48,6 +48,48 @@ import Layout from '../../layouts/Layout.astro';
     const sessionToken = localStorage.getItem('user_session');
     if (!sessionToken) window.location.href = '/user/login';
 
+    function setAddressEmpty(container) {
+      const wrap = document.createElement('div');
+      wrap.className = 'empty-state';
+      const p = document.createElement('p');
+      p.textContent = '暂无收货地址';
+      wrap.appendChild(p);
+      container.replaceChildren(wrap);
+    }
+
+    function renderAddressCard(container, name, phone, detail) {
+      const card = document.createElement('div');
+      card.className = 'address-card';
+      card.addEventListener('click', () => window.openEditModal());
+
+      const icon = document.createElement('div');
+      icon.className = 'addr-icon';
+      icon.textContent = '📍';
+
+      const info = document.createElement('div');
+      info.className = 'addr-info';
+      const user = document.createElement('div');
+      user.className = 'addr-user';
+      const userName = document.createElement('span');
+      userName.className = 'u-name';
+      userName.textContent = name || '未填写姓名';
+      const userPhone = document.createElement('span');
+      userPhone.className = 'u-phone';
+      userPhone.textContent = phone || '未填写电话';
+      user.append(userName, userPhone);
+      const address = document.createElement('div');
+      address.className = 'addr-detail';
+      address.textContent = detail;
+      info.append(user, address);
+
+      const edit = document.createElement('div');
+      edit.className = 'addr-edit-icon';
+      edit.textContent = '✎';
+
+      card.append(icon, info, edit);
+      container.replaceChildren(card);
+    }
+
     async function loadAddress() {
       try {
         const res = await fetch('/api/user/address', {
@@ -73,26 +115,14 @@ import Layout from '../../layouts/Layout.astro';
           const phone = addrObj.phone || '';
           const detail = addrObj.address || '';
 
-          container.innerHTML = `
-            <div class="address-card" onclick="openEditModal()">
-              <div class="addr-icon">📍</div>
-              <div class="addr-info">
-                <div class="addr-user">
-                    <span class="u-name">${name || '未填写姓名'}</span>
-                    <span class="u-phone">${phone || '未填写电话'}</span>
-                </div>
-                <div class="addr-detail">${detail}</div>
-              </div>
-              <div class="addr-edit-icon">✎</div>
-            </div>
-          `;
+          renderAddressCard(container, name, phone, detail);
           
           // 填充表单
           document.getElementById('addr-name').value = name;
           document.getElementById('addr-phone').value = phone;
           document.getElementById('addr-detail').value = detail;
         } else {
-          container.innerHTML = '<div class="empty-state"><p>暂无收货地址</p></div>';
+          setAddressEmpty(container);
           // 清空表单
           document.getElementById('addr-name').value = '';
           document.getElementById('addr-phone').value = '';

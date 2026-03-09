@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config';
+// TODO: 移除代理层业务修补，待后端稳定输出订单 items_json 后删除。
 
 export const prerender = false;
 

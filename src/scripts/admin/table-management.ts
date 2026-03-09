@@ -1,3 +1,6 @@
+import { matchesTableRef, parseTableRef, inferLegacySimpleHallNumber } from '../../lib/admin-table-ref';
+import { getAdminHandler, getAdminRuntimeState, registerAdminGlobal, showAdminToast } from './globals';
+
 // 全局变量
 let currentTableNum: string | null = null;
 let currentTableOrders: any[] = [];
@@ -5,8 +8,8 @@ let currentRemarkOrderId: string | null = null;
 
 function refreshAdminOrdersView() {
   const refreshFromRegistry =
-    (window as any).__adminHandlers?.refreshOrderList || null;
-  const refreshFromWindow = (window as any).refreshOrderList || null;
+    window.__adminHandlers?.refreshOrderList || null;
+  const refreshFromWindow = window.refreshOrderList || null;
   const refresh =
     typeof refreshFromRegistry === "function"
       ? refreshFromRegistry
@@ -21,6 +24,57 @@ function refreshAdminOrdersView() {
 interface RemarkCategory {
   name: string;
   options: string[];
+}
+
+function setElementStyles(el: HTMLElement, styles: Record<string, string>) {
+  Object.entries(styles).forEach(([key, value]) => {
+    (el.style as any)[key] = value;
+  });
+}
+
+function createTextElement<K extends keyof HTMLElementTagNameMap>(tag: K, text: string, styles?: Record<string, string>) {
+  const el = document.createElement(tag);
+  el.textContent = text;
+  if (styles) setElementStyles(el, styles);
+  return el;
+}
+
+function createOrderItemDetailNode(item: any) {
+  const row = document.createElement('div');
+  setElementStyles(row, {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    fontSize: '13px',
+    color: '#666',
+    marginBottom: '4px',
+    borderBottom: '1px dashed #eee',
+    paddingBottom: '2px',
+  });
+
+  const left = document.createElement('div');
+  setElementStyles(left, {
+    display: 'flex',
+    flexDirection: 'column',
+  });
+  left.appendChild(createTextElement('span', String(item?.name || ''), {
+    fontWeight: 'bold',
+    color: '#333',
+  }));
+  left.appendChild(createTextElement('span', String(item?.subName || ''), {
+    fontSize: '12px',
+    color: '#888',
+  }));
+
+  const right = document.createElement('div');
+  right.style.textAlign = 'right';
+  right.append(
+    createTextElement('div', `x${item?.quantity ?? ''}`),
+    createTextElement('div', String(item?.price || '')),
+  );
+
+  row.append(left, right);
+  return row;
 }
 
 // 备注分类配置
@@ -84,59 +138,6 @@ const remarkCategories: RemarkCategory[] = [
   },
 ];
 
-// 辅助函数：从 DOM 获取桌号订单
-function parseTableRef(input: string) {
-  const raw = String(input || "").trim();
-  if (!raw) {
-    return { area: "", number: "", key: "" };
-  }
-
-  const cleaned = raw.replace(/\s*(号桌|桌号|桌)\s*$/u, "").trim();
-  const m = cleaned.match(/^(.*?)\s*(\d+)$/u);
-  if (!m) {
-    const areaOnly = cleaned.replace(/\s+/g, "").toLowerCase();
-    return { area: areaOnly, number: "", key: areaOnly };
-  }
-
-  const area = String(m[1] || "")
-    .replace(/\s+/g, "")
-    .toLowerCase();
-  const number = String(Number(m[2] || "0") || m[2]);
-  return { area, number, key: `${area}${number}` };
-}
-
-function inferLegacySimpleHallNumber(raw: string, maxCount: number): string {
-  const compact = String(raw || "").replace(/\s+/g, "").trim();
-  if (!compact) {
-    return "";
-  }
-
-  const ref = parseTableRef(compact);
-  const isHallArea =
-    ref.area === "" ||
-    ref.area === "大厅" ||
-    ref.area === "大堂" ||
-    ref.area === "hall" ||
-    ref.area === "mainhall" ||
-    /^区域\d+$/u.test(ref.area);
-  if (ref.number && isHallArea) {
-    return ref.number;
-  }
-
-  if (!/^区域\d+$/u.test(compact) || maxCount <= 0) {
-    return "";
-  }
-
-  let best = "";
-  for (let n = 1; n <= maxCount; n++) {
-    const s = String(n);
-    if (compact.endsWith(s) && s.length >= best.length) {
-      best = s;
-    }
-  }
-  return best;
-}
-
 function getOrdersForTable(tableNum: string) {
   const targetRef = parseTableRef(String(tableNum || ""));
   const maxConfiguredTable = Array.from(
@@ -163,38 +164,7 @@ function getOrdersForTable(tableNum: string) {
       return;
 
     const tableInfo = el.dataset.table || "";
-    const orderRef = parseTableRef(tableInfo);
-    const sameExact =
-      !!(targetRef.key && orderRef.key && targetRef.key === orderRef.key);
-    const sameNumberWithCompatibleArea =
-      !!(
-        targetRef.number &&
-        orderRef.number &&
-        targetRef.number === orderRef.number &&
-        (targetRef.area === orderRef.area ||
-          (!targetRef.area && !orderRef.area))
-      );
-    const singleRoomLegacyMatch =
-      !!(
-        !targetRef.number &&
-        targetRef.area &&
-        orderRef.area &&
-        targetRef.area === orderRef.area
-      );
-    const legacySimpleHallMatch =
-      !!(
-        !targetRef.area &&
-        targetRef.number &&
-        inferLegacySimpleHallNumber(tableInfo, maxConfiguredTable) ===
-          targetRef.number
-      );
-
-    if (
-      sameExact ||
-      sameNumberWithCompatibleArea ||
-      singleRoomLegacyMatch ||
-      legacySimpleHallMatch
-    ) {
+    if (matchesTableRef(targetRef, tableInfo, maxConfiguredTable)) {
       // 解析 items
       let items: any[] = [];
       try {
@@ -265,28 +235,58 @@ function showCheckoutModal(tableNum: string, orders: any[]) {
 
   const listEl = document.getElementById("checkout-order-list");
   if (listEl) {
-    listEl.innerHTML = orders
-      .map((order) => {
-        const itemsDetail = order.items
-          .filter((i: any) => i != null)
-          .map(
-            (i: any) =>
-              `${i.name} ${i.sub_name ? "(" + i.sub_name + ")" : ""} x${i.quantity}`,
-          )
-          .join(", ");
+    const rows = orders.map((order) => {
+      const row = document.createElement('div');
+      setElementStyles(row, {
+        display: 'flex',
+        alignItems: 'center',
+        padding: '10px',
+        borderBottom: '1px solid #eee',
+      });
 
-        return `
-            <div style="display:flex; align-items:center; padding:10px; border-bottom:1px solid #eee;">
-                <input type="checkbox" class="checkout-checkbox" value="${order.id}" checked onchange="window.updateCheckoutTotal()" style="width:20px; height:20px; margin-right:10px; cursor:pointer;">
-                <div style="flex:1;">
-                    <div style="font-weight:bold;">${order.time} <span style="font-weight:normal; color:#666;">(#${order.order_no})</span></div>
-                    <div style="font-size:12px; color:#555;">${itemsDetail}</div>
-                </div>
-                <div style="font-weight:bold; color:#d32f2f;">${order.amount} RSD</div>
-            </div>
-        `;
-      })
-      .join("");
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'checkout-checkbox';
+      checkbox.value = String(order.id);
+      checkbox.checked = true;
+      checkbox.addEventListener('change', () => updateCheckoutTotal());
+      setElementStyles(checkbox, {
+        width: '20px',
+        height: '20px',
+        marginRight: '10px',
+        cursor: 'pointer',
+      });
+
+      const content = document.createElement('div');
+      content.style.flex = '1';
+      const title = document.createElement('div');
+      title.style.fontWeight = 'bold';
+      title.append(document.createTextNode(String(order.time || '')));
+      const orderNo = createTextElement('span', ` (#${order.order_no})`, {
+        fontWeight: 'normal',
+        color: '#666',
+      });
+      title.appendChild(orderNo);
+
+      const itemsDetail = order.items
+        .filter((i: any) => i != null)
+        .map((i: any) => `${i.name} ${i.sub_name ? '(' + i.sub_name + ')' : ''} x${i.quantity}`)
+        .join(', ');
+      const detail = createTextElement('div', itemsDetail, {
+        fontSize: '12px',
+        color: '#555',
+      });
+      content.append(title, detail);
+
+      const amount = createTextElement('div', `${order.amount} RSD`, {
+        fontWeight: 'bold',
+        color: '#d32f2f',
+      });
+
+      row.append(checkbox, content, amount);
+      return row;
+    });
+    listEl.replaceChildren(...rows);
   }
 
   updateCheckoutTotal();
@@ -315,7 +315,7 @@ export async function confirmCheckout() {
   const checkboxes = document.querySelectorAll<HTMLInputElement>(
     ".checkout-checkbox:checked",
   );
-  if (checkboxes.length === 0) return alert("请至少选择一个订单");
+  if (checkboxes.length === 0) return showAdminToast("请至少选择一个订单");
 
   const orderIds = Array.from(checkboxes).map((cb) => cb.value);
   await performCheckout(orderIds);
@@ -338,21 +338,16 @@ async function performCheckout(orderIds: string[]) {
 
     const data = await res.json();
     if (data.success) {
-      if ((window as any).showToast) {
-        (window as any).showToast(
-          `结账成功：${orderIds.length} 单，${data.totalAmount} RSD`,
-        );
-      }
+      showAdminToast(`结账成功：${orderIds.length} 单，${data.totalAmount} RSD`);
       closeCheckoutModal();
       refreshAdminOrdersView();
-      if (window.loadOrderStats) {
-        window.loadOrderStats();
-      }
+      const loadOrderStats = getAdminHandler<() => void>('loadOrderStats');
+      if (typeof loadOrderStats === 'function') loadOrderStats();
     } else {
-      alert("结账失败: " + data.error);
+      showAdminToast("结账失败: " + data.error);
     }
   } catch (error: any) {
-    alert("网络错误: " + error.message);
+    showAdminToast("网络错误: " + error.message);
   }
 }
 
@@ -389,8 +384,7 @@ function renderRemarksUI() {
   const container = document.getElementById("remarks-container");
   if (!container) return;
 
-  container.innerHTML = remarkCategories
-    .map((cat) => {
+  const categories = remarkCategories.map((cat) => {
       let headerColor = "#607d8b";
       const n = cat.name;
       let icon = "";
@@ -412,28 +406,71 @@ function renderRemarksUI() {
         icon = "⚙️";
       }
 
-      return `
-          <div class="remark-category" style="margin-bottom: 20px;">
-            <div class="category-title" style="background-color: ${headerColor}; color: white; padding: 10px 15px; border-radius: 8px 8px 0 0; font-weight: bold; font-size: 15px; display: flex; align-items: center; gap: 8px;">
-               ${icon} ${cat.name}
-            </div>
-            <div class="remark-options-grid" style="border: 1px solid ${headerColor}; border-top: none; border-radius: 0 0 8px 8px; padding: 15px; background: #fff; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px;">
-              ${cat.options
-                .map((opt) => {
-                  const [mainText, subText] = opt.split("/");
-                  return `
-                  <button onclick="window.toggleRemark(this, '${headerColor}')" class="remark-option-btn" data-value="${opt}" style="min-height: 45px; border: 1px solid #e0e0e0; background-color: #fff; color: #333; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5px; transition: all 0.2s;">
-                    <span style="font-size: 14px;">${mainText}</span>
-                    ${subText ? `<span style="font-size: 11px; color: #999;">${subText}</span>` : ""}
-                  </button>
-                `;
-                })
-                .join("")}
-            </div>
-          </div>
-        `;
-    })
-    .join("");
+      const category = document.createElement('div');
+      category.className = 'remark-category';
+      category.style.marginBottom = '20px';
+
+      const title = document.createElement('div');
+      title.className = 'category-title';
+      setElementStyles(title, {
+        backgroundColor: headerColor,
+        color: 'white',
+        padding: '10px 15px',
+        borderRadius: '8px 8px 0 0',
+        fontWeight: 'bold',
+        fontSize: '15px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+      });
+      title.textContent = `${icon} ${cat.name}`.trim();
+
+      const grid = document.createElement('div');
+      grid.className = 'remark-options-grid';
+      setElementStyles(grid, {
+        border: `1px solid ${headerColor}`,
+        borderTop: 'none',
+        borderRadius: '0 0 8px 8px',
+        padding: '15px',
+        background: '#fff',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+        gap: '10px',
+      });
+
+      cat.options.forEach((opt) => {
+        const [mainText, subText] = String(opt).split('/');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'remark-option-btn';
+        button.dataset.value = String(opt);
+        button.addEventListener('click', () => toggleRemark(button, headerColor));
+        setElementStyles(button, {
+          minHeight: '45px',
+          border: '1px solid #e0e0e0',
+          backgroundColor: '#fff',
+          color: '#333',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '5px',
+          transition: 'all 0.2s',
+        });
+        button.appendChild(createTextElement('span', mainText || '', { fontSize: '14px' }));
+        if (subText) {
+          button.appendChild(createTextElement('span', subText, { fontSize: '11px', color: '#999' }));
+        }
+        grid.appendChild(button);
+      });
+
+      category.append(title, grid);
+      return category;
+    });
+
+  container.replaceChildren(...categories);
 }
 
 export function toggleRemark(btn: HTMLElement, activeColor: string) {
@@ -501,7 +538,8 @@ export async function saveRemarks() {
     if (data.success) {
       alert("备注已保存");
       closeRemarksModal();
-      if (window.refreshOrderList) window.refreshOrderList(); // 刷新列表以显示新备注
+      const refreshOrderList = getAdminHandler<() => void>('refreshOrderList');
+      if (typeof refreshOrderList === 'function') refreshOrderList();
     } else {
       alert("保存失败: " + data.error);
     }
@@ -521,18 +559,18 @@ export function handleModify(tableNum: string) {
     return;
   }
 
-  // 如果只有一个订单，直接打开编辑弹窗 (使用 index.astro 中定义的 handleEditOrder)
-  if (orders.length === 1) {
-    if (window.handleEditOrder) {
-      window.handleEditOrder(orders[0].element);
-    } else {
-      alert("编辑功能未加载，请刷新页面");
-    }
+  // 直接打开最新一单的编辑弹窗（多单也不再进入中间列表）
+  const latest = [...orders].sort((a, b) => Number(b.id || 0) - Number(a.id || 0))[0];
+  if (!latest) {
+    alert("该桌号没有可修改订单");
     return;
   }
-
-  // 如果有多个订单，显示列表供选择
-  showDetailsModal(tableNum, orders);
+  const handleEditOrder = getAdminHandler<(el: any) => void>('handleEditOrder');
+  if (typeof handleEditOrder === 'function') {
+    handleEditOrder(latest.element);
+  } else {
+    alert("编辑功能未加载，请刷新页面");
+  }
 }
 
 function showDetailsModal(tableNum: string, orders: any[]) {
@@ -544,45 +582,62 @@ function showDetailsModal(tableNum: string, orders: any[]) {
 
   const listEl = document.getElementById("details-order-list");
   if (listEl) {
-    listEl.innerHTML = orders
-      .map((order) => {
-        const itemsHtml = order.items
-          .map(
-            (i: any) => `
-                <div style="display:flex; justify-content:space-between; align-items: flex-start; font-size:13px; color:#666; margin-bottom:4px; border-bottom: 1px dashed #eee; padding-bottom: 2px;">
-                    <div style="display:flex; flex-direction:column;">
-                        <span style="font-weight:bold; color:#333;">${i.name}</span>
-                        <span style="font-size:12px; color:#888;">${i.subName || ""}</span>
-                    </div>
-                    <div style="text-align:right;">
-                        <div>x${i.quantity}</div>
-                        <div>${i.price}</div>
-                    </div>
-                </div>
-            `,
-          )
-          .join("");
+    const cards = orders.map((order) => {
+      const card = document.createElement('div');
+      card.className = 'order-card-detail';
+      setElementStyles(card, {
+        padding: '15px',
+        border: '1px solid #eee',
+        borderRadius: '8px',
+        marginBottom: '10px',
+        background: '#f9f9f9',
+      });
 
-        return `
-            <div class="order-card-detail" style="padding:15px; border:1px solid #eee; border-radius:8px; margin-bottom:10px; background:#f9f9f9;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:10px; border-bottom:1px solid #ddd; padding-bottom:5px;">
-                    <span style="font-weight:bold;">订单 #${order.order_no}</span>
-                    <span style="color:#999;">${order.time}</span>
-                </div>
-                <div style="margin-bottom:10px;">
-                    ${itemsHtml}
-                </div>
-                <div style="text-align:right; font-weight:bold; color:#d32f2f;">
-                    ${order.amount} RSD
-                </div>
-                
-                <div style="text-align:right; margin-top:10px;">
-                    <button onclick="window.triggerEditOrder('${order.id}')" style="padding:5px 10px; background:#fff; border:1px solid #ddd; border-radius:4px; cursor:pointer;">✏️ 修改订单</button>
-                </div>
-            </div>
-        `;
-      })
-      .join("");
+      const header = document.createElement('div');
+      setElementStyles(header, {
+        display: 'flex',
+        justifyContent: 'space-between',
+        marginBottom: '10px',
+        borderBottom: '1px solid #ddd',
+        paddingBottom: '5px',
+      });
+      header.append(
+        createTextElement('span', `订单 #${order.order_no}`, { fontWeight: 'bold' }),
+        createTextElement('span', String(order.time || ''), { color: '#999' }),
+      );
+
+      const itemsWrap = document.createElement('div');
+      itemsWrap.style.marginBottom = '10px';
+      (Array.isArray(order.items) ? order.items : []).forEach((item: any) => {
+        itemsWrap.appendChild(createOrderItemDetailNode(item));
+      });
+
+      const amount = createTextElement('div', `${order.amount} RSD`, {
+        textAlign: 'right',
+        fontWeight: 'bold',
+        color: '#d32f2f',
+      });
+
+      const actions = document.createElement('div');
+      setElementStyles(actions, {
+        textAlign: 'right',
+        marginTop: '10px',
+      });
+      const editButton = createTextElement('button', '✏️ 修改订单', {
+        padding: '5px 10px',
+        background: '#fff',
+        border: '1px solid #ddd',
+        borderRadius: '4px',
+        cursor: 'pointer',
+      }) as HTMLButtonElement;
+      editButton.type = 'button';
+      editButton.addEventListener('click', () => triggerEditOrder(String(order.id)));
+      actions.appendChild(editButton);
+
+      card.append(header, itemsWrap, amount, actions);
+      return card;
+    });
+    listEl.replaceChildren(...cards);
   }
 
   modal.style.display = "flex";
@@ -593,13 +648,21 @@ export function triggerEditOrder(orderId: string) {
   const el = document.querySelector<HTMLElement>(
     `.hidden-data[data-oid="${orderId}"]`,
   );
-  if (window.handleEditOrder && el) {
+  const handleEditOrder = getAdminHandler<(el: any) => void>('handleEditOrder');
+  if (typeof handleEditOrder === 'function' && el) {
     closeDetailsModal();
-    window.handleEditOrder(el);
+    handleEditOrder(el);
   } else {
     alert("无法调用订单修改功能，请刷新页面重试");
   }
 }
+
+// Ensure handleEditOrder is available by the time user clicks "修改订单"
+try {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('admin:order-edit-ready', () => {});
+  }
+} catch {}
 
 export function closeDetailsModal() {
   const modal = document.getElementById("details-modal");
@@ -671,20 +734,17 @@ export async function handlePrintTable(tableNum: string) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         tableNum,
-        shopSlug: window.shopSlug,
+        shopSlug: getAdminRuntimeState().shopSlug,
       }),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({} as any));
 
-    if (data.success) {
-      if ((window as any).showToast) {
-        (window as any).showToast(`Print command sent: table ${tableNum}`);
-      } else {
-        alert("Print command sent");
-      }
+    if (data && data.success) {
+      const msg = String(data.message || '').trim() || `打印指令已发送: 桌号 ${tableNum}`;
+      showAdminToast(msg);
     } else {
-      alert("Print failed: " + (data.error || "unknown error"));
+      alert("打印失败: " + ((data && data.error) || "unknown error"));
     }
 
     if (btn) {
@@ -693,7 +753,7 @@ export async function handlePrintTable(tableNum: string) {
     }
   } catch (e) {
     console.error("Print error:", e);
-    alert("Network error: cannot reach server");
+    alert("网络错误，无法连接服务器");
     const btn = document.querySelector(
       `.table-card-wide[data-table="${tableNum}"] .btn-print`,
     ) as HTMLButtonElement;
@@ -714,7 +774,7 @@ export async function approveTableReviews(tableNum: string) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        restaurantId: window.shopId,
+        restaurantId: getAdminRuntimeState().shopId,
       }),
       },
     );
@@ -741,7 +801,7 @@ export async function rejectTableReviews(tableNum: string) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        restaurantId: window.shopId,
+        restaurantId: getAdminRuntimeState().shopId,
       }),
       },
     );
@@ -786,7 +846,7 @@ export function closeRejectModal() {
 }
 
 // 暴露给 window 以便 HTML onclick 调用 (需要手动绑定或在 window 对象上扩展)
-(window as any).selectRejectReason = function (reason: string) {
+registerAdminGlobal('selectRejectReason', function (reason: string) {
   const input = document.getElementById(
     "reject-reason-input",
   ) as HTMLTextAreaElement;
@@ -800,7 +860,7 @@ export function closeRejectModal() {
       btn.classList.remove("selected");
     }
   });
-};
+});
 
 export async function confirmReject() {
   const inputId = document.getElementById(
@@ -825,14 +885,14 @@ export async function confirmReject() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         reason: reason,
-        restaurantId: window.shopId,
+        restaurantId: getAdminRuntimeState().shopId,
       }),
       },
     );
 
     const data = await res.json();
     if (data.success) {
-      if ((window as any).showToast) (window as any).showToast("🚫 订单已拒绝");
+      showAdminToast("🚫 订单已拒绝");
       closeRejectModal();
       refreshAdminOrdersView();
     } else {
@@ -845,52 +905,27 @@ export async function confirmReject() {
 
 // Expose to window for inline calls
 if (typeof window !== "undefined") {
-  const registry = ((window as any).__adminHandlers ||= {});
+  registerAdminGlobal('handleTableCheckout', handleTableCheckout);
+  registerAdminGlobal('updateCheckoutTotal', updateCheckoutTotal);
+  registerAdminGlobal('closeCheckoutModal', closeCheckoutModal);
+  registerAdminGlobal('confirmCheckout', confirmCheckout);
+  registerAdminGlobal('handleTableRemarks', handleTableRemarks);
+  registerAdminGlobal('toggleRemark', toggleRemark);
+  registerAdminGlobal('closeRemarksModal', closeRemarksModal);
+  registerAdminGlobal('saveRemarks', saveRemarks);
+  registerAdminGlobal('handleModify', handleModify);
+  registerAdminGlobal('closeDetailsModal', closeDetailsModal);
+  registerAdminGlobal('triggerEditOrder', triggerEditOrder);
+  registerAdminGlobal('handleTableOrder', handleTableOrder);
+  registerAdminGlobal('closeOrderModal', closeOrderModal);
+  registerAdminGlobal('handlePrintTable', handlePrintTable);
 
-  window.handleTableCheckout = handleTableCheckout;
-  window.updateCheckoutTotal = updateCheckoutTotal;
-  window.closeCheckoutModal = closeCheckoutModal;
-  window.confirmCheckout = confirmCheckout;
-  window.handleTableRemarks = handleTableRemarks;
-  window.toggleRemark = toggleRemark;
-  window.closeRemarksModal = closeRemarksModal;
-  window.saveRemarks = saveRemarks;
-  window.handleModify = handleModify;
-  window.closeDetailsModal = closeDetailsModal;
-  window.triggerEditOrder = triggerEditOrder;
-  window.handleTableOrder = handleTableOrder;
-  window.closeOrderModal = closeOrderModal;
-  window.handlePrintTable = handlePrintTable;
+  registerAdminGlobal('approveTableReviews', approveTableReviews);
+  registerAdminGlobal('rejectTableReviews', rejectTableReviews);
 
-  window.approveTableReviews = approveTableReviews;
-  window.rejectTableReviews = rejectTableReviews;
-
-  // 新增
-  (window as any).openRejectModal = openRejectModal;
-  (window as any).closeRejectModal = closeRejectModal;
-  (window as any).confirmReject = confirmReject;
-
-  Object.assign(registry, {
-    handleTableCheckout,
-    updateCheckoutTotal,
-    closeCheckoutModal,
-    confirmCheckout,
-    handleTableRemarks,
-    toggleRemark,
-    closeRemarksModal,
-    saveRemarks,
-    handleModify,
-    closeDetailsModal,
-    triggerEditOrder,
-    handleTableOrder,
-    closeOrderModal,
-    handlePrintTable,
-    approveTableReviews,
-    rejectTableReviews,
-    openRejectModal,
-    closeRejectModal,
-    confirmReject,
-  });
+  registerAdminGlobal('openRejectModal', openRejectModal);
+  registerAdminGlobal('closeRejectModal', closeRejectModal);
+  registerAdminGlobal('confirmReject', confirmReject);
 
   window.dispatchEvent(new CustomEvent("admin:handlers-registered"));
 }

@@ -2,6 +2,7 @@
 
 export const prerender = true;
 import Layout from '../../layouts/Layout.astro';
+import '../../lib/user-auth-browser';
 ---
 
 <Layout title="用户登录">
@@ -139,42 +140,31 @@ import Layout from '../../layouts/Layout.astro';
     errorMsg.style.display = 'none';
 
     try {
-      let res, data;
-      if (isRegisterMode) {
-        // 注册
-        res = await fetch('/api/user/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ account_type: regAccountType, account, password, name })
-        });
-      } else {
-        // 登录
-        res = await fetch('/api/user/history', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ login_account: account, password }) // 复用 history 接口作为登录
-        });
-      }
-
-      data = await res.json();
-
-      if (data.success) {
-        // 保存用户信息
-        const user = isRegisterMode ? { name, phone: regAccountType==='phone'?account:'', login_account: account } : data.user;
-        
-        // 统一保存到 localStorage
-        const userInfo = {
-            name: user.name,
-            phone: user.phone || (regAccountType==='phone'?account:''),
-            login_account: user.login_account || account,
-            email: user.email,
-            avatar: user.avatar
-        };
-        localStorage.setItem('user_info', JSON.stringify(userInfo));
-        localStorage.setItem('user_session', data.sessionToken || userInfo.login_account || userInfo.phone || '');
-        
-        // UI 切换显示成功状态
+        let data;
         if (isRegisterMode) {
+          data = await window.__userAuthBrowser.registerUser({
+            accountType: regAccountType,
+            account,
+            password,
+            name,
+          });
+        } else {
+          data = await window.__userAuthBrowser.loginUser({
+            loginAccount: account,
+            password,
+          });
+        }
+
+        if (data.success) {
+          window.__userAuthBrowser.persistUserAuth(
+            data,
+            isRegisterMode
+              ? { accountType: regAccountType, account, password, name }
+              : { loginAccount: account, password }
+          );
+         
+          // UI 切换显示成功状态
+          if (isRegisterMode) {
             document.getElementById('auth-form').style.display = 'none';
             document.getElementById('register-options').style.display = 'none';
             document.querySelector('.switch-mode').style.display = 'none';

@@ -47,6 +47,175 @@
   <script>
     import { API_BASE_URL } from '../config.ts';
     const API_BASE = API_BASE_URL;
+
+    function setNodeText(node, value) {
+      if (node) node.textContent = String(value ?? '');
+    }
+
+    function clearNode(node) {
+      if (node) node.replaceChildren();
+    }
+
+    function createEmptyMessage(text, className = 'loading') {
+      const div = document.createElement('div');
+      div.className = className;
+      div.textContent = text;
+      return div;
+    }
+
+    function renderAppError(message) {
+      const app = document.getElementById('app');
+      if (!app) return;
+      const wrap = document.createElement('div');
+      wrap.style.padding = '40px';
+      wrap.style.textAlign = 'center';
+      const title = document.createElement('h2');
+      title.textContent = '出错了';
+      const detail = document.createElement('p');
+      detail.textContent = String(message || '加载失败');
+      const slug = document.createElement('p');
+      slug.style.color = '#999';
+      slug.style.marginTop = '10px';
+      slug.textContent = `Slug: ${SHOP_SLUG}`;
+      wrap.append(title, detail, slug);
+      app.replaceChildren(wrap);
+    }
+
+    function createProductCard(product) {
+      const item = document.createElement('div');
+      item.className = 'product-item';
+      item.dataset.id = String(product.id);
+
+      const img = document.createElement('img');
+      img.className = 'product-img';
+      img.src = product.img || '/placeholder.jpg';
+      img.alt = String(product.name || '商品图片');
+      img.addEventListener('error', () => {
+        img.src = '/placeholder.jpg';
+      });
+
+      const info = document.createElement('div');
+      info.className = 'product-info';
+      const name = document.createElement('div');
+      name.className = 'product-name';
+      name.textContent = String(product.name || '');
+      const sub = document.createElement('div');
+      sub.className = 'product-sub';
+      sub.textContent = String(product.sub_name || '');
+      const price = document.createElement('div');
+      price.className = 'product-price';
+      price.textContent = `RSD ${product.price}`;
+      info.append(name, sub, price);
+
+      const actions = document.createElement('div');
+      actions.className = 'product-actions';
+      const decrease = document.createElement('button');
+      decrease.className = 'btn-decrease';
+      decrease.dataset.action = 'decrease';
+      decrease.dataset.id = String(product.id);
+      decrease.textContent = '-';
+      const quantity = document.createElement('span');
+      quantity.className = 'quantity';
+      quantity.textContent = String(cart[product.id] || 0);
+      const increase = document.createElement('button');
+      increase.className = 'btn-increase';
+      increase.dataset.action = 'increase';
+      increase.dataset.id = String(product.id);
+      increase.textContent = '+';
+      actions.append(decrease, quantity, increase);
+
+      item.append(img, info, actions);
+      return item;
+    }
+
+    function createCheckoutModal() {
+      const modal = document.createElement('div');
+      modal.id = 'checkout-modal';
+      modal.className = 'modal';
+      modal.style.display = 'none';
+
+      const content = document.createElement('div');
+      content.className = 'modal-content';
+      const title = document.createElement('h3');
+      title.textContent = '确认订单';
+      const orderItems = document.createElement('div');
+      orderItems.id = 'order-items';
+
+      const createField = (labelText, inputId, placeholder, type = 'text') => {
+        const group = document.createElement('div');
+        group.className = 'form-group';
+        const label = document.createElement('label');
+        label.textContent = labelText;
+        const input = document.createElement('input');
+        input.type = type;
+        input.id = inputId;
+        input.placeholder = placeholder;
+        group.append(label, input);
+        return group;
+      };
+
+      const actions = document.createElement('div');
+      actions.className = 'modal-actions';
+      const cancel = document.createElement('button');
+      cancel.id = 'btn-cancel';
+      cancel.textContent = '取消';
+      const confirm = document.createElement('button');
+      confirm.className = 'btn-primary';
+      confirm.id = 'btn-confirm';
+      confirm.textContent = '确认下单';
+      actions.append(cancel, confirm);
+
+      content.append(
+        title,
+        orderItems,
+        createField('桌号/配送信息', 'table-info', '如: A01 或配送地址'),
+        createField('备注', 'remarks', '少盐/不要辣等'),
+        createField('手机号', 'phone', '便于联系', 'tel'),
+        actions,
+      );
+      modal.appendChild(content);
+      return modal;
+    }
+
+    function createShell() {
+      const fragment = document.createDocumentFragment();
+
+      const header = document.createElement('header');
+      header.className = 'header';
+      const h1 = document.createElement('h1');
+      const p = document.createElement('p');
+      header.append(h1, p);
+
+      const mainContainer = document.createElement('div');
+      mainContainer.className = 'main-container';
+      const sidebar = document.createElement('aside');
+      sidebar.className = 'sidebar';
+      sidebar.id = 'sidebar';
+      const productList = document.createElement('main');
+      productList.className = 'product-list';
+      productList.id = 'product-list';
+      mainContainer.append(sidebar, productList);
+
+      const footer = document.createElement('footer');
+      footer.className = 'cart-bar';
+      const cartInfo = document.createElement('div');
+      cartInfo.className = 'cart-info';
+      const total = document.createElement('span');
+      total.className = 'cart-total';
+      total.textContent = `RSD ${getTotal()}`;
+      const count = document.createElement('span');
+      count.className = 'cart-count';
+      count.textContent = `${getCount()} 件`;
+      cartInfo.append(total, count);
+      const checkout = document.createElement('button');
+      checkout.className = 'btn-submit';
+      checkout.id = 'btn-checkout';
+      checkout.textContent = '去结算';
+      footer.append(cartInfo, checkout);
+
+      fragment.append(header, mainContainer, footer, createCheckoutModal());
+      return fragment;
+    }
     
     // 从URL获取slug (格式: /shop-slug 或 /shop-slug/admin)
     function getSlug() {
@@ -98,66 +267,19 @@
         
         render();
       } catch (err) {
-        document.getElementById('app').innerHTML = `
-          <div style="padding: 40px; text-align: center;">
-            <h2>出错了</h2>
-            <p>${err.message}</p>
-            <p style="color: #999; margin-top: 10px;">Slug: ${SHOP_SLUG}</p>
-          </div>
-        `;
+        renderAppError(err.message);
       }
     }
     
     // 渲染页面
     function render() {
       const app = document.getElementById('app');
-      app.innerHTML = `
-        <header class="header">
-          <h1>${shopInfo.name}</h1>
-          <p>${shopInfo.address || ''} ${shopInfo.phone || ''}</p>
-        </header>
-        
-        <div class="main-container">
-          <aside class="sidebar" id="sidebar">
-            <!-- 分类由JS填充 -->
-          </aside>
-          
-          <main class="product-list" id="product-list">
-            <!-- 商品由JS填充 -->
-          </main>
-        </div>
-        
-        <footer class="cart-bar">
-          <div class="cart-info">
-            <span class="cart-total">RSD ${getTotal()}</span>
-            <span class="cart-count">${getCount()} 件</span>
-          </div>
-          <button class="btn-submit" id="btn-checkout">去结算</button>
-        </footer>
-        
-        <div id="checkout-modal" class="modal" style="display: none;">
-          <div class="modal-content">
-            <h3>确认订单</h3>
-            <div id="order-items"></div>
-            <div class="form-group">
-              <label>桌号/配送信息</label>
-              <input type="text" id="table-info" placeholder="如: A01 或配送地址" />
-            </div>
-            <div class="form-group">
-              <label>备注</label>
-              <input type="text" id="remarks" placeholder="少盐/不要辣等" />
-            </div>
-            <div class="form-group">
-              <label>手机号</label>
-              <input type="tel" id="phone" placeholder="便于联系" />
-            </div>
-            <div class="modal-actions">
-              <button id="btn-cancel">取消</button>
-              <button class="btn-primary" id="btn-confirm">确认下单</button>
-            </div>
-          </div>
-        </div>
-      `;
+      app.replaceChildren(createShell());
+
+      const title = app.querySelector('.header h1');
+      const meta = app.querySelector('.header p');
+      setNodeText(title, shopInfo?.name || '');
+      setNodeText(meta, `${shopInfo?.address || ''} ${shopInfo?.phone || ''}`.trim());
       
       renderCategories();
       renderProducts();
@@ -166,11 +288,14 @@
     
     function renderCategories() {
       const sidebar = document.getElementById('sidebar');
-      sidebar.innerHTML = categories.map((cat, idx) => `
-        <div class="sidebar-item ${idx === currentCategory ? 'active' : ''}" data-idx="${idx}">
-          ${cat.name}
-        </div>
-      `).join('');
+      clearNode(sidebar);
+      categories.forEach((cat, idx) => {
+        const item = document.createElement('div');
+        item.className = `sidebar-item ${idx === currentCategory ? 'active' : ''}`.trim();
+        item.dataset.idx = String(idx);
+        item.textContent = String(cat.name || '');
+        sidebar.appendChild(item);
+      });
       
       // 绑定分类点击事件
       sidebar.querySelectorAll('.sidebar-item').forEach((item, idx) => {
@@ -187,31 +312,30 @@
       const currentCat = categories[currentCategory];
       
       if (!currentCat) {
-        productList.innerHTML = '<div class="loading">暂无商品</div>';
+        productList.replaceChildren(createEmptyMessage('暂无商品'));
         return;
       }
-      
-      productList.innerHTML = `
-        <div class="category-section">
-          <div class="category-header">${currentCat.name}</div>
-          ${currentCat.products?.map(product => `
-            <div class="product-item" data-id="${product.id}">
-              <img class="product-img" src="${product.img || '/placeholder.jpg'}" 
-                   alt="${product.name}" onerror="this.src='/placeholder.jpg'" />
-              <div class="product-info">
-                <div class="product-name">${product.name}</div>
-                <div class="product-sub">${product.sub_name || ''}</div>
-                <div class="product-price">RSD ${product.price}</div>
-              </div>
-              <div class="product-actions">
-                <button class="btn-decrease" data-action="decrease" data-id="${product.id}">-</button>
-                <span class="quantity">${cart[product.id] || 0}</span>
-                <button class="btn-increase" data-action="increase" data-id="${product.id}">+</button>
-              </div>
-            </div>
-          `).join('') || '<div style="padding: 20px; color: #999;">暂无商品</div>'}
-        </div>
-      `;
+
+      const section = document.createElement('div');
+      section.className = 'category-section';
+      const header = document.createElement('div');
+      header.className = 'category-header';
+      header.textContent = String(currentCat.name || '');
+      section.appendChild(header);
+
+      const products = Array.isArray(currentCat.products) ? currentCat.products : [];
+      if (products.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.padding = '20px';
+        empty.style.color = '#999';
+        empty.textContent = '暂无商品';
+        section.appendChild(empty);
+      } else {
+        products.forEach((product) => {
+          section.appendChild(createProductCard(product));
+        });
+      }
+      productList.replaceChildren(section);
       
       // 绑定商品操作事件
       productList.querySelectorAll('button[data-action]').forEach(btn => {
@@ -281,7 +405,12 @@
         });
       });
       
-      document.getElementById('order-items').innerHTML = items.join('<br>');
+      const orderItems = document.getElementById('order-items');
+      clearNode(orderItems);
+      items.forEach((item, index) => {
+        if (index > 0) orderItems.appendChild(document.createElement('br'));
+        orderItems.appendChild(document.createTextNode(item));
+      });
       document.getElementById('checkout-modal').style.display = 'flex';
     }
     

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
+import { persistGoogleUserAuth } from '../lib/user-auth';
 
 declare global {
   interface Window {
@@ -33,15 +34,19 @@ export default function GoogleLoginButton({ onSuccess, onError }: GoogleLoginBut
                 });
                 const data = await res.json();
                 if (data.success) {
-                    localStorage.setItem('user_session', data.sessionToken);
-                    localStorage.setItem('user_info', JSON.stringify(data.user));
-                    onSuccess?.(data.user);
+                    const auth = persistGoogleUserAuth({
+                        id: data.user?.google_id || data.user?.id || response.credential,
+                        name: data.user?.name || '',
+                        email: data.user?.email || '',
+                        avatar: data.user?.avatar || '',
+                        phone: data.user?.phone || '',
+                    });
+                    onSuccess?.(auth.user);
                     window.location.reload();
                 } else {
                     onError?.(data.error);
                 }
             } catch (e: any) { 
-                console.error('Google verification error:', e);
                 onError?.(e.message); 
             }
         };

@@ -1,6 +1,13 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
-import { API_BASE_URL, MASTER_TOKEN } from '../../../config';
+import { API_BASE_URL } from '../../../config';
+import {
+  buildTableValue,
+  isHallLikeZoneName as isSharedHallLikeZoneName,
+  isPlaceholderZoneName,
+  isSimpleHallMode,
+} from '../../../lib/table-config';
+import { parseTableRef, inferLegacySimpleHallNumber, orderMatchesAnyConfiguredTable } from '../../../lib/admin-table-ref';
 import AdminHeader from '../../../components/admin/AdminHeader.astro';
 import AdminTabs from '../../../components/admin/AdminTabs.astro';
 import TabOrders from '../../../components/admin/TabOrders.astro';
@@ -9,6 +16,8 @@ import TabTables from '../../../components/admin/TabTables.astro';
 import TabMenu from '../../../components/admin/TabMenu.astro';
 import TabSettings from '../../../components/admin/TabSettings.astro';
 import TabStats from '../../../components/admin/TabStats.astro';
+import TabMarketing from '../../../components/admin/TabMarketing.astro';
+import TabCustomers from '../../../components/admin/TabCustomers.astro';
 import TabData from '../../../components/admin/TabData.astro';
 import TabPassword from '../../../components/admin/TabPassword.astro';
 import TabRenew from '../../../components/admin/TabRenew.astro';
@@ -175,7 +184,7 @@ function buildTableCards(orders: any[], tableConfig: Array<{ name: string; prefi
 
   for (const zone of tableConfig) {
     for (let i = 1; i <= zone.count; i++) {
-      const tableNum = buildTableValue(zone, i, tableConfig);
+        const tableNum = buildTableValue(zone, i, isSimpleHallMode(tableConfig));
       const tableRef = parseTableRef(tableNum);
       const displayNum = String(i);
       const tableOrders = activeDineIn.filter((o) => {
@@ -242,152 +251,30 @@ function buildTableCards(orders: any[], tableConfig: Array<{ name: string; prefi
   return cards;
 }
 
-function normalizeTableArea(input: string): string {
-  return String(input || '').replace(/\s+/g, '').trim().toLowerCase();
-}
-
-function extractTableNumber(input: any): string {
-  const raw = String(input || '').trim();
-  if (!raw) return '';
-  const cleaned = raw.replace(/\s*(号桌|桌号|桌)\s*$/u, '').trim();
-  const m = cleaned.match(/(\d+)\s*$/u);
-  if (!m) return '';
-  return String(Number(m[1] || '0') || m[1]);
-}
-
-function parseTableRef(input: any): { area: string; number: string; key: string } {
-  const raw = String(input || '').trim();
-  if (!raw) return { area: '', number: '', key: '' };
-  const cleaned = raw.replace(/\s*(号桌|桌号|桌)\s*$/u, '').trim();
-  const m = cleaned.match(/^(.*?)\s*(\d+)$/u);
-  if (!m) {
-    const areaOnly = normalizeTableArea(cleaned);
-    return { area: areaOnly, number: '', key: areaOnly };
-  }
-  const area = normalizeTableArea(m[1] || '');
-  const num = String(Number(m[2] || '0') || m[2]);
-  return { area, number: num, key: `${area}${num}` };
-}
-
-function inferLegacySimpleHallNumber(raw: any, maxCount: number): string {
-  const compact = String(raw || '').replace(/\s+/g, '').trim();
-  if (!compact) return '';
-
-  const ref = parseTableRef(compact);
-  if (ref.number && (!ref.area || isHallZoneName(ref.area) || isPlaceholderZoneName(ref.area))) {
-    return ref.number;
-  }
-
-  if (!/^区域\d+$/u.test(compact) || maxCount <= 0) return '';
-
-  let best = '';
-  for (let n = 1; n <= maxCount; n++) {
-    const s = String(n);
-    if (compact.endsWith(s) && s.length >= best.length) {
-      best = s;
-    }
-  }
-  return best;
-}
-
-function orderMatchesAnyTable(orderTableInfo: any, tableConfig: Array<{ name: string; prefix: string; count: number }>) {
-  const orderRef = parseTableRef(orderTableInfo);
-  if (!orderRef.key && !orderRef.number) return false;
-  const simpleHall = isSimpleHallTableConfig(tableConfig);
-  const simpleHallMaxCount = simpleHall ? Math.max(0, Number(tableConfig?.[0]?.count || 0)) : 0;
-
-  for (const zone of tableConfig) {
-    for (let i = 1; i <= zone.count; i++) {
-      const tableRef = parseTableRef(buildTableValue(zone, i, tableConfig));
-      const sameExact = !!(orderRef.key && tableRef.key && orderRef.key === tableRef.key);
-      const sameNumberWithCompatibleArea =
-        !!(orderRef.number &&
-          tableRef.number &&
-          orderRef.number === tableRef.number &&
-          (orderRef.area === tableRef.area || (!orderRef.area && !tableRef.area)));
-      const singleRoomLegacyMatch =
-        !!(!tableRef.number && tableRef.area && orderRef.area && tableRef.area === orderRef.area);
-      const legacySimpleHallMatch =
-        !!(
-          simpleHall &&
-          tableRef.number &&
-          inferLegacySimpleHallNumber(orderTableInfo, simpleHallMaxCount) === tableRef.number
-        );
-      if (sameExact || sameNumberWithCompatibleArea || singleRoomLegacyMatch || legacySimpleHallMatch) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-function resolveZonePrefix(
-  zone: { name?: string; prefix?: string },
-  tableConfig: Array<{ name: string; prefix: string; count: number }>,
-) {
-  const explicit = String(zone?.prefix || '').trim();
-  if (explicit) return explicit;
-
-  const name = String(zone?.name || '').trim();
-  if (!name) return '';
-  if (isSimpleHallTableConfig(tableConfig)) return '';
-  if (isHallZoneName(name) || isPlaceholderZoneName(name)) return '';
-  return name;
-}
-
-function buildTableValue(
-  zone: { name?: string; prefix?: string; count?: number },
-  index: number,
-  tableConfig: Array<{ name: string; prefix: string; count: number }>,
-) {
-  const base = resolveZonePrefix(zone, tableConfig);
-  const n = String(index);
-  const count = Math.max(0, Number(zone?.count || 0));
-  if (count <= 1) {
-    if (base) return base;
-    return `${n}号桌`;
-  }
-  if (base) return `${base}${n}号桌`;
-  return `${n}号桌`;
-}
-
 function buildTableDisplayLabel(
   zone: { name?: string; prefix?: string; count?: number },
   index: number,
   tableConfig: Array<{ name: string; prefix: string; count: number }>,
 ) {
-  return buildTableValue(zone, index, tableConfig);
+  return buildTableValue(zone, index, isSimpleHallMode(tableConfig));
 }
 
 function isHallZoneName(v: any) {
-  const s = String(v || '').trim().toLowerCase();
-  const compact = s.replace(/\s+/g, '');
-  if (!s) return false;
-  return s === '大厅' || s === '大堂' || s === 'hall' || s === 'main hall' || compact === 'mainhall';
-}
-
-function isPlaceholderZoneName(v: any) {
-  return /^区域\d+$/u.test(String(v || '').trim());
+  return isSharedHallLikeZoneName(v);
 }
 
 function isSimpleHallTableConfig(tableConfig: Array<{ name: string; prefix: string; count: number }>) {
-  if (!Array.isArray(tableConfig) || tableConfig.length !== 1) return false;
-  const z = tableConfig[0] || { name: '', prefix: '', count: 0 };
-  const name = String(z.name || '').trim();
-  const prefix = String(z.prefix || '').trim();
-  const hallLikeName = !name || isHallZoneName(name) || isPlaceholderZoneName(name);
-  const hallLikePrefix = !prefix || isHallZoneName(prefix) || isPlaceholderZoneName(prefix);
-  return hallLikeName && hallLikePrefix;
+  return isSimpleHallMode(tableConfig);
 }
 
 const authHeaders = { Authorization: `Bearer ${token}` };
 
-const [statusResp, shopResp, menuResp, ordersResp] = await Promise.all([
+const [statusResp, shopResp, menuResp, ordersResp, billingResp] = await Promise.all([
   fetchJSON(`${API_BASE_URL}/api/admin/status`, { headers: authHeaders }),
   fetchJSON(`${API_BASE_URL}/${encodeURIComponent(slug)}/info`),
   fetchJSON(`${API_BASE_URL}/${encodeURIComponent(slug)}/menu`),
   fetchJSON(`${API_BASE_URL}/api/admin/orders?_=${Date.now()}`, { headers: authHeaders }),
+  fetchJSON(`${API_BASE_URL}/api/admin/billing`, { headers: authHeaders }),
 ]);
 
 const statusCode = Number(statusResp.status || 0);
@@ -423,23 +310,31 @@ const shop = {
 
 const settings = asObject(parseMaybeJSON(shop.settings));
 
-let resolvedExpireDate =
-  shop?.expire_date ||
-  shop?.expireDate ||
-  settings?.expire_date ||
-  settings?.expireDate ||
-  '';
+const billingData = asObject(billingResp.data?.billing);
+const subscriptionFeeRSD = Number(billingResp.data?.subscription_fee_rsd || settings.subscription_fee_rsd || 1200);
+const businessFeeRSD = Number(billingResp.data?.business_fee_rsd || settings.business_fee_rsd || 1800);
+const billingBalanceRSD = Number(billingData.balance_rsd || 0);
+const billingPlanType = String(billingData.plan_type || 'subscription').toLowerCase();
+const pendingPlanType = String(billingData.pending_plan_type || '').toLowerCase();
+const billingStatus = String(billingData.billing_status || 'active');
+const billingNextChargeDate = String(billingData.next_charge_date || '');
+const billingGraceUntil = String(billingData.grace_until || '');
+const billingAlertLevel = String(billingData.billing_alert_level || 'normal');
+const upgradeChargeRSD = Number(billingData.upgrade_charge_rsd || 0);
 
-if (!resolvedExpireDate && MASTER_TOKEN) {
-  const masterResp = await fetchJSON(`${API_BASE_URL}/api/master/init`, {
-    headers: { Authorization: `Bearer ${MASTER_TOKEN}` },
-  });
-  const shops = Array.isArray(masterResp.data?.shops) ? masterResp.data.shops : [];
-  const matched = shops.find((s: any) => String(s?.slug || '') === String(shop.slug));
-  if (matched?.expire_date) {
-    resolvedExpireDate = String(matched.expire_date);
-  }
-}
+// 从后端获取真实的营业额（包含已清理的记录）
+const lastMonthRevenue = Number(billingData.last_month_revenue || 0);
+const thisMonthRevenue = Number(billingData.this_month_revenue || 0);
+
+const deliveryChargeRSD = Number(rawShop?.delivery_charge_rsd || 0);
+
+const deliveryLocked = Boolean(rawShop?.delivery_locked);
+const deliveryLockReason = String(rawShop?.delivery_lock_reason || '');
+const isPaidPlan = billingPlanType === 'subscription' || billingPlanType === 'business';
+const showReservationTab = isPaidPlan && Number(shop?.enable_reservation ?? 0) !== 0;
+const showStatsTab = isPaidPlan;
+const showMarketingTab = billingPlanType === 'business';
+const showCustomersTab = billingPlanType === 'subscription' || billingPlanType === 'business';
 
 const rawMenu = Array.isArray(menuResp.data) ? menuResp.data : [];
 const categories = rawMenu.map((c: any) => ({
@@ -475,6 +370,7 @@ const orders = rawOrders.map((o: any) => ({
   remarks_json: normalizeJSONString(o?.remarks_json, '[]'),
   table_info: String(o?.table_info || ''),
   user_phone: String(o?.user_phone || ''),
+  scheduled_for: String(o?.scheduled_for || ''),
   created_at: String(o?.created_at || ''),
   is_deleted: Number(o?.is_deleted || 0),
 }));
@@ -496,7 +392,7 @@ const unmatchedDineInOrders = orders
       o.status !== 'paid' &&
       o.is_deleted !== 1,
   )
-  .filter((o: any) => !orderMatchesAnyTable(o.table_info, tableConfig));
+  .filter((o: any) => !orderMatchesAnyConfiguredTable(o.table_info, tableConfig));
 const activeDeliveryOrders = orders.filter(
   (o: any) =>
     o.order_type === 'delivery' &&
@@ -504,25 +400,11 @@ const activeDeliveryOrders = orders.filter(
     o.is_deleted !== 1,
 );
 
-const today = new Date();
-today.setHours(0, 0, 0, 0);
-let daysLeft = 0;
-let isExpired = false;
-let isWarning = false;
-let isNotice = false;
-let expireDateStr = '未设置';
-
-if (resolvedExpireDate) {
-  const expire = new Date(String(resolvedExpireDate));
-  if (!Number.isNaN(expire.getTime())) {
-    expire.setHours(0, 0, 0, 0);
-    daysLeft = Math.ceil((expire.getTime() - today.getTime()) / 86400000);
-    isExpired = daysLeft <= 0;
-    isWarning = daysLeft > 0 && daysLeft <= 3;
-    isNotice = daysLeft > 3 && daysLeft <= 7;
-    expireDateStr = String(resolvedExpireDate).slice(0, 10);
-  }
-}
+const daysLeft = 0;
+const isExpired = false;
+const isWarning = false;
+const isNotice = false;
+const expireDateStr = '按月自动扣费';
 
 const now = new Date();
 const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -532,27 +414,15 @@ const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 const commissionType = shop.commission_type === 'percentage' ? 'percentage' : 'per_order';
 const commissionValue = Number(shop.commission_value || 30);
 
-const chargeableOrders = orders.filter((o: any) => o.status !== 'cancelled' && o.is_deleted !== 1);
-const lastMonthOrders = chargeableOrders.filter((o: any) => {
-  const ms = parseDBDateMs(o.created_at);
-  return ms >= prevMonthStart.getTime() && ms <= prevMonthEnd.getTime();
-});
-const thisMonthOrders = chargeableOrders.filter((o: any) => {
-  const ms = parseDBDateMs(o.created_at);
-  return ms >= thisMonthStart.getTime();
-});
+// 计算累计消耗
+const lastMonthCommission = Math.round(lastMonthRevenue * (commissionValue / 100));
+const thisMonthCommission = Math.round(thisMonthRevenue * (commissionValue / 100));
 
-const lastMonthCommission =
-  commissionType === 'per_order'
-    ? lastMonthOrders.length * commissionValue
-    : Math.round(lastMonthOrders.reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0) * (commissionValue / 100));
-
-const thisMonthCommission =
-  commissionType === 'per_order'
-    ? thisMonthOrders.length * commissionValue
-    : Math.round(thisMonthOrders.reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0) * (commissionValue / 100));
+// 如果余额为负，则视为“待付”
+const debtAmount = billingBalanceRSD < 0 ? Math.abs(billingBalanceRSD) : 0;
 
 const isBillPeriod = now.getDate() <= 6;
+
 const lastMonthKey = prevMonthStart.toISOString().slice(0, 7);
 const isLastMonthPaid = String(shop.last_paid_month || '') === lastMonthKey;
 const showPayWarning = isBillPeriod && lastMonthCommission > 0 && !isLastMonthPaid;
@@ -599,8 +469,9 @@ const cities = {
     isExpired ? (
       <div style="background:#d32f2f; color:#fff; padding:15px; text-align:center; position:fixed; top:0; left:0; right:0; z-index:9999;">
         <h3 style="margin:0;">服务已到期</h3>
-        <p style="margin:6px 0 0;">请联系管理员续费后恢复服务。</p>
+        <p style="margin:6px 0 0;">请联系管理员缴纳费用后恢复服务。</p>
       </div>
+
     ) : (
       <div style="display:flex; flex-direction:column; gap:5px; margin-bottom:10px;">
         <div
@@ -612,11 +483,11 @@ const cities = {
                 : 'background:#e8f5e9; color:#2e7d32; border:1px solid #c8e6c9;'
           }`}
         >
-          {isWarning
-            ? `服务即将到期 (剩余 ${daysLeft} 天)`
-            : isNotice
-              ? `服务到期提醒 (剩余 ${daysLeft} 天) - ${expireDateStr}`
-              : `服务有效期至: ${expireDateStr}${resolvedExpireDate ? ` (剩余 ${daysLeft} 天)` : ''}`}
+          {billingPlanType === 'subscription'
+            ? `订阅版：每月 1 号自动扣费（月费 ${subscriptionFeeRSD} RSD）`
+            : billingPlanType === 'business'
+              ? `商务版：每月 1 号自动扣费（月费 ${businessFeeRSD} RSD）`
+              : '套餐信息异常，请联系平台管理员'}
           <span
             id="mqtt-status-indicator"
             style="margin-left:10px; font-size:11px; padding:2px 6px; border-radius:10px; background:#eee; color:#999;"
@@ -624,6 +495,78 @@ const cities = {
             MQTT: 连接中...
           </span>
         </div>
+
+        <div
+          style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:8px;"
+        >
+          <div style="background:#ecfdf5; border:1px solid #86efac; border-radius:8px; padding:10px;">
+            <div style="font-size:12px; color:#166534;">钱包余额</div>
+            <div style="font-size:20px; font-weight:800; color:#166534;">{billingBalanceRSD} RSD</div>
+            <div style="font-size:12px; color:#166534; margin-top:2px;">套餐：{billingPlanType === 'business' ? '商务版' : '订阅版'}</div>
+          </div>
+          <div style="background:#eff6ff; border:1px solid #93c5fd; border-radius:8px; padding:10px;">
+            <div style="font-size:12px; color:#1e3a8a;">外卖扣点门槛</div>
+            <div style="font-size:20px; font-weight:800; color:#1d4ed8;">{deliveryChargeRSD} RSD</div>
+            <div style="font-size:12px; color:#1e40af; margin-top:2px;">用于余额锁单判断，实际扣点按提成规则计算</div>
+          </div>
+          <div style={`border-radius:8px; padding:10px; border:1px solid ${deliveryLocked ? '#fecaca' : '#86efac'}; background:${deliveryLocked ? '#fef2f2' : '#f0fdf4'};`}>
+            <div style={`font-size:12px; color:${deliveryLocked ? '#991b1b' : '#166534'};`}>外卖状态</div>
+            <div style={`font-size:20px; font-weight:800; color:${deliveryLocked ? '#b91c1c' : '#15803d'};`}>
+              {deliveryLocked ? '受限（需充值）' : '正常可接单'}
+            </div>
+            <div style={`font-size:12px; margin-top:2px; color:${deliveryLocked ? '#991b1b' : '#166534'};`}>
+              {deliveryLocked ? (deliveryLockReason || '余额不足，请先充值') : '扣点成功后自动放行下一单'}
+            </div>
+          </div>
+          <div style={`border-radius:8px; padding:10px; border:1px solid ${isPaidPlan ? '#fcd34d' : '#cbd5e1'}; background:${isPaidPlan ? '#fffbeb' : '#f8fafc'};`}>
+            <div style="font-size:12px; color:#92400e;">缴费提醒</div>
+            <div style="font-size:13px; font-weight:700; color:#78350f; margin-top:3px;">
+              {billingPlanType === 'subscription'
+                ? `每月1号自动扣费（月费 ${subscriptionFeeRSD} RSD）`
+                : billingPlanType === 'business'
+                  ? `每月1号自动扣费（月费 ${businessFeeRSD} RSD）`
+                  : '套餐信息异常'}
+            </div>
+            {isPaidPlan && billingNextChargeDate && (
+              <div style="font-size:12px; color:#92400e; margin-top:3px;">下次扣费日：{billingNextChargeDate}</div>
+            )}
+            {isPaidPlan && billingGraceUntil && (
+              <div style="font-size:12px; color:#b91c1c; margin-top:3px;">宽限截止：{billingGraceUntil}</div>
+            )}
+          </div>
+        </div>
+
+        {
+          billingAlertLevel !== 'normal' && (
+            <div
+              style={`text-align:center; padding:10px; font-size:13px; font-weight:bold; border-radius:4px; border:1px solid ${
+                billingAlertLevel === 'overdue'
+                  ? '#fecaca'
+                  : billingAlertLevel === 'critical'
+                    ? '#fecaca'
+                    : '#fde68a'
+              }; background:${
+                billingAlertLevel === 'overdue'
+                  ? '#fef2f2'
+                  : billingAlertLevel === 'critical'
+                    ? '#fff1f2'
+                    : '#fffbeb'
+              }; color:${
+                billingAlertLevel === 'overdue'
+                  ? '#7f1d1d'
+                  : billingAlertLevel === 'critical'
+                    ? '#991b1b'
+                    : '#92400e'
+              };`}
+            >
+              {billingAlertLevel === 'overdue'
+                ? `欠费宽限中，请尽快充值（余额 ${billingBalanceRSD} RSD）`
+                : billingAlertLevel === 'critical'
+                  ? `余额低于 200 RSD（当前 ${billingBalanceRSD} RSD），请立即充值`
+                  : `余额低于 1000 RSD（当前 ${billingBalanceRSD} RSD），建议尽快充值`}
+            </div>
+          )
+        }
 
         {
           lastMonthCommission > 0 && (
@@ -646,10 +589,10 @@ const cities = {
   <div id="page-wrapper" style="max-width:1400px; margin:0 auto; width:100%; box-sizing:border-box;">
     <div class="admin-container">
       <AdminHeader shop={shop} restaurantId={slug} />
-      <AdminTabs />
+      <AdminTabs showReservationTab={showReservationTab} showStatsTab={showStatsTab} showMarketingTab={showMarketingTab} showCustomersTab={showCustomersTab} />
       <TabTables tableCardsData={tableCardsData} activeDeliveryOrders={activeDeliveryOrders} unmatchedDineInOrders={unmatchedDineInOrders} useSimpleHallLabel={useSimpleHallLabel} />
       <TabOrders orders={orders} useSimpleHallLabel={useSimpleHallLabel} />
-      <TabReservations />
+      {showReservationTab && <TabReservations />}
       <TabMenu categories={categories} products={products} shop={shop} />
       <TabSettings
         settings={settings}
@@ -659,24 +602,51 @@ const cities = {
         restaurantId={shop.id}
         cities={cities}
       />
-      <TabStats />
+      {showStatsTab && <TabStats />}
+      {showMarketingTab && <TabMarketing shopSlug={slug} shopSettings={settings} />}
+      {showCustomersTab && <TabCustomers shopSlug={slug} />}
       <TabData restaurantId={shop.id} />
       <TabPassword />
       <TabRenew
-        isWarning={isWarning}
-        expireDateStr={expireDateStr}
-        daysLeft={daysLeft}
         lastMonthCommission={lastMonthCommission}
         thisMonthCommission={thisMonthCommission}
+        debtAmount={debtAmount}
         isBillPeriod={isBillPeriod}
+
         showPayWarning={showPayWarning}
         isLastMonthPaid={isLastMonthPaid}
         lastMonthName={lastMonthName}
+        billingAlertLevel={billingAlertLevel}
+        billingBalanceRSD={billingBalanceRSD}
+        subscriptionFeeRSD={subscriptionFeeRSD}
+        businessFeeRSD={businessFeeRSD}
+        billingStatus={billingStatus}
+        billingNextChargeDate={billingNextChargeDate}
+        billingGraceUntil={billingGraceUntil}
+        billingPlanType={billingPlanType}
+        pendingPlanType={pendingPlanType}
+        upgradeChargeRSD={upgradeChargeRSD}
       />
     </div>
   </div>
 
   <AdminModals categories={categories} />
+
+  <div style="display:none;" aria-hidden="true">
+    {orders.map((o: any) => (
+      <span
+        class="hidden-data"
+        data-oid={o.id}
+        data-order-id={o.id}
+        data-order-no={o.order_no}
+        data-items={o.items_json}
+        data-total={o.total_amount}
+        data-table={o.table_info}
+        data-status={o.status}
+        data-remarks={o.remarks_json}
+      ></span>
+    ))}
+  </div>
 
   <AdminScripts
     shopId={shop.id}

@@ -1,0 +1,95 @@
+---
+import type { MasterSettingsView } from '../../lib/master-settings-view';
+
+const { settings } = Astro.props as { settings: MasterSettingsView['backup'] };
+---
+
+<section class="settings-card settings-card-backup">
+  <div class="settings-head">
+    <div>
+      <div class="settings-title">备份设置</div>
+      <div class="settings-subtitle">管理自动备份时间、保留数量和目标存储方式。</div>
+    </div>
+  </div>
+
+  <form id="master-backup-settings-form" class="settings-form" onsubmit="return window.submitMasterBackupSettings ? window.submitMasterBackupSettings(this) : false;">
+    <label>
+      <span>备份时间</span>
+      <input name="backupTime" type="time" value={settings.backupTime} />
+    </label>
+    <label>
+      <span>保留数量</span>
+      <input name="backupRetention" type="number" min="1" step="1" value={settings.backupRetention} />
+    </label>
+    <label>
+      <span>备份目标</span>
+      <select name="backupTarget" data-backup-target>
+        <option value="" selected={settings.backupTarget === ''}>未设置</option>
+        <option value="local" selected={settings.backupTarget === 'local'}>本地 / 服务器</option>
+        <option value="s3" selected={settings.backupTarget === 's3'}>S3 / R2</option>
+      </select>
+    </label>
+
+    <div class="backup-group" data-backup-mode="host">
+      <label>
+        <span>备份主机</span>
+        <input name="backupHost" type="text" value={settings.backupHost} />
+      </label>
+      <label>
+        <span>备份用户</span>
+        <input name="backupUser" type="text" value={settings.backupUser} />
+      </label>
+      <label>
+        <span>备份密码</span>
+        <input name="backupPass" type="password" value={settings.backupPass} />
+      </label>
+      <label>
+        <span>备份路径</span>
+        <input name="backupPath" type="text" value={settings.backupPath} />
+      </label>
+    </div>
+
+    <div class="backup-group" data-backup-mode="s3">
+      <label>
+        <span>S3 Endpoint</span>
+        <input name="backupEndpoint" type="text" value={settings.backupEndpoint} />
+      </label>
+      <label>
+        <span>Bucket</span>
+        <input name="backupBucket" type="text" value={settings.backupBucket} />
+      </label>
+    </div>
+
+    <div class="settings-actions">
+      <button type="submit" class="settings-submit">保存备份设置</button>
+      <div id="master-backup-settings-feedback" class="settings-feedback">切换备份目标后会自动切换需要填写的字段。</div>
+    </div>
+  </form>
+</section>
+
+<style>
+  .settings-card {
+    background: #fff;
+    border: 1px solid #d7dee7;
+    border-left: 4px solid #b45309;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+  }
+
+  .settings-head { margin-bottom: 14px; }
+  .settings-title { font-size: 20px; font-weight: 900; color: #0f172a; }
+  .settings-subtitle { margin-top: 4px; font-size: 13px; color: #64748b; }
+  .settings-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .settings-form label { display: grid; gap: 6px; }
+  .settings-form span { font-size: 12px; font-weight: 700; color: #475569; }
+  .settings-form input, .settings-form select { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fff; }
+  .backup-group { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 12px; border-radius: 14px; background: #f8fafc; border: 1px solid #e2e8f0; }
+  .settings-actions { grid-column: 1 / -1; display: grid; gap: 8px; }
+  .settings-submit { border: none; border-radius: 10px; padding: 12px 16px; background: #b45309; color: #fff; font-weight: 800; cursor: pointer; }
+  .settings-feedback { font-size: 12px; color: #64748b; }
+
+  @media (max-width: 860px) {
+    .settings-form, .backup-group { grid-template-columns: 1fr; }
+  }
+</style>

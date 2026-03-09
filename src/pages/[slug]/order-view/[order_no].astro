@@ -87,6 +87,7 @@ const shopId = Number(shop?.id || 0);
 const orderId = Number(order?.id || 0);
 
 const createdAt = String(order?.created_at || '').replace('T', ' ').replace('Z', '');
+const scheduledFor = String(order?.scheduled_for || '').replace('T', ' ').replace('Z', '');
 const isDeliveryOrder = String(order?.order_type || '').toLowerCase() === 'delivery';
 const tableToken = String(order?.table_info || '').split(' ')[0] || '';
 const backUrl = `/${slug}`;
@@ -105,6 +106,7 @@ const reorderUrl = isDeliveryOrder
       <div class="line"><span>订单号 / Broj:</span><b>#{order?.order_no || order_no}</b></div>
       <div class="line"><span>状态 / Status:</span><b id="order-status">{statusText}</b></div>
       <div class="line"><span>下单时间 / Vreme:</span><b>{createdAt || '-'}</b></div>
+      {scheduledFor && <div class="line"><span>预约送达 / Zakazano:</span><b>{scheduledFor}</b></div>}
       <div class="line"><span>联系商家 / Kontakt:</span>{phone ? <a href={`tel:${phone}`}>{phone}</a> : <b>-</b>}</div>
       {order?.table_info && <div class="line"><span>地址/桌号 / Adresa/Sto:</span><b>{order.table_info}</b></div>}
 
@@ -231,60 +233,91 @@ const reorderUrl = isDeliveryOrder
     })();
   </script>
 
-  <style is:inline>
-    .wrap { max-width: 760px; margin: 24px auto 110px; padding: 0 12px; }
-    .card { background: #fff; border: 1px solid #e9ecef; border-radius: 14px; padding: 18px; box-shadow: 0 6px 18px rgba(0,0,0,.05); }
-    h1 { margin: 0 0 12px; font-size: 22px; color: #243447; }
-    h2 { margin: 16px 0 10px; font-size: 18px; color: #334e68; }
-    .line { display: flex; gap: 10px; margin: 6px 0; color: #2f3e4e; align-items: baseline; }
-    .line span { color: #6b7c93; min-width: 160px; }
-    .items { border: 1px solid #eef2f7; border-radius: 10px; overflow: hidden; }
-    .item { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #f2f4f7; }
-    .item:last-child { border-bottom: none; }
-    .item.empty { display: block; color: #888; }
-    .sub { color: #7b8794; font-size: 13px; }
-    .qty, .price { color: #52606d; font-weight: 600; }
-    .total { margin-top: 14px; font-size: 18px; color: #1f2933; }
-    .rider { margin-top: 14px; padding: 12px; border-radius: 10px; background: #e8f4ff; border: 1px solid #b6d4fe; }
-    .rider.hide { display: none; }
-    .tips { margin-top: 12px; font-size: 13px; color: #6b7c93; }
-    .sticky-actions {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 20;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      padding: 12px;
-      background: rgba(255, 255, 255, 0.96);
-      border-top: 1px solid #e6ebf1;
-      backdrop-filter: blur(4px);
-    }
-    .sticky-actions a {
-      text-decoration: none;
-      text-align: center;
-      padding: 12px 10px;
-      border-radius: 10px;
-      font-weight: 700;
-      font-size: 15px;
-      border: 1px solid transparent;
-    }
-    .sticky-actions .btn-back {
-      background: #f3f6fb;
-      color: #2f3e4e;
-      border-color: #d9e2ec;
-    }
-    .sticky-actions .btn-reorder {
-      background: linear-gradient(135deg, #4f7efc 0%, #3a67e4 100%);
-      color: #fff;
-    }
-    @media (max-width: 640px) {
-      .line { display: block; }
-      .line span { display: block; min-width: 0; }
-      .item { grid-template-columns: 1fr; }
-      .sticky-actions a { font-size: 14px; }
-    }
-  </style>
+<style is:inline>
+  * { box-sizing: border-box; }
+  .wrap { max-width: 800px; margin: 24px auto 130px; padding: 0 16px; }
+  .card { background: #fff; border-radius: 20px; padding: 24px; box-shadow: 0 10px 40px rgba(0,0,0,.08); border: 1px solid #f0f0f0; }
+  h1 { margin: 0 0 20px; font-size: 24px; color: #1a1a2e; font-weight: 700; position: relative; padding-bottom: 15px; }
+  h1::after { content: ''; position: absolute; bottom: 0; left: 0; width: 60px; height: 4px; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); border-radius: 2px; }
+  h2 { margin: 28px 0 16px; font-size: 20px; color: #2d3748; font-weight: 600; }
+  .line { display: flex; gap: 12px; margin: 12px 0; color: #2d3748; align-items: baseline; padding: 10px 14px; background: #f8fafc; border-radius: 10px; transition: all 0.2s; }
+  .line:hover { background: #edf2f7; }
+  .line span { color: #718096; min-width: 140px; font-weight: 500; font-size: 14px; }
+  .line b { color: #1a202c; font-weight: 600; }
+  .line a { color: #4299e1; text-decoration: none; font-weight: 600; transition: color 0.2s; }
+  .line a:hover { color: #3182ce; text-decoration: underline; }
+  #order-status { color: #059669; background: #d1fae5; padding: 4px 12px; border-radius: 20px; font-size: 14px; }
+  .items { border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background: #fff; }
+  .item { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; padding: 16px 20px; border-bottom: 1px solid #f1f5f9; align-items: center; transition: background 0.2s; }
+  .item:hover { background: #f8fafc; }
+  .item:last-child { border-bottom: none; }
+  .item.empty { display: block; color: #a0aec0; text-align: center; padding: 40px 20px; }
+  .item b { color: #2d3748; font-weight: 600; font-size: 16px; }
+  .sub { color: #718096; font-size: 14px; }
+  .qty { color: #4a5568; font-weight: 500; font-size: 14px; background: #f1f5f9; padding: 4px 10px; border-radius: 20px; }
+  .price { color: #d32f2f; font-weight: 700; font-size: 16px; }
+  .total { margin-top: 24px; padding: 20px; background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%); border-radius: 16px; font-size: 20px; color: #1a202c; display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+  #order-total { color: #d32f2f; font-size: 24px; font-weight: 700; }
+  .rider { margin-top: 24px; padding: 20px; border-radius: 16px; background: linear-gradient(135deg, #ebf8ff 0%, #e6fffa 100%); border: 1px solid #90cdf4; }
+  .rider h3 { margin: 0 0 12px; color: #2b6cb0; font-size: 16px; }
+  .rider.hide { display: none; }
+  .rider a { color: #2b6cb0; text-decoration: none; font-weight: 600; }
+  .rider a:hover { color: #2c5282; }
+  .tips { margin-top: 20px; padding: 16px 20px; font-size: 14px; color: #4a5568; background: #fffbeb; border: 1px solid #fbd38d; border-radius: 12px; display: flex; align-items: center; gap: 10px; }
+  .tips::before { content: '💡'; font-size: 18px; }
+  .sticky-actions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.98);
+    border-top: 1px solid #e2e8f0;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 -4px 20px rgba(0,0,0,.05);
+  }
+  .sticky-actions a {
+    text-decoration: none;
+    text-align: center;
+    padding: 16px 20px;
+    border-radius: 14px;
+    font-weight: 600;
+    font-size: 16px;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .sticky-actions a:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+  .sticky-actions .btn-back {
+    background: #f7fafc;
+    color: #4a5568;
+    border-color: #e2e8f0;
+  }
+  .sticky-actions .btn-back:hover { background: #edf2f7; }
+  .sticky-actions .btn-reorder {
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(72, 187, 120, 0.4);
+  }
+  .sticky-actions .btn-reorder:hover { box-shadow: 0 6px 20px rgba(72, 187, 120, 0.5); }
+  @media (max-width: 640px) {
+    .wrap { margin: 16px auto 120px; padding: 0 12px; }
+    .card { padding: 20px; border-radius: 16px; }
+    h1 { font-size: 20px; }
+    h2 { font-size: 18px; }
+    .line { flex-direction: column; gap: 4px; padding: 12px; }
+    .line span { min-width: 0; font-size: 13px; }
+    .item { grid-template-columns: 1fr; gap: 8px; padding: 14px 16px; }
+    .sticky-actions { padding: 12px; }
+    .sticky-actions a { font-size: 15px; padding: 14px 16px; }
+    .total { flex-direction: column; gap: 8px; text-align: center; }
+  }
+</style>
 </Layout>

@@ -7,7 +7,7 @@
 - **TypeScript** - 类型安全
 - **Cloudflare Pages** - 边缘部署
 
-## 项目结构.
+## 项目结构
 
 ```
 meituanAstro/

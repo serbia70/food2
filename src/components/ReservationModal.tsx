@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useStore } from "@nanostores/preact";
 import { cartItems, cartTotal } from "../store/cartStore";
+import { SHOP_EVENTS } from "../lib/events";
 
 interface ReservationModalProps {
   restaurantId?: string | number;
   onClose?: () => void;
+  requiresPreOrder?: boolean;
 }
 
 interface CartMenuItem {
@@ -47,7 +49,6 @@ interface SelectedMenuItem {
   quantity: number;
 }
 
-type DineType = "dine_in" | "takeout" | "delivery";
 type PreOrderMode = "none" | "cart" | "menu";
 
 function pad2(n: number) {
@@ -77,7 +78,7 @@ function parseLocalDateTime(dateStr: string, timeStr: string) {
   return dt;
 }
 
-export default function ReservationModal({ restaurantId, onClose }: ReservationModalProps) {
+export default function ReservationModal({ restaurantId, onClose, requiresPreOrder = false }: ReservationModalProps) {
   const $items = useStore(cartItems);
   const $total = useStore(cartTotal);
 
@@ -89,8 +90,7 @@ export default function ReservationModal({ restaurantId, onClose }: ReservationM
   const [reservationTime, setReservationTime] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
-  const [dineType, setDineType] = useState<DineType>("dine_in");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const dineType = "dine_in";
   const [remarks, setRemarks] = useState("");
 
   const [preOrderMode, setPreOrderMode] = useState<PreOrderMode>("none");
@@ -107,7 +107,6 @@ export default function ReservationModal({ restaurantId, onClose }: ReservationM
   const scrollingByChipRef = useRef(false);
 
   const hasCartItems = useMemo(() => Object.keys($items).length > 0, [$items]);
-  const requiresPreOrder = dineType === "delivery" || dineType === "takeout";
   const minDate = useMemo(() => formatLocalDate(new Date()), []);
   const maxDate = useMemo(() => {
     const d = new Date();
@@ -115,10 +114,7 @@ export default function ReservationModal({ restaurantId, onClose }: ReservationM
     return formatLocalDate(d);
   }, []);
 
-  const availablePreOrderModes = useMemo<PreOrderMode[]>(() => {
-    if (requiresPreOrder) return ["cart", "menu"];
-    return ["none", "cart", "menu"];
-  }, [requiresPreOrder]);
+  const availablePreOrderModes: PreOrderMode[] = ["none", "cart", "menu"];
 
   const selectedMenuList = useMemo(
     () => Object.values(selectedMenuItems).filter((item) => item.quantity > 0),
@@ -196,21 +192,6 @@ export default function ReservationModal({ restaurantId, onClose }: ReservationM
       return false;
     }
 
-    if (dineType === "delivery" && !deliveryAddress.trim()) {
-      alert("送餐方式请填写送餐地址 / Unesite adresu za dostavu");
-      return false;
-    }
-
-    const items = buildReservationItems();
-    if (requiresPreOrder && (!items || items.length === 0)) {
-      alert(
-        dineType === "delivery"
-          ? "送餐预约请先选择菜品 / Za dostavu prvo izaberite jela"
-          : "自取预约请先选择菜品 / Za preuzimanje prvo izaberite jela",
-      );
-      return false;
-    }
-
     return true;
   };
 
@@ -220,8 +201,8 @@ export default function ReservationModal({ restaurantId, onClose }: ReservationM
       setShowOnlySelected(false);
       setIsOpen(true);
     };
-    window.addEventListener("open-reservation", handleOpen);
-    return () => window.removeEventListener("open-reservation", handleOpen);
+    window.addEventListener(SHOP_EVENTS.OPEN_RESERVATION, handleOpen);
+    return () => window.removeEventListener(SHOP_EVENTS.OPEN_RESERVATION, handleOpen);
   }, []);
 
   useEffect(() => {
@@ -424,8 +405,8 @@ export default function ReservationModal({ restaurantId, onClose }: ReservationM
       guest_count: guestCount,
       reservation_time: reservationDateTime,
       customer_phone: customerPhone,
-      dine_type: dineType,
-      delivery_address: dineType === "delivery" ? deliveryAddress.trim() : null,
+      dine_type: "dine_in",
+      delivery_address: null,
       customer_name: customerName || null,
       items: itemsJson,
       remarks: remarks || null,
@@ -445,12 +426,7 @@ export default function ReservationModal({ restaurantId, onClose }: ReservationM
         return;
       }
 
-      const dineTypeText =
-        dineType === "dine_in"
-          ? "堂食 / U restoranu"
-          : dineType === "takeout"
-            ? "自取 / Preuzimanje"
-            : "送餐 / Dostava";
+      const dineTypeText = "堂食 / U restoranu";
       const preOrderText =
         preOrderMode === "none"
           ? "到店再点 / Narucivanje u lokalu"
@@ -582,20 +558,9 @@ export default function ReservationModal({ restaurantId, onClose }: ReservationM
               <div style={{ fontWeight: 700, color: "#123250", marginBottom: "10px" }}>
                 用餐方式 / Nacin
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "8px" }}>
-                <button onClick={() => setDineType("dine_in")} style={{ padding: "10px 8px", borderRadius: "10px", border: dineType === "dine_in" ? "2px solid #37a66b" : "1px solid #d8e3ee", background: dineType === "dine_in" ? "#e8f8ef" : "#fff", fontSize: "13px", fontWeight: dineType === "dine_in" ? 700 : 500, color: dineType === "dine_in" ? "#2f8d59" : "#4a5d70", cursor: "pointer" }}>🪑 堂食 / Lokal</button>
-                <button onClick={() => setDineType("takeout")} style={{ padding: "10px 8px", borderRadius: "10px", border: dineType === "takeout" ? "2px solid #f19a2a" : "1px solid #d8e3ee", background: dineType === "takeout" ? "#fff4e8" : "#fff", fontSize: "13px", fontWeight: dineType === "takeout" ? 700 : 500, color: dineType === "takeout" ? "#ca7f1e" : "#4a5d70", cursor: "pointer" }}>🥡 自取 / Preuzimanje</button>
-                <button onClick={() => setDineType("delivery")} style={{ padding: "10px 8px", borderRadius: "10px", border: dineType === "delivery" ? "2px solid #1a7fc2" : "1px solid #d8e3ee", background: dineType === "delivery" ? "#e8f4fd" : "#fff", fontSize: "13px", fontWeight: dineType === "delivery" ? 700 : 500, color: dineType === "delivery" ? "#166ca6" : "#4a5d70", cursor: "pointer" }}>🛵 送餐 / Dostava</button>
+              <div style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cfe2d6", background: "#edf8f1", color: "#245f3d", fontWeight: 700, fontSize: "13px" }}>
+                🪑 仅支持堂食预约 / Samo rezervacija u lokalu
               </div>
-
-              {dineType === "delivery" && (
-                <div style={{ marginTop: "12px" }}>
-                  <label style={{ display: "block", marginBottom: "6px", fontWeight: 700, color: "#123250" }}>
-                    送餐地址 * / Adresa
-                  </label>
-                  <textarea value={deliveryAddress} onInput={(e) => setDeliveryAddress((e.target as HTMLTextAreaElement).value)} placeholder="请输入详细送餐地址 / Unesite tacnu adresu" rows={2} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #c9daeb", fontSize: "14px", resize: "vertical", boxSizing: "border-box" }} />
-                </div>
-              )}
             </div>
           </div>
 
@@ -604,11 +569,7 @@ export default function ReservationModal({ restaurantId, onClose }: ReservationM
               预约点餐 / Izbor jela
             </div>
             <div style={{ fontSize: "12px", color: "#6b8196", marginBottom: "10px" }}>
-              {dineType === "delivery"
-                ? "送餐预约需提前选择菜品 / Dostava zahteva izbor jela unapred"
-                : dineType === "takeout"
-                  ? "自取预约需提前选择菜品 / Preuzimanje zahteva izbor jela unapred"
-                  : "可先点菜，也可到店再点 / Mozete izabrati sada ili u lokalu"}
+              可先点菜，也可到店再点 / Mozete izabrati sada ili u lokalu
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "8px", marginBottom: "10px" }}>

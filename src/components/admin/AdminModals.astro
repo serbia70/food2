@@ -210,5 +210,20 @@ const { categories } = Astro.props;
   </div>
 </div>
 
+<!-- Checkin Modal -->
+<div id="checkin-modal" class="modal" style="display:none;">
+  <div class="modal-content" style="max-width:500px;">
+    <h3>🚀 选择入座桌号 (Select Table)</h3>
+    <div id="checkin-tables" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap:10px; max-height:300px; overflow-y:auto; margin-bottom:20px;">
+      <!-- JS injected -->
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="window.closeCheckinModal()">取消</button>
+      <button class="btn-save" onclick="window.confirmCheckin()">✅ 确认入座</button>
+    </div>
+  </div>
+</div>
+
 <!-- 全局隐藏上传控件 -->
 <input type="file" id="global-file-input" style="display:none;" data-admin-change="global-file-upload" accept="image/*" />
+

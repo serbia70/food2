@@ -3,7 +3,7 @@ import { API_BASE_URL } from '../../../config';
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, cookies }) => {
   try {
     const body = await request.text();
     const res = await fetch(`${API_BASE_URL}/api/master/login`, {
@@ -11,7 +11,23 @@ export const POST: APIRoute = async ({ request }) => {
       headers: { 'Content-Type': 'application/json' },
       body,
     });
-    return new Response(await res.text(), {
+    const text = await res.text();
+    let data: any = null;
+    try {
+      data = JSON.parse(text);
+    } catch {}
+
+    if (res.ok && data?.success && data?.token) {
+      cookies.set('master_token', data.token, {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: false,
+        maxAge: 60 * 60 * 12,
+      });
+    }
+
+    return new Response(text, {
       status: res.status,
       headers: {
         'Content-Type': res.headers.get('content-type') || 'application/json',

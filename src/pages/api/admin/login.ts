@@ -46,11 +46,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       path: '/',
       httpOnly: true,
       sameSite: 'lax',
-      secure: false,
+      secure: import.meta.env.PROD || new URL(request.url).protocol === 'https:',
       maxAge: 60 * 60 * 24 * 7,
     });
 
-    return new Response(JSON.stringify({ success: true, token: data.token }), {
+    return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

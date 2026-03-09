@@ -70,7 +70,17 @@ import Layout from '../../layouts/Layout.astro';
         document.getElementById('user-name').innerText = user.name || '用户';
         document.getElementById('user-contact').innerText = user.phone || user.email || '';
         if (user.avatar) {
-            document.querySelector('#user-header .avatar').innerHTML = `<img src="${user.avatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+            const avatarEl = document.querySelector('#user-header .avatar');
+            if (avatarEl) {
+              const img = document.createElement('img');
+              img.src = String(user.avatar);
+              img.alt = '用户头像';
+              img.style.width = '100%';
+              img.style.height = '100%';
+              img.style.borderRadius = '50%';
+              img.style.objectFit = 'cover';
+              avatarEl.replaceChildren(img);
+            }
         }
         if (!user.phone) document.getElementById('bind-phone-btn').style.display = 'inline-block';
       } catch (e) { console.error(e); }

@@ -27,6 +27,23 @@ function formatBelgradeHHmm(v: any) {
   return belgradeTime.format(d);
 }
 
+function formatScheduledLabel(v: any) {
+  if (!v) return '';
+  const raw = String(v).trim();
+  if (!raw) return '';
+  const normalized = raw.replace(' ', 'T');
+  const d = new Date(normalized.endsWith('Z') ? normalized : `${normalized}Z`);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleString('sr-RS', {
+    timeZone: 'Europe/Belgrade',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 function formatTableLabel(tableInfo: any) {
   const raw = String(tableInfo || '').trim();
   if (!raw) return '--';
@@ -112,6 +129,13 @@ function formatTableLabel(tableInfo: any) {
                         ? '已取消'
                         : '待处理'}
               </span>
+              {o.user_phone && (
+                <button
+                  onclick={`window.openChatForPhone('${o.user_phone}')`}
+                  title="发消息"
+                  style="height:24px; width:24px; font-size:12px; background:#0891b2; color:#fff; border:none; border-radius:4px; cursor:pointer;"
+                >💬</button>
+              )}
               <button class="btn-action" data-admin-action="print-order" data-order-id={o.id} title="打印" style="height:24px; width:24px; font-size:12px;">🖨️</button>
             </div>
 
@@ -125,6 +149,11 @@ function formatTableLabel(tableInfo: any) {
           </div>
 
           {o.order_type === 'delivery' && <div class="order-address-row">地址: {o.table_info}</div>}
+          {o.order_type === 'delivery' && o.scheduled_for && (
+            <div class="order-address-row" style="margin-top:4px; color:#1565c0;">
+              预约送达: {formatScheduledLabel(o.scheduled_for)}
+            </div>
+          )}
         </div>
       );
     })}

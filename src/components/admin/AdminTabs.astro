@@ -1,13 +1,20 @@
+---
+const { showReservationTab = true, showStatsTab = true, showMarketingTab = false, showCustomersTab = false } = Astro.props;
+---
+
 <div class="tabs-container">
   <div class="tabs">
     <button data-admin-action="show-tab" data-tab-name="tables" class="active" id="btn-tables">📱 订单 (Active)</button>
     <button data-admin-action="show-tab" data-tab-name="orders" id="btn-orders">📜 历史 (History)</button>
-    <button data-admin-action="show-tab" data-tab-name="reservations" id="btn-reservations">📅 预约</button>
+    {showReservationTab && <button data-admin-action="show-tab" data-tab-name="reservations" id="btn-reservations">📅 预约</button>}
     <button data-admin-action="show-tab" data-tab-name="menu" id="btn-menu">🍔 菜单</button>
     <button data-admin-action="show-tab" data-tab-name="settings" id="btn-settings">🛠️ 设置</button>
-    <button data-admin-action="show-tab" data-tab-name="stats" id="btn-stats">📊 统计</button>
+    {showStatsTab && <button data-admin-action="show-tab" data-tab-name="stats" id="btn-stats">📊 统计</button>}
+    {showMarketingTab && <button data-admin-action="show-tab" data-tab-name="marketing" id="btn-marketing">🎯 营销</button>}
+    {showCustomersTab && <button data-admin-action="show-tab" data-tab-name="customers" id="btn-customers">👥 客户</button>}
     <button data-admin-action="show-tab" data-tab-name="data" id="btn-data">💾 备份</button>
     <button data-admin-action="show-tab" data-tab-name="password" id="btn-pwd">🔑 密码</button>
-    <button data-admin-action="show-tab" data-tab-name="renew" id="btn-renew">💳 续费</button>
+    <button data-admin-action="show-tab" data-tab-name="renew" id="btn-renew">💰 费用</button>
+
   </div>
 </div>

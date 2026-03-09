@@ -33,5 +33,5 @@ npm install
 npm run dev -- --port 3000
 ```
 
-## Important.
+## Important
 - Current code still contains some Node-style API routes (`fs/path`). Build passes, but for strict Worker runtime, continue migrating those routes to Go API.

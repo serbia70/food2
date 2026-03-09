@@ -2,10 +2,12 @@
   <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
     <h3 style="margin:0; color:#1f2d3d;">📅 预约管理</h3>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <input id="reservation-date" type="date" style="padding:8px; border:1px solid #ddd; border-radius:6px;" />
-      <button class="btn-xs" type="button" data-admin-action="reservation-filter" data-mode="today">今天</button>
-      <button class="btn-xs" type="button" data-admin-action="reservation-filter" data-mode="all">全部日期</button>
-      <select id="reservation-status" style="padding:8px; border:1px solid #ddd; border-radius:6px;">
+      <input id="reservation-date" type="date" style="padding:8px; border:1px solid #ddd; border-radius:6px;" onchange="loadReservations()" />
+      <button class="btn-xs" type="button" data-admin-action="reservation-filter" data-mode="today" onclick="setReservationDateFilter('today')">今天</button>
+      <button class="btn-xs" type="button" data-admin-action="reservation-filter" data-mode="7days" style="background:#2563eb; color:#fff;" onclick="setReservationDateFilter('7days')">最近7天</button>
+      <button class="btn-xs" type="button" data-admin-action="reservation-filter" data-mode="all" onclick="setReservationDateFilter('all')">全部日期</button>
+      <select id="reservation-status" style="padding:8px; border:1px solid #ddd; border-radius:6px;" onchange="loadReservations()">
+
         <option value="">全部状态</option>
         <option value="pending">待确认</option>
         <option value="confirmed">已确认</option>

@@ -5,8 +5,19 @@ import Sidebar from '../../components/Sidebar';
 import CartModal from '../../components/CartModal';
 import UserModal from '../../components/UserModal';
 import ReservationModal from '../../components/ReservationModal';
+import UserChat from '../../components/UserChat.astro';
+import TablePageEntryIsland from '../../components/shop/TablePageEntryIsland.tsx';
 import { API_BASE_URL, MASTER_TOKEN } from '../../config';
-import { buildTableLookupKeys, createBelgradeFormatter, escapeHtml } from '../../scripts/shop/table-utils';
+import { classifyShopResponseStatus } from '../../lib/shop-status';
+import { shouldRetryStream } from '../../lib/stream-retry';
+import {
+  buildTableButtonLabel,
+  buildTableValue,
+  isHallLikeZoneName,
+  isPlaceholderZoneName,
+  isSimpleHallMode,
+} from '../../lib/table-config';
+import { buildTableLookupKeys } from '../../scripts/shop/table-utils';
 
 export const prerender = false;
 
@@ -39,7 +50,11 @@ try {
   return new Response('Upstream unavailable', { status: 503 });
 }
 
-if (!shopRes.ok) return new Response('Not Found', { status: 404 });
+if (!shopRes.ok) {
+  const status = classifyShopResponseStatus(shopRes.status);
+  const message = status === 404 ? 'Not Found' : 'Upstream shop unavailable';
+  return new Response(message, { status });
+}
 
 let shop: any;
 try {
@@ -48,6 +63,10 @@ try {
   return new Response('Invalid upstream response', { status: 502 });
 }
 const settings = parseJSON<any>(shop?.settings, {});
+const menuLayout = settings?.menu_layout || 'image-2col';
+const isMenuTextMode = settings?.menu_text_mode === true || menuLayout.startsWith('text'); // Check text mode setting
+
+
 let rawMenu: any[] = [];
 if (menuRes.ok) {
   try {
@@ -70,6 +89,7 @@ const activeMenu = (Array.isArray(rawMenu) ? rawMenu : [])
     })),
   }))
   .filter((cat: any) => Array.isArray(cat.products) && cat.products.length > 0);
+
 
 let masterSettings: any = {};
 try {
@@ -105,26 +125,11 @@ if (shop?.expire_date) {
   if (expireDate < today) isDineInExpired = true;
 }
 
-let isDeliveryLocked = false;
-const currentDay = today.getDate();
-let deadlineDate = new Date(today);
-if (currentDay > 6) {
-  deadlineDate = new Date(today.getFullYear(), today.getMonth(), 0);
-} else {
-  deadlineDate = new Date(today.getFullYear(), today.getMonth() - 1, 0);
-}
-const deadlineStr = deadlineDate.toISOString().split('T')[0] + ' 23:59:59';
-
-let checkStartDateStr = '2020-01-01 00:00:00';
-if (shop?.last_paid_month) {
-  const [year, month] = String(shop.last_paid_month).split('-').map(Number);
-  const nextMonth = new Date(year, month, 1);
-  checkStartDateStr = nextMonth.toISOString().split('T')[0] + ' 00:00:00';
-}
-if (checkStartDateStr < deadlineStr) {
-  const deliveryCount = Number(shop?.delivery_count || 0);
-  if (deliveryCount > 0) isDeliveryLocked = true;
-}
+let isDeliveryLocked = Boolean(shop?.delivery_locked);
+const deliveryLockReason = String(
+  shop?.delivery_lock_reason ||
+    '余额不足，请先充值后使用外卖 / Insufficient wallet balance, please top up first',
+);
 
 const tableNum = Astro.url.searchParams.get('table');
 const mode = Astro.url.searchParams.get('mode');
@@ -197,43 +202,15 @@ if (tableConfig.length === 1) {
   }
 }
 
-const isHallLikeZoneName = (v: any) => /^(大厅|大堂|hall|main hall)$/iu.test(String(v || '').trim());
-const isPlaceholderZoneName = (v: any) => /^区域\d+$/u.test(String(v || '').trim());
-const simpleHallMode =
-  tableConfig.length === 1 &&
-  ((isHallLikeZoneName(tableConfig[0]?.name) || isPlaceholderZoneName(tableConfig[0]?.name) || !String(tableConfig[0]?.name || '').trim()) &&
-    (isHallLikeZoneName(tableConfig[0]?.prefix) || isPlaceholderZoneName(tableConfig[0]?.prefix) || !String(tableConfig[0]?.prefix || '').trim()));
-
-const resolveZonePrefix = (zone: { name?: string; prefix?: string }) => {
-  const explicit = String(zone?.prefix || '').trim();
-  if (explicit) return explicit;
-
-  const name = String(zone?.name || '').trim();
-  if (!name) return '';
-  if (simpleHallMode) return '';
-  if (isHallLikeZoneName(name) || isPlaceholderZoneName(name)) return '';
-  return name;
-};
-
-const buildTableValue = (zone: { name?: string; prefix?: string; count?: number }, index: number) => {
-  const base = resolveZonePrefix(zone);
-  const n = String(index);
-  const count = Math.max(0, Number(zone?.count || 0));
-  if (count <= 1) {
-    if (base) return base;
-    return `${n}号桌`;
-  }
-  if (base) return `${base}${n}号桌`;
-  return `${n}号桌`;
-};
+const simpleHallMode = isSimpleHallMode(tableConfig);
 
 const buildTableDisplay = (zone: { name?: string; prefix?: string; count?: number }, index: number) => {
-  const base = resolveZonePrefix(zone);
   const count = Math.max(0, Number(zone?.count || 0));
-  if (count <= 1 && base) {
-    return { text: base, unit: '包间 / Sala' };
+  const label = buildTableButtonLabel(zone, index, simpleHallMode);
+  if (count <= 1 && label !== String(index)) {
+    return { text: label, unit: '包间 / Sala' };
   }
-  return { text: String(index), unit: '号桌 / Sto' };
+  return { text: label, unit: '号桌 / Sto' };
 };
 
 const tableZones = tableConfig.map((zone) => {
@@ -244,7 +221,7 @@ const tableZones = tableConfig.map((zone) => {
     return {
       display: display.text,
       unitLabel: display.unit,
-      value: buildTableValue(zone, n),
+      value: buildTableValue(zone, n, simpleHallMode),
     };
   });
   return {
@@ -272,7 +249,7 @@ const belgradeTimeOptions = {
   minute: '2-digit',
   hour12: false,
 };
-const belgradeTime = createBelgradeFormatter(belgradeTimeOptions);
+const belgradeTime = new Intl.DateTimeFormat('sr-RS', belgradeTimeOptions);
 
 const endedOrderStatusList = ['completed', 'cancelled', 'archived', 'paid'];
 const endedOrderStatus = new Set(endedOrderStatusList);
@@ -332,10 +309,11 @@ if (allTables.length > 0) {
 let ogImage = shop?.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(shop?.name || slug)}&background=f0f2f5&color=333&size=600&font-size=0.33&length=2&bold=true`;
 if (String(ogImage).startsWith('/')) ogImage = `${Astro.url.origin}${ogImage}`;
 
-const showClosedPage = isDineInExpired;
+const showClosedPage = false;
 const enableDelivery = Number(shop?.enable_delivery ?? 1) !== 0;
 const enableDineIn = Number(shop?.enable_dine_in ?? 1) !== 0;
-const enableReservation = Number(shop?.enable_reservation ?? 1) !== 0;
+const billingPlanType = String(shop?.billing_plan_type || 'subscription').toLowerCase();
+const enableReservation = (billingPlanType === 'subscription' || billingPlanType === 'business') && Number(shop?.enable_reservation ?? 1) !== 0;
 ---
 
 {showClosedPage ? (
@@ -376,10 +354,12 @@ const enableReservation = Number(shop?.enable_reservation ?? 1) !== 0;
             </div>
           </div>
           <div style="display:flex; gap:10px;">
-            <button onclick="openReservationModal()" style="background:linear-gradient(135deg, #26a69a 0%, #00897b 100%); border:none; border-radius:10px; padding:12px 20px; font-size:16px; cursor:pointer; color:white; box-shadow:0 4px 15px rgba(38,166,154,0.4); display:flex; align-items:center; gap:6px; font-weight:700;">
-              <span style="font-size:20px;">📅</span>
-              <span style="font-size:16px;">预订 / Rezervacija</span>
-            </button>
+            {enableReservation && (
+              <button onclick="openReservationModal()" style="background:linear-gradient(135deg, #26a69a 0%, #00897b 100%); border:none; border-radius:10px; padding:12px 20px; font-size:16px; cursor:pointer; color:white; box-shadow:0 4px 15px rgba(38,166,154,0.4); display:flex; align-items:center; gap:6px; font-weight:700;">
+                <span style="font-size:20px;">📅</span>
+                <span style="font-size:16px;">预订 / Rezervacija</span>
+              </button>
+            )}
             <button onclick="goToDeliveryMode()" style="background:linear-gradient(135deg, #ff9800 0%, #f57c00 100%); border:none; border-radius:10px; padding:12px 20px; font-size:16px; cursor:pointer; color:white; box-shadow:0 4px 15px rgba(255,152,0,0.4); display:flex; align-items:center; gap:6px; font-weight:700;">
               <span style="font-size:20px;">🛵</span>
               <span style="font-size:16px;">外卖</span>
@@ -451,14 +431,12 @@ const enableReservation = Number(shop?.enable_reservation ?? 1) !== 0;
           ))}
         </div>
 
-        <script type="module">
-          import { initTablePage } from '/src/scripts/shop/table-page';
-          initTablePage({
-            slug: ${JSON.stringify(String(slug || ''))},
-            endedStatusList: ${JSON.stringify(endedOrderStatusList || [])},
-            belgradeTimeOptions: ${JSON.stringify(belgradeTimeOptions || {})},
-          });
-        </script>
+        <TablePageEntryIsland
+          client:load
+          slug={String(slug || '')}
+          endedStatusList={endedOrderStatusList}
+          belgradeTimeOptions={belgradeTimeOptions}
+        />
 
         <div id="table-details-modal" class="table-details-modal" style="display:none;" onclick="if(event.target===this) window.closeTableDetailsModal()">
           <div class="table-details-card">
@@ -675,6 +653,7 @@ const enableReservation = Number(shop?.enable_reservation ?? 1) !== 0;
             footerPhone={footerPhone}
             footerCopyright={footerCopyright}
             footerText={footerText}
+            menuLayout={menuLayout}
             client:load={true}
           />
         </div>
@@ -687,6 +666,7 @@ const enableReservation = Number(shop?.enable_reservation ?? 1) !== 0;
           enableDelivery={enableDelivery}
           enableDineIn={enableDineIn}
           enableReservation={enableReservation}
+          deliveryLockReason={deliveryLockReason}
           isAdmin={isAdmin}
           tableConfig={tableConfig}
           client:load
@@ -695,7 +675,9 @@ const enableReservation = Number(shop?.enable_reservation ?? 1) !== 0;
       </>
     )}
 
-    <ReservationModal restaurantId={slug} client:load />
+    {enableReservation && <ReservationModal restaurantId={slug} requiresPreOrder={false} client:load />}
+    
+    <UserChat restaurantId={shopId} mqttBroker={mqttBroker} mqttUsername={mqttUsername} mqttPassword={mqttPassword} />
 
     <script src="/vendor/mqttws31.min.js" is:inline></script>
     <script define:vars={{ slug, shopId, mqttSecret, mqttBroker, mqttUsername, mqttPassword }} is:inline>
@@ -706,6 +688,21 @@ const enableReservation = Number(shop?.enable_reservation ?? 1) !== 0;
         let reloading = false;
         let stream = null;
         let streamRetryTimer = null;
+        let streamRetryStopped = false;
+
+        async function probeStreamAvailability() {
+          try {
+            const res = await fetch('/api/stream/' + encodeURIComponent(String(slug || '')), {
+              method: 'GET',
+              headers: { Accept: 'application/json' },
+            });
+            const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+            if (!shouldRetryStream(Number(res.status || 0), contentType)) {
+              return false;
+            }
+          } catch {}
+          return true;
+        }
 
         function parseBroker(raw) {
           const v = String(raw || '').trim();
@@ -762,6 +759,10 @@ const enableReservation = Number(shop?.enable_reservation ?? 1) !== 0;
         }
 
         function initStream() {
+          if (streamRetryStopped) {
+            return;
+          }
+
           try {
             if (stream) {
               stream.close();
@@ -776,11 +777,21 @@ const enableReservation = Number(shop?.enable_reservation ?? 1) !== 0;
               } catch {}
             });
 
-            stream.onerror = function () {
+            stream.onerror = async function () {
               try {
                 if (stream) stream.close();
               } catch {}
               stream = null;
+
+              if (streamRetryStopped) {
+                return;
+              }
+
+              const retryable = await probeStreamAvailability();
+              if (!retryable) {
+                streamRetryStopped = true;
+                return;
+              }
 
               if (streamRetryTimer) {
                 clearTimeout(streamRetryTimer);
@@ -845,7 +856,6 @@ const enableReservation = Number(shop?.enable_reservation ?? 1) !== 0;
         }
 
         setTimeout(initMqtt, 300);
-        setTimeout(initStream, 120);
       })();
     </script>
   </Layout>

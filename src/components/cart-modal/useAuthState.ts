@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
-import { saveUserInfo } from "../../lib/userStore";
 import { DEFAULT_USER_PASSWORD } from "../../lib/clientConfig";
+import { loginUser, persistGoogleUserAuth, persistUserAuth, registerUser } from "../../lib/user-auth";
+import { saveUserInfo } from "../../lib/userStore";
 
 export interface GoogleUser {
   id: string;
@@ -50,29 +51,14 @@ export function useAuthState({
     setLoginError("");
 
     try {
-      const res = await fetch("/api/user/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login_account: loginAccount, password }),
-      });
-      const data = await res.json();
+      const data = await loginUser({ loginAccount, password });
       if (data.success) {
-        saveUserInfo(
-          data.user.name,
-          data.user.phone || loginAccount,
-          password,
-          data.user.last_address,
-          {
-            email: data.user.email,
-            avatar: data.user.avatar,
-            login_account: loginAccount,
-          },
-        );
+        const auth = persistUserAuth(data, { loginAccount, password });
         onProfileUpdate({
-          name: data.user.name,
-          phone: data.user.phone,
-          address: data.user.last_address,
-          addresses: data.user.addresses || [],
+          name: auth.user.name,
+          phone: auth.user.phone,
+          address: auth.user.last_address,
+          addresses: auth.user.addresses || [],
         });
       } else {
         setLoginError(data.error || "登录失败");
@@ -93,26 +79,25 @@ export function useAuthState({
     setRegError("");
 
     try {
-      const res = await fetch("/api/user/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          account_type: regAccountType,
+      const data = await registerUser({
+        accountType: regAccountType,
+        account: regAccount,
+        password: regPassword,
+        name: regName,
+      });
+      if (data.success) {
+        const auth = persistUserAuth(data, {
+          accountType: regAccountType,
           account: regAccount,
           password: regPassword,
           name: regName,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        saveUserInfo(
-          regName,
-          regAccountType === "phone" ? regAccount : "",
-          regPassword,
-          "",
-          { login_account: regAccount },
-        );
-        onProfileUpdate({ name: regName });
+        });
+        onProfileUpdate({
+          name: auth.user.name,
+          phone: auth.user.phone,
+          address: auth.user.last_address,
+          addresses: auth.user.addresses || [],
+        });
       } else {
         setRegError(data.error || "注册失败");
       }
@@ -124,12 +109,8 @@ export function useAuthState({
   };
 
   const handleGoogleSuccess = (user: GoogleUser) => {
-    saveUserInfo(user.name, user.phone || "", DEFAULT_USER_PASSWORD, "", {
-      email: user.email,
-      avatar: user.avatar,
-      google_id: user.id,
-    });
-    onProfileUpdate({ name: user.name, phone: user.phone });
+    const auth = persistGoogleUserAuth(user);
+    onProfileUpdate({ name: auth.user.name, phone: auth.user.phone });
     onGoogleSuccess?.();
   };
 

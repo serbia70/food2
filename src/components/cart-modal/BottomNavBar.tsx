@@ -1,9 +1,11 @@
 import { useEffect, useState } from "preact/hooks";
+import { SHOP_EVENTS } from "../../lib/events";
 
 interface BottomNavBarProps {
   tableNumber: string;
   totalPrice: number;
   totalCount: number;
+  enableReservation?: boolean;
   onOpenCart: () => void;
 }
 
@@ -11,6 +13,7 @@ export default function BottomNavBar({
   tableNumber,
   totalPrice,
   totalCount,
+  enableReservation = false,
   onOpenCart,
 }: BottomNavBarProps) {
   const [hydrated, setHydrated] = useState(false);
@@ -24,11 +27,11 @@ export default function BottomNavBar({
   return (
     <div className="bottom-nav-bar">
       <div className="nav-left-group">
-        {!tableNumber && (
+        {!tableNumber && enableReservation && (
           <button
             type="button"
             className="nav-reserve-entry"
-            onClick={() => window.dispatchEvent(new Event("open-reservation"))}
+            onClick={() => window.dispatchEvent(new Event(SHOP_EVENTS.OPEN_RESERVATION))}
           >
             <span className="nav-reserve-main">📅 预订 / Rezervacija</span>
           </button>
@@ -38,7 +41,7 @@ export default function BottomNavBar({
       <div className="nav-right-group">
         <button
           className="nav-btn nav-user"
-          onClick={() => window.dispatchEvent(new Event("open-user-modal"))}
+          onClick={() => window.dispatchEvent(new Event(SHOP_EVENTS.OPEN_USER_MODAL))}
         >
           <svg
             width="22"

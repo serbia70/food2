@@ -1,11 +1,18 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL, MASTER_TOKEN } from '../../../config';
+import { resolveMasterAuth } from '../../../lib/master-auth';
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, cookies }) => {
   try {
-    const auth = request.headers.get('authorization') || `Bearer ${MASTER_TOKEN}`;
+    const auth = resolveMasterAuth(request, cookies, MASTER_TOKEN, { allowFallbackToken: false });
+    if (!auth) {
+      return new Response(JSON.stringify({ success: false, error: 'unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     const contentType = request.headers.get('content-type') || '';
     const body = await request.arrayBuffer();
 

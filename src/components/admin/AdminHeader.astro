@@ -37,7 +37,16 @@ const { shop, restaurantId } = Astro.props;
       <option value="voice">🗣️ 语音播报</option>
       <option value="beep">🔔 叮咚提示音</option>
     </select>
+    <span id="master-impersonated-badge" style="display:none;font-size:12px;padding:4px 8px;border-radius:999px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;">超级管理员代入模式</span>
     <a href={`/${restaurantId}`} target="_blank" class="btn-link">预览 ></a>
     <button data-admin-action="logout" class="btn-logout">退出</button>
   </div>
 </div>
+
+<script is:inline>
+  try {
+    const badge = document.getElementById('master-impersonated-badge');
+    const flag = localStorage.getItem('master_impersonated') === '1' || document.cookie.includes('admin_impersonated=1');
+    if (badge && flag) badge.style.display = 'inline-block';
+  } catch {}
+</script>

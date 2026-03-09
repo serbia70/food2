@@ -12,6 +12,7 @@ interface OrderProxyRequest {
   info?: string;
   total?: number;
   note?: string;
+  scheduled_for?: string;
   user?: {
     phone?: string;
   };
@@ -46,6 +47,7 @@ export const POST: APIRoute = async ({ request }) => {
       items,
       remarks: String(raw?.note || ''),
       user_phone: String(raw?.user?.phone || ''),
+      scheduled_for: !isDineIn && String(raw?.scheduled_for || '').trim() ? String(raw?.scheduled_for || '').trim() : '',
       dine_in_action: isDineIn ? dineInAction : '',
       merge: isDineIn && dineInAction === 'add',
       checkout_existing: isDineIn && dineInAction === 'new',

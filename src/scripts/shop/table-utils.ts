@@ -1,4 +1,4 @@
-export function buildTableLookupKeys(tableValue: unknown): string[] {
+export const buildTableLookupKeys = (tableValue: unknown): string[] => {
   const base = String(tableValue || '').trim();
   if (!base) return [] as string[];
   const keys = [base];
@@ -24,17 +24,16 @@ export function buildTableLookupKeys(tableValue: unknown): string[] {
   }
 
   return keys;
-}
+};
 
-export function escapeHtml(v: unknown): string {
-  return String(v || '')
+export const escapeHtml = (v: unknown): string =>
+  String(v || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
 
-export function createBelgradeFormatter(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  return new Intl.DateTimeFormat('sr-RS', options || {});
-}
+export const createBelgradeFormatter = (
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat => new Intl.DateTimeFormat('sr-RS', options);

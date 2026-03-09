@@ -1,7 +1,27 @@
-/* =========================================
-   global.css - 瀹岀編杩樺師7寮犳埅鍥綰I V4.0
-   2024.12.08
-========================================= */
+/* 响应式菜单网格 */
+.menu-grid-adaptive {
+  display: grid;
+  gap: 8px;
+}
+
+/* 两列模式：桌面端/大屏两列，手机端（<=640px）自动变为一列 */
+.layout-2col {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 640px) {
+  .layout-2col {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* 一列模式：始终一列 */
+.layout-1col {
+  grid-template-columns: 1fr !important;
+}
+
+/* ========================================= */
+
 
 html,
 body {

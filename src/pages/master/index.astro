@@ -55,6 +55,8 @@ let masterSettings: Record<string, any> = {};
 const hasMasterCookie = Boolean(Astro.cookies.get('master_token')?.value);
 const isUnauthorized = loadError === '加载失败 (401)';
 const activeTab = normalizeMasterTab(Astro.url.searchParams.get('tab'));
+const canLoadProtectedMasterActions = hasMasterCookie && !isUnauthorized;
+const shouldShowMasterContent = !loadError;
 
 try {
   const auth = resolveMasterAuth(Astro.request, Astro.cookies, MASTER_TOKEN, { allowFallbackToken: false });
@@ -236,7 +238,7 @@ const shopViewsData = JSON.stringify(shopViews);
         gap: 18px;
       }
     </style>
-    <script define:vars={{ shopViewsData }} is:inline>
+    <script define:vars={{ shopViewsData, canLoadProtectedMasterActions }} is:inline>
       async function handleCreateShop(form) {
         const feedback = document.getElementById('master-create-shop-feedback');
         const submitBtn = form?.querySelector('button[type="submit"]');
@@ -1362,7 +1364,15 @@ const shopViewsData = JSON.stringify(shopViews);
             el.addEventListener('change', () => syncBackupMode(el));
           }
         });
-        loadMasterCodeBackups();
+        if (canLoadProtectedMasterActions) {
+          loadMasterCodeBackups();
+        } else {
+          const backupList = document.getElementById('master-code-backup-list');
+          if (backupList instanceof HTMLElement) {
+            backupList.textContent = '请重新登录主控后再加载代码备份。';
+          }
+          setStatusFeedback('master-code-backup-feedback', '当前主控登录态无效，请重新登录。', 'error');
+        }
       });
     </script>
     <style is:inline>
@@ -1443,7 +1453,7 @@ const shopViewsData = JSON.stringify(shopViews);
         <a class:list={["tab-btn", activeTab === 'settings' && 'active']} href="/master?tab=settings">全局设置</a>
       </section>
 
-      <div class="master-stack" data-master-panel="management" hidden={activeTab !== 'management'}>
+      <div class="master-stack" data-master-panel="management" hidden={activeTab !== 'management' || !shouldShowMasterContent}>
         <MasterCreateShopCard />
         {shops.length > 0 ? (
           <MasterShopManagementTable shops={shopViews} />
@@ -1460,7 +1470,7 @@ const shopViewsData = JSON.stringify(shopViews);
         )}
       </div>
 
-      <div class="master-stack" data-master-panel="overview" hidden={activeTab !== 'overview'}>
+      <div class="master-stack" data-master-panel="overview" hidden={activeTab !== 'overview' || !shouldShowMasterContent}>
         <MasterOverview
           totalShops={totals.totalShops}
           todayRevenue={totals.todayRevenue}
@@ -1470,7 +1480,7 @@ const shopViewsData = JSON.stringify(shopViews);
         />
       </div>
 
-      <div class="settings-grid" data-master-panel="settings" hidden={activeTab !== 'settings'}>
+      <div class="settings-grid" data-master-panel="settings" hidden={activeTab !== 'settings' || !shouldShowMasterContent}>
         <MasterPricingSettingsCard settings={settingsView} />
         <MasterCategoriesSettingsCard settings={settingsView.categories} />
         <MasterServerSettingsCard settings={settingsView.server} />
@@ -1484,6 +1494,16 @@ const shopViewsData = JSON.stringify(shopViews);
         <MasterCodeBackupCard />
         <MasterSecurityCard />
       </div>
+
+      {!shouldShowMasterContent ? (
+        <div class="notice">
+          {loadError || '主控数据加载失败'}
+          <div class="notice-actions">
+            <a class="primary-btn" href="/master/login">去登录</a>
+            <button class="ghost-btn" type="button" onclick="logoutMaster()">清理状态后重新登录</button>
+          </div>
+        </div>
+      ) : null}
     </main>\n    <MasterShopEditPanel />
     <MasterShopTopupPanel />
   </body>

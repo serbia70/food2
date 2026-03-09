@@ -22,7 +22,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         path: '/',
         httpOnly: true,
         sameSite: 'lax',
-        secure: false,
+        secure: import.meta.env.PROD || new URL(request.url).protocol === 'https:',
         maxAge: 60 * 60 * 12,
       });
     }

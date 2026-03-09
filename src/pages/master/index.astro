@@ -239,6 +239,17 @@ const shopViewsData = JSON.stringify(shopViews);
       }
     </style>
     <script define:vars={{ shopViewsData, canLoadProtectedMasterActions }} is:inline>
+      function isUnauthorizedResponse(res, data) {
+        return res?.status === 401 || data?.error === 'unauthorized';
+      }
+
+      async function handleMasterUnauthorized() {
+        try {
+          await fetch('/api/master/logout', { method: 'POST' });
+        } catch {}
+        window.location.href = '/master/login';
+      }
+
       async function handleCreateShop(form) {
         const feedback = document.getElementById('master-create-shop-feedback');
         const submitBtn = form?.querySelector('button[type="submit"]');
@@ -261,6 +272,10 @@ const shopViewsData = JSON.stringify(shopViews);
             body: JSON.stringify(payload),
           });
           const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return;
+          }
           if (!res.ok || data?.success === false) {
             feedback.textContent = data?.error || '创建失败，请检查字段或后端能力';
             submitBtn.disabled = false;
@@ -305,6 +320,10 @@ const shopViewsData = JSON.stringify(shopViews);
             body: JSON.stringify(payload),
           });
           const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return;
+          }
           feedback.textContent = !res.ok || data?.success === false ? data?.error || '保存失败，请检查后端支持范围' : '套餐与提成设置已保存';
         } catch {
           feedback.textContent = '保存失败，请稍后重试';
@@ -334,6 +353,10 @@ const shopViewsData = JSON.stringify(shopViews);
             body: JSON.stringify(payload),
           });
           const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return;
+          }
           if (!res.ok || data?.success === false) {
             feedback.textContent = data?.error || config.errorText || '保存失败，请检查后端支持范围';
             submitBtn.disabled = false;
@@ -527,6 +550,10 @@ const shopViewsData = JSON.stringify(shopViews);
               body: formData,
             });
             const data = await res.json().catch(() => ({}));
+            if (isUnauthorizedResponse(res, data)) {
+              await handleMasterUnauthorized();
+              return;
+            }
             if (!res.ok || !data?.success || !data?.url) {
               alert(data?.error || '上传失败');
               return;
@@ -671,6 +698,10 @@ const shopViewsData = JSON.stringify(shopViews);
             body: JSON.stringify({ action: 'list' }),
           });
           const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return;
+          }
           if (!res.ok || data?.success === false) {
             setStatusFeedback('master-code-backup-feedback', data?.error || '代码备份列表加载失败', 'error');
             if (list instanceof HTMLElement) {
@@ -722,6 +753,10 @@ const shopViewsData = JSON.stringify(shopViews);
             body: JSON.stringify({ action: 'create', backupName }),
           });
           const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return false;
+          }
           if (!res.ok || data?.success === false) {
             setStatusFeedback('master-code-backup-feedback', data?.error || '代码备份创建失败', 'error');
             return false;
@@ -752,6 +787,10 @@ const shopViewsData = JSON.stringify(shopViews);
             body: JSON.stringify({ action: 'delete', backupName: name }),
           });
           const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return;
+          }
           if (!res.ok || data?.success === false) {
             setStatusFeedback('master-code-backup-feedback', data?.error || '代码备份删除失败', 'error');
             return;
@@ -777,6 +816,10 @@ const shopViewsData = JSON.stringify(shopViews);
             body: JSON.stringify({}),
           });
           const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return;
+          }
           if (!res.ok || data?.success === false) {
             setStatusFeedback('master-data-backup-feedback', data?.error || '数据备份触发失败', 'error');
             return;
@@ -815,6 +858,10 @@ const shopViewsData = JSON.stringify(shopViews);
             body: formData,
           });
           const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return;
+          }
           if (!res.ok || data?.success === false) {
             setStatusFeedback('master-restore-feedback', data?.error || '系统还原失败', 'error');
             return;
@@ -857,6 +904,10 @@ const shopViewsData = JSON.stringify(shopViews);
             body: JSON.stringify({ newPassword: password }),
           });
           const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return;
+          }
           if (!res.ok || data?.success === false) {
             feedback.textContent = data?.error || '保存失败，请检查后端支持范围';
             submitBtn.disabled = false;
@@ -972,6 +1023,10 @@ const shopViewsData = JSON.stringify(shopViews);
               body: JSON.stringify({ id: shopId }),
             });
             const data = await res.json();
+            if (isUnauthorizedResponse(res, data)) {
+              await handleMasterUnauthorized();
+              return;
+            }
             if (!res.ok || !data?.success || !data?.slug) {
               alert(data?.error || '进入店铺后台失败');
               return;
@@ -997,6 +1052,10 @@ const shopViewsData = JSON.stringify(shopViews);
               method: 'DELETE',
             });
             const data = await res.json().catch(() => ({}));
+            if (isUnauthorizedResponse(res, data)) {
+              await handleMasterUnauthorized();
+              return;
+            }
             if (!res.ok || data?.success === false) {
               alert(data?.error || '删除店铺失败');
               return;
@@ -1082,6 +1141,10 @@ const shopViewsData = JSON.stringify(shopViews);
             body: JSON.stringify(payload),
           });
           const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return;
+          }
           if (!res.ok || data?.success === false) {
             feedback.textContent = data?.error || '保存失败，请检查后端支持范围';
             submitBtn.disabled = false;
@@ -1126,6 +1189,10 @@ const shopViewsData = JSON.stringify(shopViews);
             body: JSON.stringify(payload),
           });
           const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return;
+          }
           if (!res.ok || data?.success === false) {
             feedback.textContent = data?.error || '充值失败，请检查后端支持范围';
             submitBtn.disabled = false;
@@ -1156,6 +1223,7 @@ const shopViewsData = JSON.stringify(shopViews);
         } catch {}
         window.location.href = '/master/login';
       }
+      window.logoutMaster = logoutMaster;
 
       async function loadShopDetail(shopId) {
         const panel = document.getElementById('master-shop-detail-panel');
@@ -1353,6 +1421,13 @@ const shopViewsData = JSON.stringify(shopViews);
       });
 
       document.addEventListener('DOMContentLoaded', () => {
+        if (!canLoadProtectedMasterActions) {
+          document.querySelectorAll('form button[type="submit"]').forEach((el) => {
+            if (el instanceof HTMLButtonElement) {
+              el.disabled = true;
+            }
+          });
+        }
         applyMasterTableFilters();
         document.querySelectorAll('[data-master-filter-search], [data-master-filter-status], [data-master-filter-billing], [data-master-sort]').forEach((el) => {
           el.addEventListener('input', applyMasterTableFilters);

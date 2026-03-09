@@ -33,8 +33,12 @@ export function showTab(tabName: string) {
 
 export function logout() {
   if (confirm('确认退出登录吗？')) {
-    document.cookie = 'admin_token=; Max-Age=0; path=/';
-    location.reload();
+    fetch('/api/admin/logout', { method: 'POST' })
+      .catch(() => {})
+      .finally(() => {
+        document.cookie = 'admin_token=; Max-Age=0; path=/';
+        location.href = location.pathname.replace(/\/?$/, '/login');
+      });
   }
 }
 

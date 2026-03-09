@@ -16,10 +16,20 @@ export async function loadStats() {
       data = await res.json();
     } catch (err) {
       console.error('Failed to parse stats response', err);
+      if (res.status === 401 || res.status === 403) {
+        alert('登录已失效，请重新登录 / Sesija je istekla, prijavite se ponovo');
+        window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+        return;
+      }
       alert('查询失败 / Neuspešan upit：响应解析失败');
       return;
     }
     if (!res.ok || data?.success === false) {
+      if (res.status === 401 || res.status === 403) {
+        alert('登录已失效，请重新登录 / Sesija je istekla, prijavite se ponovo');
+        window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+        return;
+      }
       const message = data?.message ? `：${String(data.message)}` : '';
       alert(`查询失败 / Neuspešan upit${message}`);
       return;

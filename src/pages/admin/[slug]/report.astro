@@ -1,6 +1,0 @@
----
-export const prerender = false;
-const { slug } = Astro.params;
-if (!slug) return new Response('Not Found', { status: 404 });
-return Astro.redirect(`/admin/${encodeURIComponent(slug)}`, 302);
----

@@ -1,8 +1,0 @@
----
-import AdminLoginForm from '../../components/admin/AdminLoginForm.astro';
-
-const title = '商家登录';
-const shopId = Astro.url.searchParams.get('shopId') || '';
----
-
-<AdminLoginForm title={title} subtitle="商家后台管理系统" slug={shopId} />

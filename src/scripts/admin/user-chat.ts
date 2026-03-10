@@ -6,6 +6,7 @@ import { makeAdminChatMessageKey } from '../../lib/admin-chat-message-key';
 import { buildConversationList } from '../../lib/admin-chat-conversations';
 import { buildConversationItemTone } from '../../lib/admin-chat-highlight';
 import { buildCustomerSummary } from '../../lib/admin-chat-customer-summary';
+import { buildOrderItemsPreview } from '../../lib/order-items-preview';
 
 let adminChatOpen = false;
 let currentChatUserPhone = '';
@@ -144,6 +145,15 @@ function setContainerMessage(container: HTMLElement | null, text: string, color 
   container.replaceChildren(div);
 }
 
+function escapeHtml(raw: string) {
+  return String(raw || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function createAdminChatMessageNode(message: any) {
   const role = String(message?.sender_role || '');
   const isShopSide = role === 'admin' || role === 'shop';
@@ -202,7 +212,7 @@ function clearUnread(phone?: string) {
 function renderUserPickerLoading() {
   const listEl = document.getElementById('admin-chat-conversations');
   if (!listEl) return;
-  setContainerMessage(listEl, '正在加载会话...');
+  setContainerMessage(listEl, '正在加载会话... / Ucitavanje razgovora...');
 }
 
 function renderUserPicker(phones: string[]) {
@@ -212,8 +222,8 @@ function renderUserPicker(phones: string[]) {
 
   const unique = Array.from(new Set(phones.map((p) => String(p || '').trim()).filter(Boolean)));
   if (unique.length === 0) {
-    setContainerMessage(listEl, '暂无会话记录');
-    setContainerMessage(messagesEl, '请选择一个用户开始聊天');
+    setContainerMessage(listEl, '暂无会话记录 / Nema razgovora');
+    setContainerMessage(messagesEl, '请选择一个用户开始聊天 / Izaberite korisnika');
     return;
   }
 
@@ -223,7 +233,7 @@ function renderUserPicker(phones: string[]) {
   wrap.style.padding = '6px';
   const tip = document.createElement('div');
   setStyles(tip, { fontSize: '12px', color: '#64748b', marginBottom: '10px' });
-  tip.textContent = '最近聊天';
+  tip.textContent = '最近聊天 / Skorasnji chat';
   wrap.appendChild(tip);
 
   conversations.slice(0, 30).forEach((item) => {
@@ -252,7 +262,7 @@ function renderUserPicker(phones: string[]) {
     phoneText.textContent = p;
     const preview = document.createElement('span');
     setStyles(preview, { fontSize: '11px', color: '#64748b', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
-    preview.textContent = item.preview || '点击查看会话';
+    preview.textContent = item.preview || '点击查看会话 / Otvori chat';
     left.append(phoneText, preview);
     const badge = document.createElement('span');
     setStyles(badge, {
@@ -280,7 +290,7 @@ function renderUserPicker(phones: string[]) {
   });
   listEl.replaceChildren(wrap);
   if (!currentChatUserPhone) {
-    setContainerMessage(messagesEl, '请选择一个用户开始聊天');
+    setContainerMessage(messagesEl, '请选择一个用户开始聊天 / Izaberite korisnika');
   }
 }
 
@@ -309,24 +319,35 @@ async function loadCustomerSummary(phone: string) {
     currentCustomerOrders = Array.isArray(ordersData) ? ordersData : Array.isArray(ordersData?.orders) ? ordersData.orders : [];
     currentCustomerReservations = Array.isArray(reservationsData?.reservations) ? reservationsData.reservations : Array.isArray(reservationsData) ? reservationsData : [];
 
-    const summary = buildCustomerSummary(phone, currentCustomerOrders, currentCustomerReservations);
-    currentCustomerSummary = summary;
-    summaryEl.innerHTML = `
-      <div style="font-size:12px;color:#64748b;font-weight:800;">客户最近记录</div>
-      <div style="display:grid;gap:8px;">
+		const summary = buildCustomerSummary(phone, currentCustomerOrders, currentCustomerReservations);
+		currentCustomerSummary = summary;
+
+		const latestItems = summary.latestOrder ? buildOrderItemsPreview(summary.latestOrder, { maxItems: 3 }) : { zh: '', sr: '', totalItems: 0 };
+		const latestItemsRow = (latestItems.zh || latestItems.sr)
+			? `
+				<div style="margin-top:6px;display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#475569;">
+					<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(`Jela: ${latestItems.sr || latestItems.zh}`)}</span>
+					<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;">${escapeHtml(`菜品: ${latestItems.zh || latestItems.sr}`)}</span>
+				</div>
+			`
+			: '';
+		summaryEl.innerHTML = `
+		  <div style="font-size:12px;color:#64748b;font-weight:800;">客户最近记录 / Istorija kupca</div>
+		  <div style="display:grid;gap:8px;">
+			<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;">
+			  <div style="font-size:12px;color:#64748b;margin-bottom:6px;">最近外卖 / Poslednja porudzbina</div>
+			  <div style="font-weight:700;color:#0f172a;">${summary.latestOrder ? `#${summary.latestOrder.order_no}` : '暂无外卖订单 / Nema porudzbine'}</div>
+			  ${summary.latestOrder ? `
+				${latestItemsRow}
+				<div style="margin-top:6px;font-size:12px;color:#475569;">金额 / Iznos: ${Number(summary.latestOrder.total_amount || 0).toLocaleString()} RSD</div>
+				<div style="margin-top:4px;font-size:12px;color:#64748b;line-height:1.6;">地址 / Adresa: ${String(summary.latestOrder.table_info || '').replace(/\s*\[货到付款\/Cash\].*$/u, '').replace(/\s*\(备注:.*$/u, '').trim()}</div>
+				<button id="admin-chat-recent-orders-toggle" type="button" style="margin-top:8px;padding:6px 10px;border:none;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">查看最近10单</button>
+				<div id="admin-chat-recent-orders-list" style="display:none;margin-top:10px;display:grid;gap:8px;"></div>
+			  ` : ''}
+			</div>
         <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;">
-          <div style="font-size:12px;color:#64748b;margin-bottom:6px;">最近外卖</div>
-          <div style="font-weight:700;color:#0f172a;">${summary.latestOrder ? `#${summary.latestOrder.order_no}` : '暂无外卖订单'}</div>
-          ${summary.latestOrder ? `
-            <div style="margin-top:6px;font-size:12px;color:#475569;">金额：${Number(summary.latestOrder.total_amount || 0).toLocaleString()} RSD</div>
-            <div style="margin-top:4px;font-size:12px;color:#64748b;line-height:1.6;">地址：${String(summary.latestOrder.table_info || '').replace(/\s*\[货到付款\/Cash\].*$/u, '').replace(/\s*\(备注:.*$/u, '').trim()}</div>
-            <button id="admin-chat-recent-orders-toggle" type="button" style="margin-top:8px;padding:6px 10px;border:none;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">查看最近10单</button>
-            <div id="admin-chat-recent-orders-list" style="display:none;margin-top:10px;display:grid;gap:8px;"></div>
-          ` : ''}
-        </div>
-        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;">
-          <div style="font-size:12px;color:#64748b;margin-bottom:6px;">最近预约</div>
-          <div style="font-weight:700;color:#0f172a;">${currentShopReservationEnabled ? (summary.latestReservation ? String(summary.latestReservation.reservation_time || '有预约') : '暂无预约记录') : '当前店铺未开启预约'}</div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:6px;">最近预约 / Poslednja rezervacija</div>
+           <div style="font-weight:700;color:#0f172a;">${currentShopReservationEnabled ? (summary.latestReservation ? String(summary.latestReservation.reservation_time || '有预约') : '暂无预约记录 / Nema rezervacije') : '当前店铺未开启预约 / Rezervacije nisu ukljucene'}</div>
         </div>
       </div>
     `;
@@ -351,7 +372,7 @@ async function loadCustomerSummary(phone: string) {
       toggleBtn.addEventListener('click', () => {
         recentOrdersExpanded = !recentOrdersExpanded;
         listEl.style.display = recentOrdersExpanded ? 'grid' : 'none';
-        toggleBtn.textContent = recentOrdersExpanded ? '收起最近10单' : '查看最近10单';
+        toggleBtn.textContent = recentOrdersExpanded ? '收起最近10单 / Sklopi' : '查看最近10单 / Prikazi 10';
         if (recentOrdersExpanded) renderRecentOrders();
       });
     }
@@ -669,7 +690,7 @@ export function initAdminChatUI() {
     cursor: 'pointer',
     fontSize: '12px',
   });
-  switchBtn.textContent = '会话';
+  switchBtn.textContent = '最近聊天';
   switchBtn.addEventListener('click', () => {
     const el = document.getElementById('admin-chat-panel') as HTMLElement | null;
     if (!el) return;
@@ -726,13 +747,13 @@ export function initAdminChatUI() {
   const input = document.createElement('input');
   input.type = 'text';
   input.id = 'admin-chat-input';
-  input.placeholder = '输入消息...';
+  input.placeholder = '输入消息... / Poruka...';
   setStyles(input, { flex: '1', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' });
   const send = document.createElement('button');
   send.id = 'admin-chat-send';
   send.type = 'button';
   setStyles(send, { padding: '8px 16px', background: '#0891b2', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' });
-  send.textContent = '发送';
+  send.textContent = '发送 / Posalji';
   footer.append(input, send);
   chatSide.append(summary, messages, footer);
   body.append(conversations, chatSide);

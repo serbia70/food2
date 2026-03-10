@@ -3,6 +3,7 @@ import { SHOP_EVENTS } from '../lib/events';
 import { getUserInfo } from '../lib/userStore';
 import { buildCustomerConversationList } from '../lib/customer-chat-conversations';
 import { buildOrderDetailState } from '../lib/order-detail-state';
+import { buildOrderItemsPreview } from '../lib/order-items-preview';
 import { buildShopChatContext } from '../lib/shop-chat-state';
 import { normalizeUserChatMessages } from '../lib/user-chat-panel-state';
 import { ensureUserChatRealtime } from '../lib/user-chat-realtime';
@@ -33,6 +34,9 @@ export default function ShopChatModal() {
 
   const customerConversations = buildCustomerConversationList(allChatMessages as any[], shopMap as any);
   const selectedOrderDetail = selectedOrder ? buildOrderDetailState(selectedOrder) : null;
+  const selectedOrderItems = selectedOrder ? buildOrderItemsPreview(selectedOrder, { maxItems: 3 }) : null;
+
+  const t = (zh: string, sr: string) => `${zh} / ${sr}`;
 
   const loadShopMap = async () => {
     try {
@@ -122,9 +126,9 @@ export default function ShopChatModal() {
   const renderConversationList = (opts?: { onPick?: () => void }) => {
     return (
       <>
-        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800 }}>最近联系商家</div>
+        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800 }}>{t('最近联系商家', 'Skorasnje prodavnice')}</div>
         {customerConversations.length === 0 ? (
-          <div style={{ color: '#94a3b8', fontSize: '13px', lineHeight: 1.7 }}>暂无会话记录</div>
+          <div style={{ color: '#94a3b8', fontSize: '13px', lineHeight: 1.7 }}>{t('暂无会话记录', 'Nema razgovora')}</div>
         ) : (
           customerConversations.map((shop) => (
             <button
@@ -153,7 +157,7 @@ export default function ShopChatModal() {
               }}
             >
               <div style={{ fontWeight: 700, color: '#0f172a' }}>{shop.shopName}</div>
-              <div style={{ fontSize: '11px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shop.preview || '点击查看会话'}</div>
+              <div style={{ fontSize: '11px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shop.preview || t('点击查看会话', 'Otvori chat')}</div>
             </button>
           ))
         )}
@@ -168,20 +172,20 @@ export default function ShopChatModal() {
       <div class="shop-chat-modal" data-mobile-pane={mobilePane} style={{ width: 'min(860px, 100%)', height: 'min(720px, 96vh)', background: '#fff', borderRadius: '20px', boxShadow: '0 24px 48px rgba(15,23,42,.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ background: 'linear-gradient(145deg, #22c55e, #059669)', color: '#fff', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: '11px', opacity: .86, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em' }}>联系商家</div>
+            <div style={{ fontSize: '11px', opacity: .86, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em' }}>{t('联系商家', 'Kontakt')}</div>
             <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '4px' }}>{chatContext.shopName}</div>
-            <div style={{ fontSize: '12px', opacity: .9, marginTop: '4px' }}>{chatContext.shopSlug ? `/${chatContext.shopSlug}` : '当前商家会话'}</div>
+            <div style={{ fontSize: '12px', opacity: .9, marginTop: '4px' }}>{chatContext.shopSlug ? `/${chatContext.shopSlug}` : t('当前商家会话', 'Trenutni chat')}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button type="button" class="shop-chat-mobile-switch" onClick={() => setMobilePane('list')} style={{ padding: '8px 10px', borderRadius: '999px', border: 'none', background: 'rgba(255,255,255,.18)', color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>会话</button>
+            <button type="button" class="shop-chat-mobile-switch" onClick={() => setMobilePane('list')} style={{ padding: '8px 10px', borderRadius: '999px', border: 'none', background: 'rgba(255,255,255,.18)', color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>{t('最近聊天', 'Chat')}</button>
             <button onClick={() => setIsOpen(false)} style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,.18)', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>×</button>
           </div>
         </div>
 
         <div class="shop-chat-mobile-overlay" aria-hidden={mobilePane !== 'list'}>
           <div class="shop-chat-mobile-overlay-header">
-            <div style={{ fontWeight: 900, color: '#0f172a' }}>最近联系商家</div>
-            <button type="button" onClick={() => setMobilePane('chat')} style={{ padding: '8px 10px', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff', fontWeight: 900, cursor: 'pointer', color: '#0f172a' }}>返回</button>
+            <div style={{ fontWeight: 900, color: '#0f172a' }}>{t('最近聊天', 'Skorasnji chat')}</div>
+            <button type="button" onClick={() => setMobilePane('chat')} style={{ padding: '8px 10px', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff', fontWeight: 900, cursor: 'pointer', color: '#0f172a' }}>{t('返回', 'Nazad')}</button>
           </div>
           <div class="shop-chat-mobile-overlay-body">
             {renderConversationList({ onPick: () => setMobilePane('chat') })}
@@ -205,21 +209,24 @@ export default function ShopChatModal() {
               </div>
 
               <div style={{ background: '#fffaf7', border: '1px solid #ffedd5', borderRadius: '14px', padding: '14px', display: 'grid', gap: '10px' }}>
-                <div style={{ fontSize: '12px', color: '#9a3412', fontWeight: 900 }}>订单协助信息</div>
+                <div style={{ fontSize: '12px', color: '#9a3412', fontWeight: 900 }}>{t('订单协助信息', 'Pomoc za porudzbinu')}</div>
                 {selectedOrder ? (() => {
                   const detail = buildOrderDetailState(selectedOrder);
                   return (
                     <>
                       <div style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>#{detail.orderNo}</div>
+                      {selectedOrderItems && (selectedOrderItems.zh || selectedOrderItems.sr) ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', fontSize: '12px', color: '#475569' }}>
+                          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Jela: ${selectedOrderItems.sr || selectedOrderItems.zh}`}</span>
+                          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right' }}>{`菜品: ${selectedOrderItems.zh || selectedOrderItems.sr}`}</span>
+                        </div>
+                      ) : null}
                       <div style={{ fontSize: '13px', color: '#475569' }}>{detail.statusLabel} · {detail.amount}</div>
                       <div style={{ fontSize: '12px', color: '#64748b' }}>{detail.createdAt}</div>
-                      <div style={{ display: 'grid', gap: '6px', fontSize: '13px', color: '#334155' }}>
-                        {detail.items.slice(0, 3).map((item, idx) => <div key={idx}>• {item}</div>)}
-                      </div>
                       {detail.address ? <div style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.6 }}>📍 {detail.address}</div> : null}
                     </>
                   );
-                })() : <div style={{ color: '#9a3412', fontSize: '13px', lineHeight: 1.7 }}>当前会话暂无绑定订单。</div>}
+                })() : <div style={{ color: '#9a3412', fontSize: '13px', lineHeight: 1.7 }}>{t('当前会话暂无绑定订单。', 'Nema vezane porudzbine.')}</div>}
               </div>
             </div>
 
@@ -279,10 +286,10 @@ export default function ShopChatModal() {
                     loadChatMessages();
                   }
                 } catch {}
-              }} disabled={!chatContext.userPhone || !chatContext.shopId} style={{ padding: '12px 16px', borderRadius: '12px', border: 'none', background: '#ff4b33', color: '#fff', fontWeight: 800, cursor: !chatContext.userPhone || !chatContext.shopId ? 'not-allowed' : 'pointer', opacity: !chatContext.userPhone || !chatContext.shopId ? 0.55 : 1, boxShadow: '0 10px 18px rgba(255,75,51,.22)' }}>发送</button>
+              }} disabled={!chatContext.userPhone || !chatContext.shopId} style={{ padding: '12px 16px', borderRadius: '12px', border: 'none', background: '#ff4b33', color: '#fff', fontWeight: 800, cursor: !chatContext.userPhone || !chatContext.shopId ? 'not-allowed' : 'pointer', opacity: !chatContext.userPhone || !chatContext.shopId ? 0.55 : 1, boxShadow: '0 10px 18px rgba(255,75,51,.22)' }}>{t('发送', 'Posalji')}</button>
             </div>
 
-            <button onClick={() => setIsOpen(false)} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#475569', fontWeight: 700, cursor: 'pointer' }}>关闭</button>
+            <button onClick={() => setIsOpen(false)} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#475569', fontWeight: 700, cursor: 'pointer' }}>{t('关闭', 'Zatvori')}</button>
           </div>
         </div>
 

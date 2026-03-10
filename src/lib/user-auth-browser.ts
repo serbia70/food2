@@ -1,36 +1,55 @@
+export type BrowserAuthResult = {
+  success?: boolean;
+  sessionToken?: string;
+  user?: Record<string, any>;
+};
+
+export type BrowserPersistFallback = {
+  loginAccount?: string;
+  password: string;
+  account?: string;
+  accountType?: 'phone' | 'email' | 'id';
+  name?: string;
+};
+
+export type BrowserGoogleUser = {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string;
+  phone?: string;
+};
+
+type StorageLike = {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem?: (key: string) => void;
+};
+
 declare global {
   interface Window {
     __userAuthBrowser?: {
       loginUser: (payload: { loginAccount: string; password: string }) => Promise<any>;
       registerUser: (payload: { accountType: 'phone' | 'email' | 'id'; account: string; password: string; name: string }) => Promise<any>;
-      persistUserAuth: (result: any, fallback: {
-        loginAccount?: string;
-        password: string;
-        account?: string;
-        accountType?: 'phone' | 'email' | 'id';
-        name?: string;
-      }) => { user: any; sessionToken: string };
-      persistGoogleUserAuth: (user: {
-        id: string;
-        name: string;
-        email: string;
-        avatar: string;
-        phone?: string;
-      }) => { user: any; sessionToken: string };
+      persistUserAuth: (result: BrowserAuthResult, fallback: BrowserPersistFallback) => { user: any; sessionToken: string };
+      persistGoogleUserAuth: (user: BrowserGoogleUser) => { user: any; sessionToken: string };
     };
   }
 }
 
-function readStoredUser() {
+function readStoredUser(storage: StorageLike) {
   try {
-    return JSON.parse(localStorage.getItem('food_order_user') || '{}');
+    const raw = storage.getItem('food_order_user') || storage.getItem('user_info') || '{}';
+    return JSON.parse(raw);
   } catch {
     return {};
   }
 }
 
-function saveStoredUser(nextUser: Record<string, unknown>) {
-  localStorage.setItem('food_order_user', JSON.stringify(nextUser));
+function saveStoredUser(storage: StorageLike, nextUser: Record<string, unknown>) {
+  const serialized = JSON.stringify(nextUser);
+  storage.setItem('food_order_user', serialized);
+  storage.setItem('user_info', serialized);
 }
 
 async function postJSON(url: string, body: Record<string, unknown>) {
@@ -58,15 +77,13 @@ async function registerUser(payload: { accountType: 'phone' | 'email' | 'id'; ac
   });
 }
 
-function persistUserAuth(result: any, fallback: {
-  loginAccount?: string;
-  password: string;
-  account?: string;
-  accountType?: 'phone' | 'email' | 'id';
-  name?: string;
-}) {
+export function persistUserAuthWithStorage(
+  storage: StorageLike,
+  result: BrowserAuthResult,
+  fallback: BrowserPersistFallback,
+) {
   const user = result?.user || {};
-  const current = readStoredUser();
+  const current = readStoredUser(storage);
   const resolvedLoginAccount = String(user.login_account || fallback.loginAccount || fallback.account || '').trim();
   const resolvedPhone = String(user.phone || (fallback.accountType === 'phone' ? fallback.account : '') || fallback.loginAccount || '').trim();
   const resolvedName = String(user.name || fallback.name || current.name || '').trim();
@@ -83,24 +100,18 @@ function persistUserAuth(result: any, fallback: {
     avatar: user.avatar || current.avatar,
   };
 
-  saveStoredUser(nextUser);
+  saveStoredUser(storage, nextUser);
 
   const sessionToken = String(result?.sessionToken || resolvedLoginAccount || resolvedPhone).trim();
   if (sessionToken) {
-    localStorage.setItem('user_session', sessionToken);
+    storage.setItem('user_session', sessionToken);
   }
 
   return { user: nextUser, sessionToken };
 }
 
-function persistGoogleUserAuth(user: {
-  id: string;
-  name: string;
-  email: string;
-  avatar: string;
-  phone?: string;
-}) {
-  const current = readStoredUser();
+export function persistGoogleUserAuthWithStorage(storage: StorageLike, user: BrowserGoogleUser) {
+  const current = readStoredUser(storage);
   const nextUser = {
     ...current,
     name: user.name || current.name || '',
@@ -110,14 +121,22 @@ function persistGoogleUserAuth(user: {
     google_id: user.id,
   };
 
-  saveStoredUser(nextUser);
+  saveStoredUser(storage, nextUser);
 
   const sessionToken = String(user.email || user.phone || user.id || '').trim();
   if (sessionToken) {
-    localStorage.setItem('user_session', sessionToken);
+    storage.setItem('user_session', sessionToken);
   }
 
   return { user: nextUser, sessionToken };
+}
+
+export function persistUserAuth(result: BrowserAuthResult, fallback: BrowserPersistFallback) {
+  return persistUserAuthWithStorage(localStorage, result, fallback);
+}
+
+export function persistGoogleUserAuth(user: BrowserGoogleUser) {
+  return persistGoogleUserAuthWithStorage(localStorage, user);
 }
 
 if (typeof window !== 'undefined') {

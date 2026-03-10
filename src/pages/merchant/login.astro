@@ -9,11 +9,10 @@ const apiBase = API_BASE_URL;
   <div class="wrap">
     <div class="card">
       <h2>商家登录</h2>
-      <p>使用店铺 `slug` 和密码登录后台。</p>
+      <p>使用店铺 `slug` 和密码登录后台。商家账号由主控台创建后使用，不提供前台自助注册。</p>
       <input id="slug" placeholder="店铺 slug，例如 s1234" />
       <input id="pwd" type="password" placeholder="密码" />
       <button id="submit">登录后台</button>
-      <a href="/merchant/register" class="link">没有店铺？先申请入驻</a>
     </div>
   </div>
 
@@ -24,7 +23,6 @@ const apiBase = API_BASE_URL;
     p { margin: 0 0 14px; color: #666; font-size: 14px; }
     input { width: 100%; box-sizing: border-box; margin-bottom: 10px; padding: 11px; border: 1px solid #d1d5db; border-radius: 8px; }
     button { width: 100%; border: none; background: #00b140; color: #fff; padding: 11px; border-radius: 8px; font-weight: 700; cursor: pointer; }
-    .link { display: inline-block; margin-top: 10px; color: #0f62fe; text-decoration: none; font-size: 14px; }
   </style>
 
   <script is:inline define:vars={{ apiBase }}>

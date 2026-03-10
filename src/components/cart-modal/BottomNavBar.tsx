@@ -61,6 +61,16 @@ export default function BottomNavBar({
           <span className="price-unit">RSD</span>
         </div>
 
+        <button
+          className="nav-btn nav-cart"
+          onClick={() => window.dispatchEvent(new Event(SHOP_EVENTS.OPEN_SHOP_CHAT_MODAL))}
+          style={{ background: 'linear-gradient(135deg, #22c55e, #059669)' }}
+          aria-label="联系商家"
+          title="联系商家"
+        >
+          <span style={{ fontSize: '20px', lineHeight: 1 }}>💬</span>
+        </button>
+
         <button className="nav-btn nav-cart" onClick={onOpenCart}>
           <svg
             width="22"

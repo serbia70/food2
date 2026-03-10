@@ -4,15 +4,23 @@ import Layout from '../../layouts/Layout.astro';
 
 <Layout title="商家入驻">
   <div class="wrap">
-    <h2>商家入驻</h2>
-    <p>当前先使用商家登录页，由主控台创建商家账号后登录。</p>
-    <a href="/merchant/login" class="btn">前往商家登录</a>
+    <div class="card">
+      <h2>暂不开放在线商家注册</h2>
+      <p>当前商家账号统一由主控台创建后分配，不支持在前台页面自行注册。</p>
+      <div class="actions">
+        <a href="/merchant/login" class="btn">前往商家登录</a>
+        <a href="/" class="btn secondary">返回首页</a>
+      </div>
+    </div>
   </div>
 
   <style>
-    .wrap { min-height: 100vh; background: #f5f5f5; padding: 24px; }
+    .wrap { min-height: 100vh; background: #f5f5f5; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .card { width: 100%; max-width: 520px; background: #fff; border-radius: 14px; padding: 24px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); }
     h2 { margin: 0 0 10px; }
-    p { color: #666; margin: 0 0 14px; }
+    p { color: #666; margin: 0 0 18px; line-height: 1.7; }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; }
     .btn { display: inline-block; text-decoration: none; background: #00b140; color: #fff; padding: 10px 14px; border-radius: 8px; }
+    .btn.secondary { background: #eef2f7; color: #334155; }
   </style>
 </Layout>

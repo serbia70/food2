@@ -6,7 +6,6 @@ import {
   addToCart,
   clearCart,
 } from "../store/cartStore";
-import GoogleLoginButton from "./GoogleLoginButton";
 import {
   getUserInfo,
   clearUser as clearUserInfo,
@@ -14,6 +13,14 @@ import {
 import { SHOP_EVENTS } from "../lib/events";
 import { loginUser, persistUserAuth, registerUser } from "../lib/user-auth";
 import type { Order, User, CartItem } from "../types";
+import { buildUserOrderView, filterUserVisibleOrders, type UserOrderShopMap } from "../lib/user-order-view";
+import { resolveCurrentShopContext } from "../lib/current-shop-context";
+import { buildCurrentShopEmptyStateMessage, buildCurrentShopMembershipSummary, filterOrdersForCurrentShop, splitOrdersByCurrentShop } from "../lib/shop-scoped-orders";
+import { applyLocalNicknameUpdate, buildPhoneUpdatePayload } from "../lib/user-profile-update";
+import { mapUserUpdateErrorMessage } from "../lib/user-update-error";
+import { buildPhoneConflictGuide } from "../lib/user-update-guide";
+import { validateUserLoginInput } from "../lib/user-login-validation";
+import UserCenterPanel from "./UserCenterPanel";
 // import "../styles/user-modal.css"; 
 
 /**
@@ -25,10 +32,17 @@ export default function UserModal() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [history, setHistory] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
+  const [shopMap, setShopMap] = useState<UserOrderShopMap>({});
+  const [currentShopName, setCurrentShopName] = useState("当前店铺");
+  const [currentShopSlug, setCurrentShopSlug] = useState("");
+  const [currentShopId, setCurrentShopId] = useState("");
+  const [addressSummary, setAddressSummary] = useState("暂无地址，去地址管理补充");
+  const [phoneConflictGuide, setPhoneConflictGuide] = useState<null | { title: string; description: string; actionLabel: string }>(null);
   const [historyPage, setHistoryPage] = useState(1);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [orderQty, setOrderQty] = useState<Record<number, number>>({}); // 每个订单的加购数量
+  const [openChatSignal, setOpenChatSignal] = useState(0);
 
   const [loginAccount, setLoginAccount] = useState("");
   const [password, setPassword] = useState("");
@@ -67,10 +81,93 @@ export default function UserModal() {
   }, [isOpen]);
 
   useEffect(() => {
+    let active = true;
+
+    const loadShopMap = async () => {
+      const fallbackSlug = String(window.location.pathname || '').replace(/^\//, '').split('/')[0] || '';
+
+      try {
+        const res = await fetch('/api/shop/list');
+        if (!res.ok) throw new Error('shop list failed');
+        const data = await res.json();
+        const shops = Array.isArray(data?.shops) ? data.shops : [];
+        const nextMap: UserOrderShopMap = {};
+
+        shops.forEach((shop: any) => {
+          const id = String(shop?.id || '').trim();
+          if (!id) return;
+          nextMap[id] = {
+            id,
+            name: String(shop?.name || '').trim(),
+            slug: String(shop?.slug || '').trim(),
+          };
+        });
+
+        if (active) {
+          setShopMap(nextMap);
+          const shopContext = resolveCurrentShopContext(window.location.pathname, nextMap);
+          setCurrentShopSlug(shopContext.slug || fallbackSlug);
+          setCurrentShopName(shopContext.name || (fallbackSlug ? `${fallbackSlug}号店` : '当前店铺'));
+          setCurrentShopId(shopContext.id || '');
+        }
+      } catch {
+        if (active) {
+          setShopMap({});
+          setCurrentShopSlug(fallbackSlug);
+          setCurrentShopName(fallbackSlug ? `${fallbackSlug}号店` : '当前店铺');
+          setCurrentShopId('');
+        }
+      }
+    };
+
+    loadShopMap();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const loadAddressSummary = async () => {
+      const sessionToken = localStorage.getItem('user_session');
+      if (!sessionToken) return;
+
+      try {
+        const res = await fetch('/api/user/address', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'get', sessionToken }),
+        });
+        const data = await res.json();
+        if (!data.success || !data.address) return;
+
+        let addrObj: any = {};
+        try {
+          addrObj = JSON.parse(data.address);
+          if (typeof addrObj !== 'object') throw new Error('invalid');
+        } catch {
+          addrObj = { address: data.address };
+        }
+
+        setAddressSummary(`${addrObj.name || '联系人'}${addrObj.phone ? ` · ${addrObj.phone}` : ''}${addrObj.address ? ` · ${addrObj.address}` : ''}`);
+      } catch {
+      }
+    };
+
+    if (isOpen && isLoggedIn) {
+      loadAddressSummary();
+    }
+  }, [isOpen, isLoggedIn]);
+
+  useEffect(() => {
     const handleOpen = () => {
       setIsOpen(true);
     };
+    const handleCloseForShopChat = () => {
+      // 独立聊天层打开时，强制关闭个人中心，避免出现双层关闭
+      setIsOpen(false);
+    };
     window.addEventListener(SHOP_EVENTS.OPEN_USER_MODAL, handleOpen);
+    window.addEventListener(SHOP_EVENTS.OPEN_SHOP_CHAT_MODAL, handleCloseForShopChat);
     (window as any).openUserCenter = () => setIsOpen(true);
 
     // 检查 URL 参数是否需要打开个人中心
@@ -82,7 +179,10 @@ export default function UserModal() {
       window.history.replaceState({}, "", newUrl);
     }
 
-    return () => window.removeEventListener(SHOP_EVENTS.OPEN_USER_MODAL, handleOpen);
+    return () => {
+      window.removeEventListener(SHOP_EVENTS.OPEN_USER_MODAL, handleOpen);
+      window.removeEventListener(SHOP_EVENTS.OPEN_SHOP_CHAT_MODAL, handleCloseForShopChat);
+    };
   }, []);
 
   const fetchHistory = async (phone: string, page = 1, isAppend = false) => {
@@ -100,7 +200,13 @@ export default function UserModal() {
       );
       const data = await res.json();
       if (data.success) {
-        const newHistory = data.orders || data.history || [];
+        const sourceHistory = data.orders || data.history || [];
+        const visibleHistory = filterUserVisibleOrders(sourceHistory);
+        const currentShopHistory = filterOrdersForCurrentShop(visibleHistory, {
+          id: currentShopId,
+          slug: currentShopSlug,
+        });
+        const newHistory = currentShopHistory.length > 0 ? currentShopHistory : visibleHistory;
 
         if (isAppend) {
           setHistory((prev) => [...prev, ...newHistory]);
@@ -142,6 +248,11 @@ export default function UserModal() {
 
   const handleLogin = async (e: any) => {
     e.preventDefault();
+    const validationError = validateUserLoginInput(loginAccount, password);
+    if (validationError) {
+      setLoginError(validationError);
+      return;
+    }
     setLoading(true);
     setLoginError("");
     try {
@@ -239,6 +350,49 @@ export default function UserModal() {
     window.dispatchEvent(event);
   };
 
+  const handleEditNickname = () => {
+    const currentName = String(userInfo?.name || '');
+    const nextName = window.prompt('请输入新的昵称', currentName);
+    if (!nextName) return;
+
+    const nextUser = applyLocalNicknameUpdate((userInfo || {}) as Record<string, any>, nextName);
+    localStorage.setItem('food_order_user', JSON.stringify(nextUser));
+    localStorage.setItem('user_info', JSON.stringify(nextUser));
+    setUserInfo(nextUser as User);
+  };
+
+  const handleEditPhone = async () => {
+    const currentPhone = String(userInfo?.phone || '');
+    const nextPhone = window.prompt('请输入新的手机号', currentPhone);
+    if (!nextPhone) return;
+
+    try {
+      const payload = buildPhoneUpdatePayload((userInfo || {}) as Record<string, any>, nextPhone);
+      const res = await fetch('/api/user/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        if (String(data?.error || '').trim().toLowerCase() === 'phone already in use') {
+          setPhoneConflictGuide(buildPhoneConflictGuide(nextPhone));
+        }
+        alert(mapUserUpdateErrorMessage(data));
+        return;
+      }
+
+      setPhoneConflictGuide(null);
+      const nextUser = { ...(userInfo || {}), phone: nextPhone };
+      localStorage.setItem('food_order_user', JSON.stringify(nextUser));
+      localStorage.setItem('user_info', JSON.stringify(nextUser));
+      setUserInfo(nextUser as User);
+      fetchHistory(nextPhone);
+    } catch {
+      alert('网络错误');
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -257,10 +411,10 @@ export default function UserModal() {
         .user-modal-content {
           background: #fff;
           width: 100%;
-          max-width: 500px;
-          border-radius: 20px 20px 0 0;
-          min-height: 70vh;
-          max-height: 92vh;
+          max-width: 880px;
+          border-radius: 24px 24px 0 0;
+          min-height: 86vh;
+          max-height: 96vh;
           display: flex;
           flex-direction: column;
           overflow: hidden;
@@ -283,21 +437,21 @@ export default function UserModal() {
         .modal-body {
           flex: 1;
           overflow-y: auto;
-          padding: 0 15px 100px;
+          padding: 0 18px 110px;
         }
         .history-order-card {
-          background: #fff;
-          border: 1px solid #edf2f7;
-          border-radius: 12px;
+          background: linear-gradient(180deg, #ffffff 0%, #fffaf7 100%);
+          border: 1px solid #ffedd5;
+          border-radius: 18px;
           margin-bottom: 15px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+          box-shadow: 0 12px 24px rgba(15,23,42,0.06);
         }
         .order-top {
           padding: 14px;
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          border-bottom: 1px solid #f7fafc;
+          gap: 12px;
         }
         .user-profile {
           padding: 20px 0;
@@ -321,7 +475,34 @@ export default function UserModal() {
         .user-phone-num { font-weight: 800; font-size: 18px; color: #1a202c; }
         .user-subtitle { font-size: 13px; color: #a0aec0; }
         .btn-logout-simple { border: 1px solid #e2e8f0; background: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; }
-        .orders-tip { font-weight: 800; font-size: 16px; margin: 10px 0 15px; color: #2d3748; }
+        .orders-tip { font-weight: 900; font-size: 16px; margin: 10px 0 15px; color: #2d3748; }
+        .current-shop-card {
+          background: linear-gradient(145deg, #ff6b4a 0%, #ff8a5b 42%, #ffd36e 100%);
+          border: none;
+          border-radius: 20px;
+          padding: 16px;
+          margin-bottom: 14px;
+          color: #fff;
+          box-shadow: 0 18px 36px rgba(249,115,22,0.24);
+        }
+        .current-shop-title { font-size: 11px; color: rgba(255,255,255,0.84); font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
+        .current-shop-name { font-size: 22px; font-weight: 900; color: #fff; }
+        .current-shop-meta { font-size: 12px; color: rgba(255,255,255,0.86); margin-top: 4px; }
+        .shop-actions { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+        .shop-action-btn { border: none; background: rgba(255,255,255,0.18); color: #fff; border: 1px solid rgba(255,255,255,0.28); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; cursor: pointer; backdrop-filter: blur(8px); }
+        .profile-quick-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 14px; }
+        .profile-quick-card { background: linear-gradient(180deg, #ffffff 0%, #fffaf7 100%); border: 1px solid #ffedd5; border-radius: 16px; padding: 14px; box-shadow: 0 10px 20px rgba(15,23,42,0.05); }
+        .profile-quick-title { font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 6px; text-transform: uppercase; }
+        .profile-quick-value { font-size: 13px; color: #1f2937; line-height: 1.6; }
+        .tool-link-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 16px; }
+        .tool-link-btn { border: none; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
+        .orders-section-block { background: rgba(255,255,255,0.7); border: 1px solid #e2e8f0; border-radius: 18px; padding: 12px; margin-bottom: 14px; }
+        .orders-section-title { font-size: 13px; font-weight: 900; color: #0f172a; margin: 0 0 10px 2px; }
+        .order-brand-row { display: flex; gap: 12px; align-items: center; }
+        .order-brand-badge { width: 42px; height: 42px; border-radius: 14px; background: linear-gradient(135deg, #fb923c, #f97316); color: #fff; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 16px rgba(249,115,22,0.22); flex-shrink: 0; }
+        .order-summary-shell { margin: 0 14px 12px; border-radius: 14px; padding: 12px; background: linear-gradient(180deg, #fff7ed 0%, #fffaf5 100%); border: 1px solid #ffedd5; }
+        .order-summary-title { font-size: 12px; color: #c2410c; margin-bottom: 8px; font-weight: 800; }
+        .order-address-shell { margin: 0 14px 12px; border-radius: 14px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; }
         @keyframes modalFadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         
         .modal-footer-cart {
@@ -345,6 +526,21 @@ export default function UserModal() {
         .cart-count { position: absolute; top: -5px; right: -8px; background: #ff4b33; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 10px; border: 2px solid #1a1a1a; }
         .cart-total-price { font-size: 18px; font-weight: 800; }
         .btn-checkout-go { font-weight: bold; color: #fff; }
+        @media (min-width: 768px) {
+          .user-modal-overlay {
+            align-items: center;
+            padding: 24px;
+          }
+          .user-modal-content {
+            border-radius: 28px;
+            min-height: min(880px, 92vh);
+            max-height: 92vh;
+            width: min(880px, 100%);
+          }
+          .modal-body {
+            padding: 0 24px 118px;
+          }
+        }
       ` }} />
       <div className="user-modal-overlay" onClick={() => setIsOpen(false)}>
       <div className="user-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -421,24 +617,15 @@ export default function UserModal() {
                     style={{ padding: '12px', borderRadius: '8px', border: '1px solid #ddd' }}
                   />
                   <input type="password" placeholder="密码 / Lozinka" value={isRegisterMode ? regPassword : password} onChange={(e) => isRegisterMode ? setRegPassword(e.target.value) : setPassword(e.target.value)} style={{ padding: '12px', borderRadius: '8px', border: '1px solid #ddd' }} />
-                  <button type="submit" className="btn-login-submit" style={{ padding: '13px 12px', borderRadius: '12px', background: '#ff4b33', color: '#fff', border: 'none', fontWeight: 'bold', boxShadow: '0 10px 22px rgba(255,75,51,0.22)' }}>{loading ? '加载中...' : (isRegisterMode ? '立即注册' : '立即登录')}</button>
+                  <button
+                    type="button"
+                    className="btn-login-submit"
+                    onClick={(e) => (isRegisterMode ? handleRegister(e) : handleLogin(e))}
+                    style={{ padding: '13px 12px', borderRadius: '12px', background: '#ff4b33', color: '#fff', border: 'none', fontWeight: 'bold', boxShadow: '0 10px 22px rgba(255,75,51,0.22)' }}
+                  >
+                    {loading ? '加载中...' : (isRegisterMode ? '立即注册' : '立即登录')}
+                  </button>
                 </form>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '18px 0 12px', color: '#a0aec0', fontSize: '12px' }}>
-                  <span style={{ flex: 1, height: '1px', background: '#edf2f7' }}></span>
-                  <span>或使用 Google 登录 / Nastavite preko Google</span>
-                  <span style={{ flex: 1, height: '1px', background: '#edf2f7' }}></span>
-                </div>
-                <GoogleLoginButton
-                  onSuccess={() => {
-                    setIsLoggedIn(true);
-                    const currentUser = getUserInfo();
-                    setUserInfo(currentUser as User);
-                    if (currentUser.phone) {
-                      fetchHistory(currentUser.phone);
-                    }
-                  }}
-                  onError={(error) => setLoginError(error || 'Google 登录失败')}
-                />
                 {(loginError || regError) && (
                   <div style={{ color: '#e53e3e', marginTop: '12px', fontSize: '13px' }}>
                     {loginError || regError}
@@ -453,103 +640,35 @@ export default function UserModal() {
               </div>
             </div>
           ) : (
-            <div className="user-center">
-              {/* 用户信息头部 */}
-              <div className="user-profile">
-                <div className="user-info-row">
-                  <div className="user-avatar-circle">
-                    {userInfo?.name?.charAt(0) || "U"}
-                  </div>
-                  <div>
-                    <div className="user-phone-num">
-                      {userInfo?.name || userInfo?.phone || "用户"}
-                    </div>
-                    <div className="user-subtitle">
-                      欢迎回来 / Dobrodošli
-                    </div>
-                  </div>
-                </div>
-                <button className="btn-logout-simple" onClick={handleLogout}>
-                  退出 / Logout
-                </button>
-              </div>
-
-              <div className="orders-tip">历史订单 / Istorija narudžbina</div>
-
-              {/* 历史订单列表 */}
-              <div className="history-list">
-                {loading ? (
-                  <div style={{ textAlign: "center", padding: "40px" }}>加载中...</div>
-                ) : history.length === 0 ? (
-                  <div className="no-orders">📋 暂无历史订单</div>
-                ) : (
-                  history.map((order, idx) => (
-                    <div key={idx} className="history-order-card">
-                      <div className="order-top">
-                        <div style={{ display: "flex", flexDirection: "column" }}>
-                          <span style={{ fontSize: "12px", color: "#999" }}>#{order.order_no}</span>
-                          <span style={{ fontSize: "16px", fontWeight: "bold" }}>取餐号: <span style={{ color: "#2196f3" }}>{order.order_no.slice(-3)}</span></span>
-                        </div>
-                        <span style={{ color: '#e53e3e', fontSize: '18px', fontWeight: '800' }}>
-                          {Number(order.total_amount || 0).toLocaleString()} RSD
-                        </span>
-                      </div>
-
-                      <div style={{ padding: '0 14px', fontSize: '11px', color: '#a0aec0' }}>
-                        {new Date(order.created_at || '').toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                      </div>
-
-                      {/* 商品内容 */}
-                      <div className="order-content" style={{ fontSize: '13px', color: '#4a5568', background: '#f8fafc', padding: '8px', borderRadius: '6px', margin: '8px 14px' }}>
-                        {(() => {
-                          try {
-                            const items = typeof (order as any).items_json === 'string' 
-                              ? JSON.parse((order as any).items_json) 
-                              : (order as any).items_json;
-                            const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
-                            return itemsArray.map((i: any, iIdx: number) => (
-                              <div key={iIdx} style={{ marginBottom: '4px' }}>
-                                • {i.name} <span style={{ color: '#718096', fontSize: '11px' }}>({i.subName || i.sub_name})</span> x{i.quantity}
-                              </div>
-                            ));
-                          } catch (e) { return "商品解析失败"; }
-                        })()}
-                      </div>
-
-                      {/* 配送信息 */}
-                      {order.table_info && (
-                        <div style={{ padding: '0 14px 8px', fontSize: '12px', color: '#718096' }}>
-                          📍 {order.table_info}
-                        </div>
-                      )}
-
-                      {/* 状态与骑手 */}
-                      <div style={{ padding: '0 14px 14px' }}>
-                        {order.status === "delivering" ? (
-                          <div style={{ background: "#e3f2fd", color: "#1565c0", padding: "10px", borderRadius: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span>🛵</span>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: "bold", fontSize: "13px" }}>派送中 / Delivering</div>
-                              {order.courier_name && <div style={{ fontSize: "12px", opacity: 0.8 }}>骑手: {order.courier_name} ({order.courier_phone})</div>}
-                            </div>
-                            {order.courier_phone && <a href={`tel:${order.courier_phone}`} style={{ background: "#fff", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", textDecoration: "none", color: "#1565c0", border: "1px solid #1565c0" }}>拨打</a>}
-                          </div>
-                        ) : (
-                          <span style={{ padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", background: order.status === "pending" ? "#fff3e0" : order.status === "confirmed" ? "#e8f5e9" : "#f5f5f5", color: order.status === "pending" ? "#ef6c00" : order.status === "confirmed" ? "#2e7d32" : "#757575" }}>
-                            {order.status === "pending" ? "等待接单 / Pending" : order.status === "confirmed" ? "商家已接单 / Confirmed" : order.status === "completed" ? "已送达 / Completed" : "订单已关闭"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-                {hasMoreHistory && (
-                  <button className="btn-load-more" onClick={() => fetchHistory(userInfo?.phone || "", historyPage + 1, true)}>
-                    {isLoadingMore ? "加载中..." : "加载更多 / Više"}
-                  </button>
-                )}
-              </div>
-            </div>
+            <UserCenterPanel
+              userInfo={userInfo}
+              currentShopName={currentShopName}
+              currentShopSlug={currentShopSlug}
+              currentShopId={currentShopId}
+              addressSummary={addressSummary}
+              membershipLabel={buildCurrentShopMembershipSummary(history).label || '暂无积分或 VIP 权益'}
+              history={history as any[]}
+              shopMap={shopMap}
+              loading={loading}
+              hasMoreHistory={hasMoreHistory}
+              isLoadingMore={isLoadingMore}
+              phoneConflictGuide={phoneConflictGuide}
+              onContinueShop={() => setIsOpen(false)}
+              onViewAllOrders={() => (window.location.href = '/orders')}
+              onManageAddress={() => (window.location.href = '/user/address')}
+              onCoupons={() => (window.location.href = '/user/coupon')}
+              onService={() => (window.location.href = '/user/service')}
+              onEditNickname={handleEditNickname}
+              onEditPhone={handleEditPhone}
+              onLogout={handleLogout}
+              onConflictLogin={() => {
+                if (!phoneConflictGuide?.loginHref) return;
+                handleLogout();
+                window.location.href = phoneConflictGuide.loginHref;
+              }}
+              onLoadMore={() => fetchHistory(userInfo?.phone || '', historyPage + 1, true)}
+              openChatSignal={openChatSignal}
+            />
           )}
         </div>
 

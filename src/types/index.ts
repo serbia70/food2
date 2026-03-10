@@ -35,6 +35,16 @@ export interface Order {
   id: number;
   order_no: string;
   restaurant_id: number;
+  shop_name?: string;
+  shop_slug?: string;
+  restaurant_name?: string;
+  restaurant_slug?: string;
+  slug?: string;
+  points?: number;
+  user_points?: number;
+  points_balance?: number;
+  is_vip?: boolean | number | string;
+  vip_level?: string;
   table_info?: string;
   order_type: "dine_in" | "delivery";
   status:

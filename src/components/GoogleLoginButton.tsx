@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'preact/hooks';
 import { persistGoogleUserAuth } from '../lib/user-auth';
+import { shouldPromptGoogleOneTap } from '../lib/google-prompt-policy';
 
 declare global {
   interface Window {
@@ -66,7 +67,9 @@ export default function GoogleLoginButton({ onSuccess, onError }: GoogleLoginBut
                         { type: 'standard', theme: 'outline', size: 'large', text: 'signin_with', shape: 'rectangular', width: 280 }
                     );
                 }
-                window.google.accounts.id.prompt();
+                if (shouldPromptGoogleOneTap(window.location.href)) {
+                    window.google.accounts.id.prompt();
+                }
                 setSdkLoaded(true);
             }
         };

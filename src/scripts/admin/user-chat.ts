@@ -1,6 +1,11 @@
 
 import { getAdminHandler, getAdminRuntimeState } from './globals';
 import { buildRecentChatPhones, chooseChatPhoneOnOpen } from '../../lib/admin-chat-state';
+import { shouldPlayAdminChatNotify } from '../../lib/admin-chat-notify';
+import { makeAdminChatMessageKey } from '../../lib/admin-chat-message-key';
+import { buildConversationList } from '../../lib/admin-chat-conversations';
+import { buildConversationItemTone } from '../../lib/admin-chat-highlight';
+import { buildCustomerSummary } from '../../lib/admin-chat-customer-summary';
 
 let adminChatOpen = false;
 let currentChatUserPhone = '';
@@ -10,6 +15,12 @@ let chatMqttClient: any;
 let chatMqttInitInFlight = false;
 let chatMqttRetryCount = 0;
 let chatMqttSubscribed = false;
+const processedChatMessageKeys = new Set<string>();
+let currentCustomerOrders: any[] = [];
+let currentCustomerReservations: any[] = [];
+let currentCustomerSummary: any = null;
+let recentOrdersExpanded = false;
+let currentShopReservationEnabled = true;
 
 function getShopId(): string {
   try {
@@ -189,38 +200,36 @@ function clearUnread(phone?: string) {
 
 
 function renderUserPickerLoading() {
-  const messagesEl = document.getElementById('admin-chat-messages');
-  if (!messagesEl) return;
-  setContainerMessage(messagesEl, '正在加载会话...');
+  const listEl = document.getElementById('admin-chat-conversations');
+  if (!listEl) return;
+  setContainerMessage(listEl, '正在加载会话...');
 }
 
 function renderUserPicker(phones: string[]) {
+  const listEl = document.getElementById('admin-chat-conversations');
   const messagesEl = document.getElementById('admin-chat-messages');
-  if (!messagesEl) return;
+  if (!listEl || !messagesEl) return;
 
   const unique = Array.from(new Set(phones.map((p) => String(p || '').trim()).filter(Boolean)));
   if (unique.length === 0) {
-    setContainerMessage(messagesEl, '暂无会话记录');
+    setContainerMessage(listEl, '暂无会话记录');
+    setContainerMessage(messagesEl, '请选择一个用户开始聊天');
     return;
   }
 
-  // Prefer showing unread users first.
-  unique.sort((a, b) => {
-    const au = unreadByPhone[a] || 0;
-    const bu = unreadByPhone[b] || 0;
-    if (bu !== au) return bu - au;
-    return a.localeCompare(b);
-  });
+  const conversations = buildConversationList(unique.map((phone) => ({ sender_phone: phone, created_at: '', message: '' })), unreadByPhone);
 
   const wrap = document.createElement('div');
-  wrap.style.padding = '10px';
+  wrap.style.padding = '6px';
   const tip = document.createElement('div');
   setStyles(tip, { fontSize: '12px', color: '#64748b', marginBottom: '10px' });
-  tip.textContent = '选择一个用户开始聊天';
+  tip.textContent = '最近聊天';
   wrap.appendChild(tip);
 
-  unique.slice(0, 30).forEach((p) => {
-    const n = unreadByPhone[p] || 0;
+  conversations.slice(0, 30).forEach((item) => {
+    const p = item.phone;
+    const n = item.unread || 0;
+    const tone = buildConversationItemTone({ unread: n, active: currentChatUserPhone === p });
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.dataset.phone = p;
@@ -230,15 +239,21 @@ function renderUserPicker(phones: string[]) {
       justifyContent: 'space-between',
       alignItems: 'center',
       padding: '10px 12px',
-      border: '1px solid #e5e7eb',
-      borderRadius: '10px',
-      background: '#fff',
+      border: `1px solid ${tone.borderColor}`,
+      borderRadius: '12px',
+      background: tone.background,
       cursor: 'pointer',
-      marginBottom: '10px',
+      marginBottom: '8px',
     });
+    const left = document.createElement('div');
+    setStyles(left, { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' });
     const phoneText = document.createElement('span');
     setStyles(phoneText, { fontWeight: '600', color: '#0f172a' });
     phoneText.textContent = p;
+    const preview = document.createElement('span');
+    setStyles(preview, { fontSize: '11px', color: '#64748b', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
+    preview.textContent = item.preview || '点击查看会话';
+    left.append(phoneText, preview);
     const badge = document.createElement('span');
     setStyles(badge, {
       display: n > 0 ? 'inline-block' : 'none',
@@ -253,11 +268,90 @@ function renderUserPicker(phones: string[]) {
       textAlign: 'center',
     });
     badge.textContent = String(Math.min(99, n));
-    btn.append(phoneText, badge);
+    btn.append(left, badge);
     btn.addEventListener('click', () => openChatForPhone(p));
     wrap.appendChild(btn);
   });
-  messagesEl.replaceChildren(wrap);
+  listEl.replaceChildren(wrap);
+  if (!currentChatUserPhone) {
+    setContainerMessage(messagesEl, '请选择一个用户开始聊天');
+  }
+}
+
+async function loadCustomerSummary(phone: string) {
+  const summaryEl = document.getElementById('admin-chat-summary');
+  if (!summaryEl) return;
+
+  try {
+    const ordersRes = await fetch('/api/admin/orders');
+    const ordersData = await ordersRes.json().catch(() => []);
+
+    let reservationsData: any = { reservations: [] };
+    if (currentShopReservationEnabled) {
+      try {
+        const reservationsRes = await fetch('/api/admin/reservations');
+        if (reservationsRes.ok) {
+          reservationsData = await reservationsRes.json().catch(() => ({ reservations: [] }));
+        } else {
+          currentShopReservationEnabled = false;
+        }
+      } catch {
+        currentShopReservationEnabled = false;
+      }
+    }
+
+    currentCustomerOrders = Array.isArray(ordersData) ? ordersData : Array.isArray(ordersData?.orders) ? ordersData.orders : [];
+    currentCustomerReservations = Array.isArray(reservationsData?.reservations) ? reservationsData.reservations : Array.isArray(reservationsData) ? reservationsData : [];
+
+    const summary = buildCustomerSummary(phone, currentCustomerOrders, currentCustomerReservations);
+    currentCustomerSummary = summary;
+    summaryEl.innerHTML = `
+      <div style="font-size:12px;color:#64748b;font-weight:800;">客户最近记录</div>
+      <div style="display:grid;gap:8px;">
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;">
+          <div style="font-size:12px;color:#64748b;margin-bottom:6px;">最近外卖</div>
+          <div style="font-weight:700;color:#0f172a;">${summary.latestOrder ? `#${summary.latestOrder.order_no}` : '暂无外卖订单'}</div>
+          ${summary.latestOrder ? `
+            <div style="margin-top:6px;font-size:12px;color:#475569;">金额：${Number(summary.latestOrder.total_amount || 0).toLocaleString()} RSD</div>
+            <div style="margin-top:4px;font-size:12px;color:#64748b;line-height:1.6;">地址：${String(summary.latestOrder.table_info || '').replace(/\s*\[货到付款\/Cash\].*$/u, '').replace(/\s*\(备注:.*$/u, '').trim()}</div>
+            <button id="admin-chat-recent-orders-toggle" type="button" style="margin-top:8px;padding:6px 10px;border:none;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">查看最近10单</button>
+            <div id="admin-chat-recent-orders-list" style="display:none;margin-top:10px;display:grid;gap:8px;"></div>
+          ` : ''}
+        </div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;">
+          <div style="font-size:12px;color:#64748b;margin-bottom:6px;">最近预约</div>
+          <div style="font-weight:700;color:#0f172a;">${currentShopReservationEnabled ? (summary.latestReservation ? String(summary.latestReservation.reservation_time || '有预约') : '暂无预约记录') : '当前店铺未开启预约'}</div>
+        </div>
+      </div>
+    `;
+
+    const toggleBtn = document.getElementById('admin-chat-recent-orders-toggle');
+    const listEl = document.getElementById('admin-chat-recent-orders-list');
+    if (toggleBtn && listEl) {
+      const renderRecentOrders = () => {
+        if (!currentCustomerSummary?.recentOrders?.length) {
+          listEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;">暂无更多外卖记录</div>';
+          return;
+        }
+        listEl.innerHTML = currentCustomerSummary.recentOrders.map((order: any) => `
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px;display:grid;gap:4px;">
+            <div style="font-weight:700;color:#0f172a;">#${order.order_no || '-'}</div>
+            <div style="font-size:12px;color:#475569;">${Number(order.total_amount || 0).toLocaleString()} RSD</div>
+            <div style="font-size:12px;color:#64748b;line-height:1.6;">${String(order.table_info || '').replace(/\s*\[货到付款\/Cash\].*$/u, '').replace(/\s*\(备注:.*$/u, '').trim()}</div>
+          </div>
+        `).join('');
+      };
+
+      toggleBtn.addEventListener('click', () => {
+        recentOrdersExpanded = !recentOrdersExpanded;
+        listEl.style.display = recentOrdersExpanded ? 'grid' : 'none';
+        toggleBtn.textContent = recentOrdersExpanded ? '收起最近10单' : '查看最近10单';
+        if (recentOrdersExpanded) renderRecentOrders();
+      });
+    }
+  } catch {
+    setContainerMessage(summaryEl as HTMLElement, '客户摘要加载失败', '#ef4444');
+  }
 }
 
 function hideAdminChatBadge() {
@@ -318,15 +412,25 @@ function initAdminChatRealtime() {
       const payload = JSON.parse(m?.payloadString || '{}');
       if (Number(payload.shop_id || 0) !== Number(shopId)) return;
 
+      const messageKey = makeAdminChatMessageKey(payload);
+      if (processedChatMessageKeys.has(messageKey)) return;
+      processedChatMessageKeys.add(messageKey);
+      if (processedChatMessageKeys.size > 200) {
+        const first = processedChatMessageKeys.values().next().value;
+        if (first) processedChatMessageKeys.delete(first);
+      }
+
       const phone = String(payload.sender_phone || '').trim();
       if (!phone) return;
 
       const shouldRefresh = currentChatUserPhone && phone === currentChatUserPhone;
       if (shouldRefresh) {
         loadAdminChat();
+        if (shouldPlayAdminChatNotify({ adminChatOpen, currentChatUserPhone, incomingPhone: phone })) {
+          playChatNotify();
+        }
         if (!adminChatOpen) {
           showAdminChatBadge();
-          playChatNotify();
           incUnread(phone);
         }
         return;
@@ -470,6 +574,7 @@ export function openChatForPhone(phone: string) {
   if (titleEl) titleEl.textContent = `与用户 ${phone} 聊天`;
   hideAdminChatBadge();
   clearUnread(phone);
+  loadCustomerSummary(phone);
   loadAdminChat();
   initAdminChatRealtime();
 }
@@ -506,13 +611,14 @@ export function initAdminChatUI() {
     position: fixed;
     bottom: 150px;
     right: 20px;
-    width: 320px;
-    height: 400px;
+    width: min(860px, calc(100vw - 40px));
+    height: min(620px, calc(100vh - 170px));
     background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    border-radius: 18px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.18);
     z-index: 10000;
     flex-direction: column;
+    overflow: hidden;
   `;
   const header = document.createElement('div');
   setStyles(header, {
@@ -534,13 +640,41 @@ export function initAdminChatUI() {
   close.textContent = '×';
   header.append(title, close);
 
+  const body = document.createElement('div');
+  setStyles(body, { display: 'grid', gridTemplateColumns: '220px 1fr', flex: '1', minHeight: '0' });
+
+  const conversations = document.createElement('div');
+  conversations.id = 'admin-chat-conversations';
+  setStyles(conversations, {
+    borderRight: '1px solid #e5e7eb',
+    background: '#fff',
+    overflowY: 'auto',
+    padding: '10px',
+  });
+
+  const chatSide = document.createElement('div');
+  // Important: allow flex children (messages) to shrink, otherwise footer may be pushed out
+  // and hidden by panel overflow on shorter viewports.
+  setStyles(chatSide, { display: 'flex', flexDirection: 'column', minWidth: '0', minHeight: '0', background: '#f8fafc' });
+
+  const summary = document.createElement('div');
+  summary.id = 'admin-chat-summary';
+  setStyles(summary, {
+    padding: '12px',
+    borderBottom: '1px solid #e5e7eb',
+    background: '#fffaf7',
+    display: 'grid',
+    gap: '8px',
+  });
+  setContainerMessage(summary, '请选择客户查看最近外卖和预约记录');
+
   const messages = document.createElement('div');
   messages.id = 'admin-chat-messages';
-  setStyles(messages, { flex: '1', overflowY: 'auto', padding: '10px', background: '#f9fafb' });
+  setStyles(messages, { flex: '1', minHeight: '0', overflowY: 'auto', padding: '12px', background: '#f9fafb' });
   setContainerMessage(messages, '请选择用户开始聊天');
 
   const footer = document.createElement('div');
-  setStyles(footer, { padding: '10px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '8px' });
+  setStyles(footer, { padding: '12px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '8px', background: '#fff' });
   const input = document.createElement('input');
   input.type = 'text';
   input.id = 'admin-chat-input';
@@ -552,7 +686,9 @@ export function initAdminChatUI() {
   setStyles(send, { padding: '8px 16px', background: '#0891b2', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' });
   send.textContent = '发送';
   footer.append(input, send);
-  panel.append(header, messages, footer);
+  chatSide.append(summary, messages, footer);
+  body.append(conversations, chatSide);
+  panel.append(header, body);
   document.body.appendChild(panel);
 
   // Add a visible chat button inside the panel (bottom-right).

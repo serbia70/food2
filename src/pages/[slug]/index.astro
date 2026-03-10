@@ -5,7 +5,7 @@ import Sidebar from '../../components/Sidebar';
 import CartModal from '../../components/CartModal';
 import UserModal from '../../components/UserModal';
 import ReservationModal from '../../components/ReservationModal';
-import UserChat from '../../components/UserChat.astro';
+import ShopChatModal from '../../components/ShopChatModal';
 import TablePageEntryIsland from '../../components/shop/TablePageEntryIsland.tsx';
 import { API_BASE_URL, MASTER_TOKEN } from '../../config';
 import { classifyShopResponseStatus } from '../../lib/shop-status';
@@ -671,14 +671,13 @@ const enableReservation = (billingPlanType === 'subscription' || billingPlanType
           tableConfig={tableConfig}
           client:load
         />
+        <ShopChatModal client:load />
         <UserModal client:load />
       </>
     )}
 
     {enableReservation && <ReservationModal restaurantId={slug} requiresPreOrder={false} client:load />}
     
-    <UserChat restaurantId={shopId} mqttBroker={mqttBroker} mqttUsername={mqttUsername} mqttPassword={mqttPassword} />
-
     <script src="/vendor/mqttws31.min.js" is:inline></script>
     <script define:vars={{ slug, shopId, mqttSecret, mqttBroker, mqttUsername, mqttPassword }} is:inline>
       (function () {

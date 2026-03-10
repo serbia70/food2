@@ -3,16 +3,586 @@ import Layout from '../../layouts/Layout.astro';
 ---
 
 <Layout title="订单中心">
-  <div class="wrap">
-    <h2>订单中心</h2>
-    <p>功能迁移中。请先在商家后台或骑手端查看订单。</p>
-    <a href="/" class="btn">返回首页</a>
+  <div class="orders-page">
+    <section class="hero-card">
+      <div>
+        <p class="eyebrow">Order Center</p>
+        <h1>我的订单</h1>
+        <p class="hero-text">按店铺查看历史订单、积分和 VIP 权益，清楚知道每一单来自哪家店。</p>
+      </div>
+      <a href="/" class="ghost-link">返回首页</a>
+    </section>
+
+    <section id="orders-auth" class="state-card" style="display:none;">
+      <h2>请先登录</h2>
+      <p>登录后即可查看你在不同店铺的订单与会员权益。</p>
+      <div class="actions">
+        <a href="/user/login" class="primary-btn">去登录</a>
+        <a href="/user/login?mode=register" class="secondary-btn">去注册</a>
+      </div>
+    </section>
+
+    <section id="orders-loading" class="state-card" style="display:none;">
+      <h2>加载中...</h2>
+      <p>正在读取你的订单与店铺权益。</p>
+    </section>
+
+    <section id="orders-error" class="state-card error" style="display:none;">
+      <h2>订单加载失败</h2>
+      <p id="orders-error-text">请稍后重试。</p>
+    </section>
+
+    <section id="membership-section" style="display:none;">
+      <div id="overview-hero" class="overview-hero"></div>
+      <div class="section-head">
+        <h2>店铺权益</h2>
+        <span class="section-tip">积分和 VIP 按店铺分别统计</span>
+      </div>
+      <div id="membership-list" class="membership-rail"></div>
+    </section>
+
+    <section id="orders-section" style="display:none;">
+      <div class="section-head">
+        <h2>全部订单</h2>
+        <span id="orders-count" class="section-tip"></span>
+      </div>
+      <div id="orders-empty" class="state-card" style="display:none;">
+        <h2>暂无订单</h2>
+        <p>你还没有历史订单，先去逛逛首页吧。</p>
+      </div>
+      <div id="orders-list" class="orders-groups"></div>
+    </section>
   </div>
 
+  <script is:inline>
+    function filterUserVisibleOrders(orders) {
+      return (orders || []).filter((order) => String(order?.order_type || '').trim() === 'delivery');
+    }
+
+    function pickFirstString(order, keys) {
+      for (const key of keys) {
+        const value = String(order?.[key] || '').trim();
+        if (value) return value;
+      }
+      return '';
+    }
+
+    function pickFirstNumber(order, keys) {
+      for (const key of keys) {
+        const raw = order?.[key];
+        if (raw === undefined || raw === null || raw === '') continue;
+        const value = Number(raw);
+        if (Number.isFinite(value)) return value;
+      }
+      return null;
+    }
+
+    function pickVip(order) {
+      if (order?.is_vip === true || order?.is_vip === 1 || order?.is_vip === '1') return true;
+      const vipLevel = String(order?.vip_level || '').trim();
+      return Boolean(vipLevel && vipLevel !== '0' && vipLevel.toLowerCase() !== 'none');
+    }
+
+    function buildMembershipLabel(points, isVip) {
+      const tags = [];
+      if (isVip) tags.push('VIP');
+      if (points !== null) tags.push(`积分 ${points}`);
+      return tags.join(' · ');
+    }
+
+    function buildUserOrderView(order, shopMap = {}) {
+      const shopId = String(order?.shop_id || order?.restaurant_id || '').trim();
+      const fallbackShop = shopId ? shopMap[shopId] || {} : {};
+      const shopName = pickFirstString(order, ['shop_name', 'restaurant_name', 'merchant_name']) || String(fallbackShop.name || '').trim() || '未知店铺';
+      const shopSlug = pickFirstString(order, ['shop_slug', 'slug', 'restaurant_slug']) || String(fallbackShop.slug || '').trim();
+      const points = pickFirstNumber(order, ['points', 'user_points', 'points_balance']);
+      const isVip = pickVip(order);
+      return {
+        shopName,
+        shopSlug,
+        points,
+        isVip,
+        membershipLabel: buildMembershipLabel(points, isVip),
+      };
+    }
+
+    function buildShopMembershipSummaries(orders, shopMap = {}) {
+      const grouped = new Map();
+      for (const order of filterUserVisibleOrders(orders || [])) {
+        const view = buildUserOrderView(order, shopMap);
+        const shopKey = view.shopSlug || view.shopName;
+        const existing = grouped.get(shopKey);
+        if (!existing) {
+          grouped.set(shopKey, {
+            shopName: view.shopName,
+            shopSlug: view.shopSlug,
+            points: view.points,
+            isVip: view.isVip,
+            membershipLabel: view.membershipLabel,
+            orderCount: 1,
+            latestOrderAt: String(order?.created_at || ''),
+          });
+          continue;
+        }
+        existing.orderCount += 1;
+        if ((view.points ?? -1) > (existing.points ?? -1)) existing.points = view.points;
+        existing.isVip = existing.isVip || view.isVip;
+        existing.membershipLabel = buildMembershipLabel(existing.points, existing.isVip);
+        if (String(order?.created_at || '') > String(existing.latestOrderAt || '')) {
+          existing.latestOrderAt = String(order?.created_at || '');
+        }
+      }
+      return [...grouped.values()].sort((a, b) => String(b.latestOrderAt).localeCompare(String(a.latestOrderAt)));
+    }
+
+    async function loadShopMap() {
+      try {
+        const res = await fetch('/api/shop/list');
+        if (!res.ok) return {};
+        const data = await res.json();
+        const shops = Array.isArray(data?.shops) ? data.shops : [];
+        const nextMap = {};
+        shops.forEach((shop) => {
+          const id = String(shop?.id || '').trim();
+          if (!id) return;
+          nextMap[id] = {
+            id,
+            name: String(shop?.name || '').trim(),
+            slug: String(shop?.slug || '').trim(),
+          };
+        });
+        return nextMap;
+      } catch {
+        return {};
+      }
+    }
+
+    const authEl = document.getElementById('orders-auth');
+    const loadingEl = document.getElementById('orders-loading');
+    const errorEl = document.getElementById('orders-error');
+    const errorTextEl = document.getElementById('orders-error-text');
+    const membershipSectionEl = document.getElementById('membership-section');
+    const membershipListEl = document.getElementById('membership-list');
+    const overviewHeroEl = document.getElementById('overview-hero');
+    const ordersSectionEl = document.getElementById('orders-section');
+    const ordersEmptyEl = document.getElementById('orders-empty');
+    const ordersListEl = document.getElementById('orders-list');
+    const ordersCountEl = document.getElementById('orders-count');
+
+    function getStatusLabel(status) {
+      if (status === 'pending') return '等待接单';
+      if (status === 'confirmed') return '商家已接单';
+      if (status === 'delivering') return '配送中';
+      if (status === 'completed') return '已完成';
+      return '订单已关闭';
+    }
+
+    function getStatusClass(status) {
+      if (status === 'pending') return 'status-pending';
+      if (status === 'confirmed' || status === 'delivering') return 'status-active';
+      if (status === 'completed') return 'status-done';
+      return 'status-closed';
+    }
+
+    function splitOrdersForView(orders) {
+      const active = [];
+      const completed = [];
+      const others = [];
+      for (const order of orders) {
+        if (order.status === 'pending' || order.status === 'confirmed' || order.status === 'delivering') {
+          active.push(order);
+        } else if (order.status === 'completed') {
+          completed.push(order);
+        } else {
+          others.push(order);
+        }
+      }
+      return [
+        { key: 'active', title: '进行中', orders: active },
+        { key: 'completed', title: '已完成', orders: completed },
+        { key: 'others', title: '其他状态', orders: others },
+      ].filter((group) => group.orders.length > 0);
+    }
+
+    function readUser() {
+      try {
+        const raw = localStorage.getItem('food_order_user') || localStorage.getItem('user_info') || '{}';
+        return JSON.parse(raw);
+      } catch {
+        return {};
+      }
+    }
+
+    function setView(mode, message = '') {
+      authEl.style.display = mode === 'auth' ? 'block' : 'none';
+      loadingEl.style.display = mode === 'loading' ? 'block' : 'none';
+      errorEl.style.display = mode === 'error' ? 'block' : 'none';
+      membershipSectionEl.style.display = mode === 'ready' ? 'block' : 'none';
+      ordersSectionEl.style.display = mode === 'ready' ? 'block' : 'none';
+      if (mode === 'error') errorTextEl.textContent = message || '请稍后重试。';
+    }
+
+    function parseItems(order) {
+      try {
+        const items = typeof order.items_json === 'string' ? JSON.parse(order.items_json) : order.items_json;
+        const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
+        return itemsArray.map((item) => {
+          const name = item?.name || '未命名商品';
+          const subName = item?.subName || item?.sub_name || '';
+          const quantity = Number(item?.quantity || 0);
+          return `• ${name}${subName ? ` (${subName})` : ''}${quantity ? ` x${quantity}` : ''}`;
+        });
+      } catch {
+        return ['商品解析失败'];
+      }
+    }
+
+    function renderMemberships(summaries) {
+      membershipListEl.innerHTML = '';
+      if (!summaries.length) {
+        membershipListEl.innerHTML = '<div class="membership-empty">还没有可展示的店铺权益，等你下第一单后这里会更丰富。</div>';
+        return;
+      }
+
+      summaries.forEach((summary) => {
+        const card = document.createElement('article');
+        card.className = 'membership-card';
+
+        const latest = summary.latestOrderAt
+          ? new Date(summary.latestOrderAt).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+          : '-';
+
+        card.innerHTML = `
+          <div class="membership-card-top">
+            <div class="membership-shop-block">
+              <div class="membership-badge">${(summary.shopName || '店').trim().charAt(0)}</div>
+              <div>
+                <div class="membership-shop-name">${summary.shopName}</div>
+                ${summary.shopSlug ? `<div class="membership-shop-slug">/${summary.shopSlug}</div>` : ''}
+              </div>
+            </div>
+            <div class="membership-badges">
+              ${summary.isVip ? '<span class="tag vip">VIP</span>' : ''}
+              ${summary.points !== null ? `<span class="tag points">积分 ${summary.points}</span>` : ''}
+            </div>
+          </div>
+          <div class="membership-meta">
+            <span>订单 ${summary.orderCount} 笔</span>
+            <span>最近下单 ${latest}</span>
+          </div>
+        `;
+        membershipListEl.appendChild(card);
+      });
+    }
+
+    function renderOverview(summaries, orders) {
+      if (!orders.length) {
+        overviewHeroEl.innerHTML = '';
+        return;
+      }
+
+      const latestOrder = [...orders].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
+      const leadShop = summaries[0];
+      const activeCount = orders.filter((order) => ['pending', 'confirmed', 'delivering'].includes(order.status)).length;
+      overviewHeroEl.innerHTML = `
+        <div class="overview-card">
+          <div class="overview-hero-top">
+            <div class="overview-brand-block">
+              <div class="overview-logo">${(leadShop?.shopName || '订').trim().charAt(0)}</div>
+              <div>
+                <div class="overview-brand">${leadShop?.shopName || '我的订单'}</div>
+                <div class="overview-sub">${leadShop?.shopSlug ? `当前店铺 / ${leadShop.shopSlug}` : '移动端订单中心'}</div>
+              </div>
+            </div>
+            <div class="overview-latest-badge">${getStatusLabel(latestOrder?.status || '')}</div>
+          </div>
+          <div class="overview-stats">
+            <div class="stat-box accent"><strong>${orders.length}</strong><span>总订单</span></div>
+            <div class="stat-box warm"><strong>${activeCount}</strong><span>进行中</span></div>
+            <div class="stat-box soft"><strong>${leadShop?.membershipLabel || '普通用户'}</strong><span>当前权益</span></div>
+          </div>
+          <div class="overview-latest">最近订单：#${latestOrder?.order_no || '-'} · ${new Date(latestOrder?.created_at || '').toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
+        </div>
+      `;
+    }
+
+    function renderOrders(orders, shopMap) {
+      ordersListEl.innerHTML = '';
+      ordersCountEl.textContent = `共 ${orders.length} 笔`;
+      ordersEmptyEl.style.display = orders.length ? 'none' : 'block';
+
+      const groups = splitOrdersForView(orders);
+      groups.forEach((group) => {
+        const section = document.createElement('section');
+        section.className = 'order-group';
+        section.innerHTML = `<div class="order-group-title">${group.title}</div>`;
+
+        group.orders.forEach((order) => {
+        const view = buildUserOrderView(order, shopMap);
+        const card = document.createElement('article');
+        card.className = 'order-card';
+
+        const items = parseItems(order)
+          .map((line) => `<div class="order-item">${line}</div>`)
+          .join('');
+
+        const timeText = order.created_at
+          ? new Date(order.created_at).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+          : '-';
+
+        const statusLabel = getStatusLabel(order.status);
+        const statusClass = getStatusClass(order.status);
+
+        const pickupNo = String(order.order_no || order.id || '').slice(-3);
+        const shopBadge = (view.shopName || '?').trim().charAt(0).toUpperCase();
+        const itemPreview = parseItems(order).slice(0, 2)
+          .map((line) => `<div class="order-item">${line}</div>`)
+          .join('');
+        const cleanShopSlug = view.shopSlug && view.shopSlug !== view.shopName ? view.shopSlug : '';
+        const addressSummary = String(order.table_info || '')
+          .replace(/\s*\[货到付款\/Cash\].*$/u, '')
+          .replace(/\s*\(备注:.*$/u, '')
+          .trim();
+        const shortAddress = addressSummary.length > 58 ? `${addressSummary.slice(0, 58)}...` : addressSummary;
+
+        card.innerHTML = `
+          <div class="order-card-head">
+            <div class="order-shop-block">
+              <div class="shop-badge">${shopBadge || '店'}</div>
+              <div>
+                <div class="order-shop-name">${view.shopName}</div>
+                <div class="order-meta">#${order.order_no || order.id || '-'} · 取餐号 ${pickupNo || '-'}</div>
+              </div>
+            </div>
+            <div class="order-head-right">
+              <span class="status-chip ${statusClass}">${statusLabel}</span>
+              <div class="order-amount">${Number(order.total_amount || 0).toLocaleString()} RSD</div>
+            </div>
+          </div>
+          <div class="order-submeta compact">
+            <span class="time-pill">${timeText}</span>
+            ${cleanShopSlug ? `<span class="slug-pill">/${cleanShopSlug}</span>` : ''}
+            ${view.membershipLabel ? `<span class="mini-tag ${view.isVip ? 'vip' : 'points'}">${view.membershipLabel}</span>` : ''}
+          </div>
+          <div class="order-body-grid">
+            <div class="order-summary-box">
+              <div class="summary-title">商品摘要</div>
+              <div class="order-items">${itemPreview}</div>
+            </div>
+            ${addressSummary ? `<div class="order-location-card"><div class="summary-title">配送地址</div><div class="order-location">📍 ${shortAddress}</div></div>` : ''}
+          </div>
+        `;
+        section.appendChild(card);
+      });
+      ordersListEl.appendChild(section);
+      });
+    }
+
+    async function loadOrders() {
+      const user = readUser();
+      const phone = String(user.phone || '').trim();
+      if (!phone) {
+        setView('auth');
+        return;
+      }
+
+      setView('loading');
+
+      try {
+        const res = await fetch(`/api/user/history?phone=${encodeURIComponent(phone)}&page=1&limit=50`);
+        const data = await res.json();
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || '读取订单失败');
+        }
+
+        const sourceOrders = Array.isArray(data.orders) ? data.orders : Array.isArray(data.history) ? data.history : [];
+        const orders = filterUserVisibleOrders(sourceOrders);
+        const shopMap = await loadShopMap();
+        const summaries = buildShopMembershipSummaries(orders, shopMap);
+
+        renderOverview(summaries, orders);
+        renderMemberships(summaries);
+        renderOrders(orders, shopMap);
+        setView('ready');
+      } catch (error) {
+        setView('error', error instanceof Error ? error.message : '读取订单失败');
+      }
+    }
+
+    loadOrders();
+  </script>
+
   <style>
-    .wrap { min-height: 100vh; background: #f5f5f5; padding: 24px; }
-    h2 { margin: 0 0 10px; }
-    p { color: #666; margin: 0 0 14px; }
-    .btn { display: inline-block; text-decoration: none; background: #00b140; color: #fff; padding: 10px 14px; border-radius: 8px; }
+    .orders-page {
+      min-height: 100vh;
+      padding: 20px 16px 100px;
+      background:
+        radial-gradient(circle at top left, rgba(0, 177, 64, 0.14), transparent 28%),
+        linear-gradient(180deg, #f8fbf8 0%, #eef4ef 100%);
+    }
+    .hero-card, .state-card, .membership-card, .order-card {
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid rgba(203, 213, 225, 0.7);
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+      backdrop-filter: blur(8px);
+    }
+    .hero-card {
+      border-radius: 24px;
+      padding: 22px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .eyebrow { margin: 0 0 6px; font-size: 12px; color: #047857; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
+    h1 { margin: 0 0 8px; font-size: 30px; color: #0f172a; }
+    .hero-text { margin: 0; color: #475569; line-height: 1.7; max-width: 560px; }
+    .ghost-link, .primary-btn, .secondary-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 11px 16px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .ghost-link { color: #065f46; background: #ecfdf5; }
+    .primary-btn { background: #00b140; color: #fff; }
+    .secondary-btn { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .state-card {
+      border-radius: 20px;
+      padding: 20px;
+      margin-bottom: 18px;
+    }
+    .state-card h2, .section-head h2 { margin: 0 0 8px; color: #0f172a; }
+    .state-card p { margin: 0 0 14px; color: #64748b; line-height: 1.7; }
+    .state-card.error { border-color: rgba(248, 113, 113, 0.35); background: rgba(254, 242, 242, 0.92); }
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 20px 0 12px;
+    }
+    .section-tip { color: #64748b; font-size: 12px; }
+    .overview-hero { margin-bottom: 14px; }
+    .overview-card {
+      background: linear-gradient(145deg, #ff6b4a 0%, #ff8a5b 42%, #ffd36e 100%);
+      border: none;
+      border-radius: 26px;
+      padding: 22px;
+      display: grid;
+      gap: 14px;
+      color: #fff;
+      box-shadow: 0 24px 48px rgba(249, 115, 22, 0.30);
+    }
+    .overview-hero-top { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+    .overview-brand-block { display: flex; gap: 14px; align-items: center; }
+    .overview-logo { width: 56px; height: 56px; border-radius: 18px; background: rgba(255,255,255,0.18); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900; }
+    .overview-brand { font-size: 24px; font-weight: 900; color: #fff; }
+    .overview-sub { margin-top: 4px; color: rgba(255,255,255,0.82); font-size: 12px; }
+    .overview-latest-badge { background: rgba(255,255,255,0.18); color: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+    .overview-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .stat-box { border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 4px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08); }
+    .stat-box.accent { background: rgba(255,255,255,0.20); }
+    .stat-box.warm { background: rgba(124, 45, 18, 0.18); }
+    .stat-box.soft { background: rgba(255,255,255,0.14); }
+    .stat-box strong { color: #fff; font-size: 18px; }
+    .stat-box span { color: rgba(255,255,255,0.82); font-size: 12px; }
+    .overview-latest { color: rgba(255,255,255,0.92); font-size: 13px; font-weight: 700; }
+    .membership-rail {
+      display: grid;
+      gap: 12px;
+    }
+    .membership-card {
+      border-radius: 22px;
+      padding: 16px;
+      background: linear-gradient(180deg, rgba(255,255,255,1), rgba(255,247,237,0.96));
+      border: 1px solid #fed7aa;
+    }
+    .membership-shop-block { display: flex; gap: 12px; align-items: center; }
+    .membership-badge { width: 42px; height: 42px; border-radius: 14px; background: linear-gradient(135deg, #fb923c, #f97316); color: #fff; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 18px rgba(249,115,22,0.22); }
+    .membership-card-top, .order-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .membership-shop-name, .order-shop-name { font-size: 18px; font-weight: 900; color: #0f172a; }
+    .membership-shop-slug, .order-shop-slug { margin-left: 6px; font-size: 12px; color: #94a3b8; font-weight: 600; }
+    .membership-badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .membership-meta, .order-submeta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+      color: #64748b;
+      font-size: 12px;
+    }
+    .tag, .status-chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .tag.vip { background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; }
+    .tag.points { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+    .status-chip { background: #eff6ff; color: #1d4ed8; }
+    .membership-empty {
+      border: 1px dashed #cbd5e1;
+      border-radius: 16px;
+      padding: 18px;
+      color: #64748b;
+      background: rgba(255,255,255,0.72);
+    }
+    .order-card {
+      border-radius: 22px;
+      padding: 18px;
+      background: linear-gradient(180deg, #ffffff 0%, #fffaf7 100%);
+      box-shadow: 0 12px 24px rgba(15,23,42,0.06);
+    }
+    .orders-groups { display: grid; gap: 14px; }
+    .order-group { display: grid; gap: 12px; background: rgba(255,255,255,0.68); border: 1px solid rgba(226,232,240,0.9); border-radius: 24px; padding: 12px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.8); }
+    .order-group-title { font-size: 14px; font-weight: 900; color: #0f172a; margin: 4px 4px 2px; letter-spacing: 0.02em; }
+    .order-shop-block { display: flex; gap: 12px; align-items: center; }
+    .shop-badge { width: 46px; height: 46px; border-radius: 16px; background: linear-gradient(135deg, #fb923c, #f97316); color: #fff; font-weight: 900; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 10px 18px rgba(249,115,22,0.24); }
+    .order-meta { margin-top: 4px; color: #64748b; font-size: 12px; }
+    .order-head-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+    .order-amount { font-size: 22px; font-weight: 900; color: #dc2626; line-height: 1; }
+    .order-submeta.compact { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; color: #64748b; font-size: 12px; gap: 8px; }
+    .time-pill { display: inline-flex; align-items: center; background: #fff7ed; color: #9a3412; border-radius: 999px; padding: 5px 10px; font-weight: 700; }
+    .slug-pill { display: inline-flex; align-items: center; background: #f8fafc; color: #64748b; border-radius: 999px; padding: 5px 10px; font-weight: 700; }
+    .mini-tag { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; }
+    .mini-tag.vip { background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; }
+    .mini-tag.points { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+    .order-body-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; margin-top: 12px; }
+    .order-summary-box { border-radius: 18px; padding: 12px; background: linear-gradient(180deg, #fff7ed 0%, #fffaf5 100%); border: 1px solid #ffedd5; }
+    .order-location-card { border-radius: 18px; padding: 12px; background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%); border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 8px; }
+    .summary-title { font-size: 12px; color: #c2410c; margin-bottom: 8px; font-weight: 800; }
+    .order-items {
+      color: #334155;
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+    }
+    .order-location { color: #475569; font-size: 13px; line-height: 1.5; }
+    .status-chip.status-pending { background: #fff7ed; color: #c2410c; }
+    .status-chip.status-active { background: #eff6ff; color: #1d4ed8; }
+    .status-chip.status-done { background: #ecfdf5; color: #047857; }
+    .status-chip.status-closed { background: #f1f5f9; color: #475569; }
+    @media (max-width: 640px) {
+      .hero-card { flex-direction: column; }
+      h1 { font-size: 26px; }
+      .overview-stats { grid-template-columns: 1fr; }
+      .membership-card-top, .order-card-head { flex-direction: column; }
+      .membership-badges { justify-content: flex-start; }
+      .order-body-grid { grid-template-columns: 1fr; }
+      .order-head-right { align-items: flex-start; }
+      .order-amount { font-size: 18px; }
+    }
   </style>
 </Layout>

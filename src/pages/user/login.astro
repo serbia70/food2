@@ -2,7 +2,6 @@
 
 export const prerender = true;
 import Layout from '../../layouts/Layout.astro';
-import '../../lib/user-auth-browser';
 ---
 
 <Layout title="用户登录">
@@ -79,6 +78,96 @@ import '../../lib/user-auth-browser';
 <script src="https://accounts.google.com/gsi/client" async defer is:inline></script>
 
 <script is:inline>
+  function mapUserAuthErrorMessage(data) {
+    const raw = String(data?.error || '').trim().toLowerCase();
+    if (raw === 'invalid credentials') return '账号或密码错误';
+    if (raw) return String(data.error);
+    return '操作失败，请稍后重试';
+  }
+
+  function readStoredUser() {
+    try {
+      return JSON.parse(localStorage.getItem('food_order_user') || localStorage.getItem('user_info') || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  function saveStoredUser(nextUser) {
+    const serialized = JSON.stringify(nextUser);
+    localStorage.setItem('food_order_user', serialized);
+    localStorage.setItem('user_info', serialized);
+  }
+
+  async function postJSON(url, body) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  }
+
+  function persistUserAuth(result, fallback) {
+    const user = result?.user || {};
+    const current = readStoredUser();
+    const resolvedLoginAccount = String(user.login_account || fallback.loginAccount || fallback.account || '').trim();
+    const resolvedPhone = String(user.phone || (fallback.accountType === 'phone' ? fallback.account : '') || fallback.loginAccount || '').trim();
+    const resolvedName = String(user.name || fallback.name || current.name || '').trim();
+
+    const nextUser = {
+      ...current,
+      ...user,
+      name: resolvedName,
+      phone: resolvedPhone,
+      password: fallback.password || current.password || '',
+      login_account: resolvedLoginAccount,
+      addresses: Array.isArray(user.addresses) ? user.addresses : current.addresses || [],
+      email: user.email || current.email,
+      avatar: user.avatar || current.avatar,
+    };
+
+    saveStoredUser(nextUser);
+    const sessionToken = String(result?.sessionToken || resolvedLoginAccount || resolvedPhone).trim();
+    if (sessionToken) localStorage.setItem('user_session', sessionToken);
+    return { user: nextUser, sessionToken };
+  }
+
+  function persistGoogleUserAuth(user) {
+    const current = readStoredUser();
+    const nextUser = {
+      ...current,
+      name: user.name || current.name || '',
+      phone: user.phone || current.phone || '',
+      email: user.email || current.email,
+      avatar: user.avatar || current.avatar,
+      google_id: user.id,
+    };
+    saveStoredUser(nextUser);
+    const sessionToken = String(user.email || user.phone || user.id || '').trim();
+    if (sessionToken) localStorage.setItem('user_session', sessionToken);
+    return { user: nextUser, sessionToken };
+  }
+
+  window.__userAuthBrowser = {
+    loginUser(payload) {
+      return postJSON('/api/user/login', {
+        login_account: payload.loginAccount,
+        password: payload.password,
+      });
+    },
+    registerUser(payload) {
+      return postJSON('/api/user/register', {
+        account_type: payload.accountType,
+        account: payload.account,
+        password: payload.password,
+        name: payload.name,
+      });
+    },
+    persistUserAuth,
+    persistGoogleUserAuth,
+  };
+
   let isRegisterMode = false;
   let regAccountType = 'phone';
 
@@ -91,20 +180,7 @@ import '../../lib/user-auth-browser';
   const errorMsg = document.getElementById('error-msg');
   const typeBtns = document.querySelectorAll('.type-btn');
 
-  // 账号类型切换
-  typeBtns.forEach(btn => {
-    btn.onclick = () => {
-      typeBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      regAccountType = btn.dataset.type;
-      const placeholders = { phone: '手机号', email: '邮箱', id: '自定义ID' };
-      document.getElementById('account').placeholder = placeholders[regAccountType];
-    };
-  });
-
-  // 模式切换：登录 <-> 注册
-  modeToggle.onclick = () => {
-    isRegisterMode = !isRegisterMode;
+  function applyModeView() {
     errorMsg.style.display = 'none';
     if (isRegisterMode) {
       formTitle.innerText = '快速注册';
@@ -122,6 +198,23 @@ import '../../lib/user-auth-browser';
       modeToggle.innerText = '没有账号？立即注册';
       document.getElementById('account').placeholder = '账号 (手机号/邮箱/ID)';
     }
+  }
+
+  // 账号类型切换
+  typeBtns.forEach(btn => {
+    btn.onclick = () => {
+      typeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      regAccountType = btn.dataset.type;
+      const placeholders = { phone: '手机号', email: '邮箱', id: '自定义ID' };
+      document.getElementById('account').placeholder = placeholders[regAccountType];
+    };
+  });
+
+  // 模式切换：登录 <-> 注册
+  modeToggle.onclick = () => {
+    isRegisterMode = !isRegisterMode;
+    applyModeView();
   };
 
   // 提交表单
@@ -140,6 +233,10 @@ import '../../lib/user-auth-browser';
     errorMsg.style.display = 'none';
 
     try {
+        if (!window.__userAuthBrowser) {
+          throw new Error('登录模块未初始化，请刷新后重试');
+        }
+
         let data;
         if (isRegisterMode) {
           data = await window.__userAuthBrowser.registerUser({
@@ -185,10 +282,10 @@ import '../../lib/user-auth-browser';
             window.location.href = '/user';
         }
       } else {
-        showError(data.error || '操作失败');
+        showError(mapUserAuthErrorMessage(data));
       }
     } catch (e) {
-      showError('网络错误，请稍后重试');
+      showError(e instanceof Error ? e.message : '网络错误，请稍后重试');
     } finally {
       btn.disabled = false;
       btn.innerText = isRegisterMode ? '立即注册' : '立即登录';
@@ -200,11 +297,44 @@ import '../../lib/user-auth-browser';
     errorMsg.style.display = 'block';
   }
 
-  // ... (Google Login logic remains same) ...
+  window.handleCredentialResponse = async function(response) {
+    try {
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'google_login', token: response.credential })
+      });
+
+      const data = await res.json();
+      if (!data?.success) {
+        throw new Error(data?.error || 'Google 登录失败');
+      }
+
+      window.__userAuthBrowser.persistGoogleUserAuth({
+        id: data.user?.google_id || data.user?.id || response.credential,
+        name: data.user?.name || '',
+        email: data.user?.email || '',
+        avatar: data.user?.avatar || '',
+        phone: data.user?.phone || '',
+      });
+
+      window.location.href = '/user';
+    } catch (e) {
+      showError(e instanceof Error ? e.message : 'Google 登录失败');
+    }
+  };
 
 
   // 页面加载时尝试显示 Google One Tap 一键登录
   window.onload = function () {
+    const params = new URLSearchParams(window.location.search);
+    isRegisterMode = params.get('mode') === 'register';
+    const presetAccount = params.get('account');
+    if (presetAccount) {
+      document.getElementById('account').value = presetAccount;
+    }
+    applyModeView();
+
     if (window.google) {
       google.accounts.id.prompt(); 
     }

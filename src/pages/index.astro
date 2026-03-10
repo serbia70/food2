@@ -312,7 +312,7 @@ if (!categories || categories.length === 0) {
   </style>
 
   <script is:inline>
-    const userStorage = localStorage.getItem('user_info');
+    const userStorage = localStorage.getItem('food_order_user') || localStorage.getItem('user_info');
     const banner = document.getElementById('auth-guide-banner');
     if (!userStorage && banner) banner.style.display = 'flex';
 

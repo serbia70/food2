@@ -39,10 +39,27 @@ export default function ShopChatModal() {
 
   const t = (zh: string, sr: string) => `${zh} / ${sr}`;
 
+  const sanitizeDeliveryAddress = (raw: string) => {
+    let s = String(raw || '').trim();
+    if (!s) return '';
+    s = s.replace(/\s*\[货到付款\/Cash\].*$/u, '').trim();
+    s = s.replace(/\s*\(备注:.*$/u, '').trim();
+
+    // Remove table-related tokens (chat is for delivery only).
+    s = s.replace(/(?:桌号|\d+\s*号桌|\d+\s*桌)\s*[:：]?\s*#?\s*\d*/gu, '').trim();
+    s = s.replace(/\b(?:table|sto|hall)\s*#?\s*\d+\b/giu, '').trim();
+
+    s = s.replace(/\s{2,}/g, ' ');
+    s = s.replace(/^[,;，；\-–—\s]+|[,;，；\-–—\s]+$/g, '');
+    return s.trim();
+  };
+
   const getLatestOrderForShop = (orders: any[], shopId: number) => {
     const sid = Number(shopId || 0);
     if (!sid) return null;
-    const list = (orders || []).filter((o) => Number(o?.shop_id || o?.restaurant_id || 0) === sid);
+    const list = (orders || [])
+      .filter((o) => String(o?.order_type || '').toLowerCase() === 'delivery')
+      .filter((o) => Number(o?.shop_id || o?.restaurant_id || 0) === sid);
     if (list.length === 0) return null;
     // created_at is usually "YYYY-MM-DD HH:mm:ss"; lexical sort works.
     return [...list].sort((a, b) => String(b?.created_at || '').localeCompare(String(a?.created_at || '')))[0] || null;
@@ -256,16 +273,10 @@ export default function ShopChatModal() {
                         </div>
                       ) : null}
 
-                      <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#334155', fontWeight: 800 }}>
-                        <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`#${detail.orderNo} · Iznos: ${detail.amount}`}</span>
-                        <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`#${detail.orderNo} · 金额: ${detail.amount}`}</span>
-                      </div>
+                      <div style={{ fontSize: '12px', color: '#334155', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`#${detail.orderNo} · Iznos/金额: ${detail.amount}`}</div>
 
                       {detail.address ? (
-                        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#64748b' }}>
-                          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Adresa: ${detail.address}`}</span>
-                          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`地址: ${detail.address}`}</span>
-                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Adresa/地址: ${sanitizeDeliveryAddress(detail.address)}`}</div>
                       ) : null}
                     </>
                   );
@@ -277,10 +288,7 @@ export default function ShopChatModal() {
               {lastReservation?.reservation_time ? (
                 <div style={{ background: '#f6fbff', border: '1px solid #dbeafe', borderRadius: '14px', padding: '12px 14px', display: 'grid', gap: '8px' }}>
                   <div style={{ fontSize: '12px', color: '#1d4ed8', fontWeight: 900 }}>{t('最近预订', 'Rezervacija')}</div>
-                  <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#334155' }}>
-                    <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Vreme: ${String(lastReservation.reservation_time || '')} | Os: ${Number(lastReservation.guest_count || 0) || '-'}`}</span>
-                    <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`时间: ${String(lastReservation.reservation_time || '')} | 人数: ${Number(lastReservation.guest_count || 0) || '-'}`}</span>
-                  </div>
+                  <div style={{ fontSize: '12px', color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Vreme/时间: ${String(lastReservation.reservation_time || '')} | Os/人数: ${Number(lastReservation.guest_count || 0) || '-'}`}</div>
                 </div>
               ) : null}
             </div>

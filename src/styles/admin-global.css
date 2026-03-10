@@ -455,3 +455,38 @@ html, body {
   font-weight: 700;
   letter-spacing: 0.2px;
 }
+
+/* ==================== Mobile Chat Adaptive ==================== */
+
+.admin-chat-switch { display: none; }
+
+@media (max-width: 640px) {
+  .admin-chat-switch { display: inline-flex !important; align-items: center; justify-content: center; }
+
+  .admin-chat-panel {
+    top: 12px !important;
+    left: 12px !important;
+    right: 12px !important;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    width: auto !important;
+    height: auto !important;
+  }
+
+  .admin-chat-body {
+    grid-template-columns: 1fr !important;
+    position: relative !important;
+  }
+
+  .admin-chat-conversations { display: none !important; }
+
+  .admin-chat-panel[data-mobile-pane='list'] .admin-chat-conversations {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 2 !important;
+    background: #fff !important;
+  }
+
+  .admin-chat-panel[data-mobile-pane='list'] .admin-chat-right { display: none !important; }
+  .admin-chat-panel[data-mobile-pane='chat'] .admin-chat-right { display: flex !important; }
+}

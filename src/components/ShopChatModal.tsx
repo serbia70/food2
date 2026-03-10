@@ -12,6 +12,7 @@ type ShopMap = Record<string, { id?: string; name?: string; slug?: string }>;
 
 export default function ShopChatModal() {
   const [isOpen, setIsOpen] = useState(false);
+  const [mobilePane, setMobilePane] = useState<'chat' | 'list'>('chat');
   const [shopMap, setShopMap] = useState<ShopMap>({});
   const [history, setHistory] = useState<Order[]>([]);
   const [allChatMessages, setAllChatMessages] = useState<any[]>([]);
@@ -85,6 +86,7 @@ export default function ShopChatModal() {
     setChatShopId(nextId);
     setChatShopName(String(activeShop.name || fallbackSlug || '当前商家'));
     setChatShopSlug(String(activeShop.slug || fallbackSlug));
+    setMobilePane('chat');
     setIsOpen(true);
   };
 
@@ -117,39 +119,81 @@ export default function ShopChatModal() {
     });
   }, [isOpen, chatContext.shopId, chatContext.userPhone]);
 
-  if (!isOpen) return null;
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.52)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px' }} onClick={() => setIsOpen(false)}>
-      <div style={{ width: 'min(860px, 100%)', height: 'min(720px, 96vh)', background: '#fff', borderRadius: '20px', boxShadow: '0 24px 48px rgba(15,23,42,.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ background: 'linear-gradient(145deg, #22c55e, #059669)', color: '#fff', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: '11px', opacity: .86, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em' }}>联系商家</div>
-            <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '4px' }}>{chatContext.shopName}</div>
-            <div style={{ fontSize: '12px', opacity: .9, marginTop: '4px' }}>{chatContext.shopSlug ? `/${chatContext.shopSlug}` : '当前商家会话'}</div>
-          </div>
-          <button onClick={() => setIsOpen(false)} style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,.18)', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>×</button>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', flex: 1, minHeight: 0 }}>
-          <div style={{ background: '#fff', borderRight: '1px solid #e5e7eb', padding: '12px', display: 'grid', gap: '8px', alignContent: 'start', overflowY: 'auto' }}>
-            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800 }}>最近联系商家</div>
-            {customerConversations.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '13px', lineHeight: 1.7 }}>暂无会话记录</div> : customerConversations.map((shop) => (
-              <button key={shop.shopId} type="button" onClick={() => {
+  const renderConversationList = (opts?: { onPick?: () => void }) => {
+    return (
+      <>
+        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800 }}>最近联系商家</div>
+        {customerConversations.length === 0 ? (
+          <div style={{ color: '#94a3b8', fontSize: '13px', lineHeight: 1.7 }}>暂无会话记录</div>
+        ) : (
+          customerConversations.map((shop) => (
+            <button
+              key={shop.shopId}
+              type="button"
+              onClick={() => {
                 setChatShopId(shop.shopId);
                 setChatShopName(shop.shopName);
                 setChatShopSlug(shop.shopSlug);
                 const relatedOrder = history.find((item: any) => Number(item.shop_id || item.restaurant_id || 0) === Number(shop.shopId));
                 setSelectedOrder(relatedOrder || null);
                 loadChatMessages();
-              }} style={{ width: '100%', textAlign: 'left', border: `1px solid ${chatShopId === shop.shopId ? '#60a5fa' : '#e5e7eb'}`, background: chatShopId === shop.shopId ? '#eff6ff' : '#fff', borderRadius: '12px', padding: '10px 12px', cursor: 'pointer', display: 'grid', gap: '4px' }}>
-                <div style={{ fontWeight: 700, color: '#0f172a' }}>{shop.shopName}</div>
-                <div style={{ fontSize: '11px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shop.preview || '点击查看会话'}</div>
-              </button>
-            ))}
+                setMobilePane('chat');
+                opts?.onPick?.();
+              }}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                border: `1px solid ${chatShopId === shop.shopId ? '#60a5fa' : '#e5e7eb'}`,
+                background: chatShopId === shop.shopId ? '#eff6ff' : '#fff',
+                borderRadius: '12px',
+                padding: '10px 12px',
+                cursor: 'pointer',
+                display: 'grid',
+                gap: '4px',
+              }}
+            >
+              <div style={{ fontWeight: 700, color: '#0f172a' }}>{shop.shopName}</div>
+              <div style={{ fontSize: '11px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shop.preview || '点击查看会话'}</div>
+            </button>
+          ))
+        )}
+      </>
+    );
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.52)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px' }} onClick={() => setIsOpen(false)}>
+      <div class="shop-chat-modal" data-mobile-pane={mobilePane} style={{ width: 'min(860px, 100%)', height: 'min(720px, 96vh)', background: '#fff', borderRadius: '20px', boxShadow: '0 24px 48px rgba(15,23,42,.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ background: 'linear-gradient(145deg, #22c55e, #059669)', color: '#fff', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: '11px', opacity: .86, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em' }}>联系商家</div>
+            <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '4px' }}>{chatContext.shopName}</div>
+            <div style={{ fontSize: '12px', opacity: .9, marginTop: '4px' }}>{chatContext.shopSlug ? `/${chatContext.shopSlug}` : '当前商家会话'}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button type="button" class="shop-chat-mobile-switch" onClick={() => setMobilePane('list')} style={{ padding: '8px 10px', borderRadius: '999px', border: 'none', background: 'rgba(255,255,255,.18)', color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>会话</button>
+            <button onClick={() => setIsOpen(false)} style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,.18)', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>×</button>
+          </div>
+        </div>
+
+        <div class="shop-chat-mobile-overlay" aria-hidden={mobilePane !== 'list'}>
+          <div class="shop-chat-mobile-overlay-header">
+            <div style={{ fontWeight: 900, color: '#0f172a' }}>最近联系商家</div>
+            <button type="button" onClick={() => setMobilePane('chat')} style={{ padding: '8px 10px', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff', fontWeight: 900, cursor: 'pointer', color: '#0f172a' }}>返回</button>
+          </div>
+          <div class="shop-chat-mobile-overlay-body">
+            {renderConversationList({ onPick: () => setMobilePane('chat') })}
+          </div>
+        </div>
+
+        <div class="shop-chat-grid" style={{ display: 'grid', gridTemplateColumns: '220px 1fr', flex: 1, minHeight: 0 }}>
+          <div class="shop-chat-left" style={{ background: '#fff', borderRight: '1px solid #e5e7eb', padding: '12px', display: 'grid', gap: '8px', alignContent: 'start', overflowY: 'auto' }}>
+            {renderConversationList()}
           </div>
 
-          <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px', background: '#fff', minHeight: 0 }}>
+          <div class="shop-chat-right" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px', background: '#fff', minHeight: 0 }}>
             <div style={{ display: 'grid', gap: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', border: '1px solid #e5e7eb', borderRadius: '14px', background: '#fffaf7' }}>
                 <div>
@@ -241,6 +285,46 @@ export default function ShopChatModal() {
             <button onClick={() => setIsOpen(false)} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#475569', fontWeight: 700, cursor: 'pointer' }}>关闭</button>
           </div>
         </div>
+
+        <style>{`
+          .shop-chat-mobile-switch { display: none; }
+          .shop-chat-mobile-overlay { display: none; }
+
+          @media (max-width: 640px) {
+            .shop-chat-mobile-switch { display: inline-flex !important; align-items: center; justify-content: center; }
+            .shop-chat-grid { grid-template-columns: 1fr !important; }
+            .shop-chat-left { display: none !important; }
+
+            .shop-chat-mobile-overlay {
+              position: absolute;
+              inset: 0;
+              background: #fff;
+              z-index: 5;
+              display: none;
+              flex-direction: column;
+            }
+            .shop-chat-modal[data-mobile-pane='list'] .shop-chat-mobile-overlay { display: flex !important; }
+            .shop-chat-mobile-overlay-header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 10px;
+              padding: 14px 14px;
+              border-bottom: 1px solid #e5e7eb;
+              background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+            }
+            .shop-chat-mobile-overlay-body {
+              flex: 1;
+              min-height: 0;
+              overflow-y: auto;
+              padding: 12px;
+              display: grid;
+              gap: 8px;
+              align-content: start;
+              -webkit-overflow-scrolling: touch;
+            }
+          }
+        `}</style>
       </div>
     </div>
   );

@@ -269,7 +269,13 @@ function renderUserPicker(phones: string[]) {
     });
     badge.textContent = String(Math.min(99, n));
     btn.append(left, badge);
-    btn.addEventListener('click', () => openChatForPhone(p));
+    btn.addEventListener('click', () => {
+      openChatForPhone(p);
+      try {
+        const panel = document.getElementById('admin-chat-panel') as HTMLElement | null;
+        if (panel) panel.dataset.mobilePane = 'chat';
+      } catch (e) {}
+    });
     wrap.appendChild(btn);
   });
   listEl.replaceChildren(wrap);
@@ -569,7 +575,10 @@ export function openChatForPhone(phone: string) {
   currentChatUserPhone = phone;
   adminChatOpen = true;
   const panel = document.getElementById('admin-chat-panel');
-  if (panel) panel.style.display = 'flex';
+  if (panel) {
+    (panel as HTMLElement).style.display = 'flex';
+    try { (panel as HTMLElement).dataset.mobilePane = 'chat'; } catch (e) {}
+  }
   const titleEl = document.getElementById('admin-chat-title');
   if (titleEl) titleEl.textContent = `与用户 ${phone} 聊天`;
   hideAdminChatBadge();
@@ -582,7 +591,12 @@ export function openChatForPhone(phone: string) {
 export function toggleAdminChat() {
   adminChatOpen = !adminChatOpen;
   const panel = document.getElementById('admin-chat-panel');
-  if (panel) panel.style.display = adminChatOpen ? 'flex' : 'none';
+  if (panel) {
+    (panel as HTMLElement).style.display = adminChatOpen ? 'flex' : 'none';
+    if (adminChatOpen) {
+      try { (panel as HTMLElement).dataset.mobilePane = 'chat'; } catch (e) {}
+    }
+  }
   if (!adminChatOpen) {
     currentChatUserPhone = '';
     return;
@@ -606,6 +620,8 @@ export function initAdminChatUI() {
   
   const panel = document.createElement('div');
   panel.id = 'admin-chat-panel';
+  panel.className = 'admin-chat-panel';
+  try { panel.dataset.mobilePane = 'chat'; } catch (e) {}
   panel.style.cssText = `
     display: none;
     position: fixed;
@@ -621,6 +637,7 @@ export function initAdminChatUI() {
     overflow: hidden;
   `;
   const header = document.createElement('div');
+  header.className = 'admin-chat-header';
   setStyles(header, {
     padding: '12px',
     background: '#0891b2',
@@ -634,25 +651,56 @@ export function initAdminChatUI() {
   title.id = 'admin-chat-title';
   title.style.fontWeight = '600';
   title.textContent = '用户聊天';
+
+  const controls = document.createElement('div');
+  setStyles(controls, { display: 'flex', alignItems: 'center', gap: '8px' });
+
+  const switchBtn = document.createElement('button');
+  switchBtn.id = 'admin-chat-switch';
+  switchBtn.className = 'admin-chat-switch';
+  switchBtn.type = 'button';
+  setStyles(switchBtn, {
+    padding: '6px 10px',
+    borderRadius: '999px',
+    border: 'none',
+    background: 'rgba(255,255,255,.18)',
+    color: '#fff',
+    fontWeight: '800',
+    cursor: 'pointer',
+    fontSize: '12px',
+  });
+  switchBtn.textContent = '会话';
+  switchBtn.addEventListener('click', () => {
+    const el = document.getElementById('admin-chat-panel') as HTMLElement | null;
+    if (!el) return;
+    const cur = String(el.dataset.mobilePane || 'chat');
+    el.dataset.mobilePane = cur === 'list' ? 'chat' : 'list';
+  });
+
   const close = document.createElement('span');
   close.id = 'admin-chat-close';
   setStyles(close, { cursor: 'pointer', fontSize: '18px' });
   close.textContent = '×';
-  header.append(title, close);
+
+  controls.append(switchBtn, close);
+  header.append(title, controls);
 
   const body = document.createElement('div');
+  body.className = 'admin-chat-body';
   setStyles(body, { display: 'grid', gridTemplateColumns: '220px 1fr', flex: '1', minHeight: '0' });
-
+  
   const conversations = document.createElement('div');
   conversations.id = 'admin-chat-conversations';
+  conversations.className = 'admin-chat-conversations';
   setStyles(conversations, {
     borderRight: '1px solid #e5e7eb',
     background: '#fff',
     overflowY: 'auto',
     padding: '10px',
   });
-
+  
   const chatSide = document.createElement('div');
+  chatSide.className = 'admin-chat-right';
   // Important: allow flex children (messages) to shrink, otherwise footer may be pushed out
   // and hidden by panel overflow on shorter viewports.
   setStyles(chatSide, { display: 'flex', flexDirection: 'column', minWidth: '0', minHeight: '0', background: '#f8fafc' });

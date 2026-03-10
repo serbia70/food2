@@ -426,6 +426,22 @@ export default function ReservationModal({ restaurantId, onClose, requiresPreOrd
         return;
       }
 
+      try {
+        const p = String(customerPhone || '').trim();
+        const slug = String(getSlug() || '').trim();
+        if (p && slug) {
+          const key = `user_last_reservation:${p}:${slug}`;
+          const stored = {
+            reservation_id: data?.reservation_id || null,
+            reservation_time: payload.reservation_time,
+            guest_count: payload.guest_count,
+            customer_phone: payload.customer_phone,
+            created_at: new Date().toISOString(),
+          };
+          localStorage.setItem(key, JSON.stringify(stored));
+        }
+      } catch {}
+
       const dineTypeText = "堂食 / U restoranu";
       const preOrderText =
         preOrderMode === "none"

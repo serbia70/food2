@@ -23,6 +23,7 @@ export default function ShopChatModal() {
   const [chatShopName, setChatShopName] = useState('当前商家');
   const [chatShopSlug, setChatShopSlug] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [lastReservation, setLastReservation] = useState<any>(null);
 
   const user = getUserInfo();
   const chatContext = buildShopChatContext({
@@ -37,6 +38,31 @@ export default function ShopChatModal() {
   const selectedOrderItems = selectedOrder ? buildOrderItemsPreview(selectedOrder, { maxItems: 3 }) : null;
 
   const t = (zh: string, sr: string) => `${zh} / ${sr}`;
+
+  const getLatestOrderForShop = (orders: any[], shopId: number) => {
+    const sid = Number(shopId || 0);
+    if (!sid) return null;
+    const list = (orders || []).filter((o) => Number(o?.shop_id || o?.restaurant_id || 0) === sid);
+    if (list.length === 0) return null;
+    // created_at is usually "YYYY-MM-DD HH:mm:ss"; lexical sort works.
+    return [...list].sort((a, b) => String(b?.created_at || '').localeCompare(String(a?.created_at || '')))[0] || null;
+  };
+
+  const loadLastReservationLocal = (phone: string, shopSlug: string) => {
+    try {
+      const p = String(phone || '').trim();
+      const slug = String(shopSlug || '').trim();
+      if (!p || !slug) return null;
+      const key = `user_last_reservation:${p}:${slug}`;
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
 
   const loadShopMap = async () => {
     try {
@@ -55,13 +81,15 @@ export default function ShopChatModal() {
     return {} as ShopMap;
   };
 
-  const loadHistory = async (phone: string) => {
+  const loadHistory = async (phone: string, shopId: number) => {
     if (!phone) return;
     try {
       const res = await fetch(`/api/user/history?phone=${encodeURIComponent(phone)}&page=1&limit=20`);
       const data = await res.json();
       if (data.success) {
-        setHistory(Array.isArray(data.orders) ? data.orders : Array.isArray(data.history) ? data.history : []);
+        const orders = Array.isArray(data.orders) ? data.orders : Array.isArray(data.history) ? data.history : [];
+        setHistory(orders);
+        setSelectedOrder(getLatestOrderForShop(orders, shopId));
       }
     } catch {}
   };
@@ -102,10 +130,17 @@ export default function ShopChatModal() {
 
   useEffect(() => {
     if (isOpen) {
-      loadHistory(user.phone || user.login_account || '');
+      loadHistory(user.phone || user.login_account || '', chatShopId);
       loadChatMessages();
     }
   }, [isOpen, chatShopId, chatContext.userPhone]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const phone = String(user.phone || user.login_account || '').trim();
+    const slug = String(chatContext.shopSlug || '').trim();
+    setLastReservation(loadLastReservationLocal(phone, slug));
+  }, [isOpen, chatContext.shopSlug, user.phone, user.login_account]);
 
   useEffect(() => {
     if (!isOpen || !chatContext.shopId || !chatContext.userPhone) return;
@@ -138,7 +173,7 @@ export default function ShopChatModal() {
                 setChatShopId(shop.shopId);
                 setChatShopName(shop.shopName);
                 setChatShopSlug(shop.shopSlug);
-                const relatedOrder = history.find((item: any) => Number(item.shop_id || item.restaurant_id || 0) === Number(shop.shopId));
+                const relatedOrder = getLatestOrderForShop(history as any[], shop.shopId);
                 setSelectedOrder(relatedOrder || null);
                 loadChatMessages();
                 setMobilePane('chat');
@@ -209,25 +244,45 @@ export default function ShopChatModal() {
               </div>
 
               <div style={{ background: '#fffaf7', border: '1px solid #ffedd5', borderRadius: '14px', padding: '14px', display: 'grid', gap: '10px' }}>
-                <div style={{ fontSize: '12px', color: '#9a3412', fontWeight: 900 }}>{t('订单协助信息', 'Pomoc za porudzbinu')}</div>
+                <div style={{ fontSize: '12px', color: '#9a3412', fontWeight: 900 }}>{t('最近外卖', 'Poslednja porudzbina')}</div>
                 {selectedOrder ? (() => {
                   const detail = buildOrderDetailState(selectedOrder);
                   return (
                     <>
-                      <div style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>#{detail.orderNo}</div>
                       {selectedOrderItems && (selectedOrderItems.zh || selectedOrderItems.sr) ? (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', fontSize: '12px', color: '#475569' }}>
+                        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#475569' }}>
                           <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Jela: ${selectedOrderItems.sr || selectedOrderItems.zh}`}</span>
-                          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right' }}>{`菜品: ${selectedOrderItems.zh || selectedOrderItems.sr}`}</span>
+                          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`菜品: ${selectedOrderItems.zh || selectedOrderItems.sr}`}</span>
                         </div>
                       ) : null}
-                      <div style={{ fontSize: '13px', color: '#475569' }}>{detail.statusLabel} · {detail.amount}</div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>{detail.createdAt}</div>
-                      {detail.address ? <div style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.6 }}>📍 {detail.address}</div> : null}
+
+                      <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#334155', fontWeight: 800 }}>
+                        <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`#${detail.orderNo} · Iznos: ${detail.amount}`}</span>
+                        <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`#${detail.orderNo} · 金额: ${detail.amount}`}</span>
+                      </div>
+
+                      {detail.address ? (
+                        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#64748b' }}>
+                          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Adresa: ${detail.address}`}</span>
+                          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`地址: ${detail.address}`}</span>
+                        </div>
+                      ) : null}
                     </>
                   );
-                })() : <div style={{ color: '#9a3412', fontSize: '13px', lineHeight: 1.7 }}>{t('当前会话暂无绑定订单。', 'Nema vezane porudzbine.')}</div>}
+                })() : (
+                  <div style={{ color: '#9a3412', fontSize: '13px', lineHeight: 1.7 }}>{t('暂无外卖订单。', 'Nema porudzbine.')}</div>
+                )}
               </div>
+
+              {lastReservation?.reservation_time ? (
+                <div style={{ background: '#f6fbff', border: '1px solid #dbeafe', borderRadius: '14px', padding: '12px 14px', display: 'grid', gap: '8px' }}>
+                  <div style={{ fontSize: '12px', color: '#1d4ed8', fontWeight: 900 }}>{t('最近预订', 'Rezervacija')}</div>
+                  <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#334155' }}>
+                    <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Vreme: ${String(lastReservation.reservation_time || '')} | Os: ${Number(lastReservation.guest_count || 0) || '-'}`}</span>
+                    <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`时间: ${String(lastReservation.reservation_time || '')} | 人数: ${Number(lastReservation.guest_count || 0) || '-'}`}</span>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div id="shop-chat-messages" style={{ flex: 1, minHeight: 0, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '12px', overflowY: 'auto', display: 'grid', gap: '8px' }}>

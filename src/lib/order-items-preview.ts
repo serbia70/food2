@@ -1,5 +1,43 @@
 type OrderLike = Record<string, any>;
 
+function hasCJK(s: string) {
+  return /[\u4e00-\u9fff]/.test(String(s || ''));
+}
+
+function hasLatinLike(s: string) {
+  // Covers basic latin and common Serbian latin letters.
+  return /[A-Za-z\u010C\u010D\u0106\u0107\u0110\u0111\u0160\u0161\u017D\u017E]/.test(String(s || ''));
+}
+
+function pickZhSr(nameRaw: string, subRaw: string) {
+  const a = String(nameRaw || '').trim();
+  const b = String(subRaw || '').trim();
+  if (!a && !b) return { zh: '', sr: '' };
+  if (!b) return { zh: a, sr: a };
+  if (!a) return { zh: b, sr: b };
+
+  const aCJK = hasCJK(a);
+  const bCJK = hasCJK(b);
+  const aLatin = hasLatinLike(a);
+  const bLatin = hasLatinLike(b);
+
+  // Typical: name=Chinese, sub=Serbian
+  if (aCJK && bLatin && !bCJK) return { zh: a, sr: b };
+  // Some data sources may flip them: name=Serbian, sub=Chinese
+  if (bCJK && aLatin && !aCJK) return { zh: b, sr: a };
+
+  // If one side clearly looks Chinese, treat it as zh.
+  if (aCJK && !bCJK) return { zh: a, sr: b };
+  if (bCJK && !aCJK) return { zh: b, sr: a };
+
+  // If one side clearly looks latin, treat it as sr.
+  if (bLatin && !aLatin) return { zh: a, sr: b };
+  if (aLatin && !bLatin) return { zh: b, sr: a };
+
+  // Fallback to original mapping.
+  return { zh: a, sr: b };
+}
+
 function toItemArray(itemsRaw: unknown): any[] {
   if (!itemsRaw) return [];
   if (Array.isArray(itemsRaw)) return itemsRaw;
@@ -21,14 +59,17 @@ export function buildOrderItemsPreview(order: OrderLike | null | undefined, opts
 
   const normalized = arr
     .map((it: any) => {
-      const zh = String((it && (it.name || it.product_name)) || '').trim();
-      if (!zh) return null;
-      const sr = String((it && (it.sub_name || it.subName)) || zh).trim();
+      const nameRaw = String((it && (it.name || it.product_name)) || '').trim();
+      const subRaw = String((it && (it.sub_name || it.subName)) || '').trim();
+      if (!nameRaw && !subRaw) return null;
+
+      const { zh, sr } = pickZhSr(nameRaw, subRaw);
+      if (!zh && !sr) return null;
       const q = Number((it && (it.quantity || it.qty)) || 1);
       const qty = Number.isFinite(q) && q > 1 ? q : 1;
       return {
         zh: `${zh}${qty > 1 ? ` x${qty}` : ''}`,
-        sr: `${sr}${qty > 1 ? ` x${qty}` : ''}`,
+        sr: `${sr || zh}${qty > 1 ? ` x${qty}` : ''}`,
       };
     })
     .filter(Boolean) as Array<{ zh: string; sr: string }>;

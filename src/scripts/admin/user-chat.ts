@@ -325,9 +325,9 @@ async function loadCustomerSummary(phone: string) {
 		const latestItems = summary.latestOrder ? buildOrderItemsPreview(summary.latestOrder, { maxItems: 3 }) : { zh: '', sr: '', totalItems: 0 };
 		const latestItemsRow = (latestItems.zh || latestItems.sr)
 			? `
-				<div style="margin-top:6px;display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#475569;">
+				<div style="margin-top:6px;display:flex;gap:12px;font-size:12px;color:#475569;">
 					<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(`Jela: ${latestItems.sr || latestItems.zh}`)}</span>
-					<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;">${escapeHtml(`菜品: ${latestItems.zh || latestItems.sr}`)}</span>
+					<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(`菜品: ${latestItems.zh || latestItems.sr}`)}</span>
 				</div>
 			`
 			: '';

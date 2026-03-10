@@ -29,3 +29,14 @@ test('items_json 为对象时也可解析', () => {
   assert.equal(p.zh, '鱼香肉丝 x2');
   assert.equal(p.sr, 'Svinjetina sa ljutim sosom x2');
 });
+
+test('name/sub_name 反转时应自动纠正 zh/sr', () => {
+  const order = {
+    items_json: JSON.stringify([
+      { name: 'Svinjetina riblji miris na trakice', sub_name: '鱼香肉丝', quantity: 1 },
+    ]),
+  };
+  const p = buildOrderItemsPreview(order, { maxItems: 3 });
+  assert.equal(p.zh, '鱼香肉丝');
+  assert.equal(p.sr, 'Svinjetina riblji miris na trakice');
+});

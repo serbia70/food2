@@ -32,6 +32,7 @@ type Props = {
   hasMoreHistory: boolean;
   isLoadingMore: boolean;
   phoneConflictGuide: ConflictGuide;
+  variant?: 'modal' | 'page';
   onContinueShop?: () => void;
   onViewAllOrders?: () => void;
   onManageAddress?: () => void;
@@ -176,6 +177,7 @@ function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onC
 
 export default function UserCenterPanel(props: Props) {
   const {
+    variant: variantProp,
     userInfo,
     currentShopName,
     currentShopSlug,
@@ -201,6 +203,8 @@ export default function UserCenterPanel(props: Props) {
     initialChatOpen,
     openChatSignal,
   } = props;
+
+  const variant = variantProp ?? 'modal';
 
   const { currentShopOrders, otherOrders } = splitOrdersByCurrentShop(history as any[], {
     id: currentShopId,
@@ -341,7 +345,7 @@ export default function UserCenterPanel(props: Props) {
   const customerConversations = buildCustomerConversationList(allChatMessages as any[], shopMap as any);
 
   return (
-    <div className="user-center">
+    <div className={`user-center user-center--${variant}`}>
       <style>{`
         @keyframes userCenterPopIn {
           from { opacity: 0; transform: translateY(14px) scale(.98); }

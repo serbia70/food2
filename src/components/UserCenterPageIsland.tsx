@@ -195,7 +195,7 @@ export default function UserCenterPageIsland() {
         </section>
         <div className="user-page-guest-note">未登录也可以浏览首页与店铺，登录后可同步订单与权益。</div>
         <style>{`
-          .user-page-shell{min-height:100vh;background:radial-gradient(circle at top left, rgba(0,177,64,.16), transparent 35%),radial-gradient(circle at 80% 10%, rgba(255,209,1,.14), transparent 32%),linear-gradient(180deg,#f7fbf7 0%,#eef6ef 100%);padding:18px 18px 96px}
+          .user-page-shell{height:100vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:radial-gradient(circle at top left, rgba(0,177,64,.16), transparent 35%),radial-gradient(circle at 80% 10%, rgba(255,209,1,.14), transparent 32%),linear-gradient(180deg,#f7fbf7 0%,#eef6ef 100%);padding:18px 18px 96px}
           .user-page-guest{max-width:920px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:22px;padding:24px 22px;box-shadow:0 18px 36px rgba(15,23,42,.08)}
           .user-page-eyebrow{margin:0 0 8px;color:#047857;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
           .user-page-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
@@ -217,9 +217,6 @@ export default function UserCenterPageIsland() {
             <div className="user-page-title-main">个人中心</div>
           </div>
           <div className="user-page-appbar-actions">
-            {currentShopSlug ? (
-              <a className="user-page-appbar-link" href={`/${currentShopSlug}`}>进入当前店铺</a>
-            ) : null}
             <a className="user-page-appbar-link" href="/">返回首页</a>
           </div>
         </div>
@@ -264,10 +261,10 @@ export default function UserCenterPageIsland() {
       </main>
 
       <style>{`
-        .user-page-shell{min-height:100vh;background:radial-gradient(circle at 12% 0%, rgba(0,177,64,.16), transparent 38%),radial-gradient(circle at 86% 12%, rgba(255,209,1,.12), transparent 36%),linear-gradient(180deg,#f7fbf7 0%,#eef6ef 100%);padding:0}
+        .user-page-shell{height:100vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:radial-gradient(circle at 12% 0%, rgba(0,177,64,.16), transparent 38%),radial-gradient(circle at 86% 12%, rgba(255,209,1,.12), transparent 36%),linear-gradient(180deg,#f7fbf7 0%,#eef6ef 100%);padding:0}
 
         .user-page-appbar{position:sticky;top:0;z-index:30;background:rgba(247,251,247,.82);backdrop-filter:saturate(140%) blur(10px);border-bottom:1px solid rgba(226,232,240,.9)}
-        .user-page-appbar-inner{max-width:960px;margin:0 auto;display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding:14px 16px}
+        .user-page-appbar-inner{max-width:1160px;margin:0 auto;display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding:14px 16px}
         .user-page-title-eyebrow{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#047857;opacity:.95}
         .user-page-title-main{font-size:18px;font-weight:900;color:#0f172a;line-height:1.1;margin-top:2px}
         .user-page-appbar-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
@@ -275,7 +272,7 @@ export default function UserCenterPageIsland() {
         .user-page-appbar-link:active{transform:translateY(1px)}
 
         .user-page-main{padding:14px 0 96px}
-        .user-page-container{max-width:960px;margin:0 auto;padding:0 16px}
+        .user-page-container{max-width:1160px;margin:0 auto;padding:0 16px}
 
         @media (min-width:768px){
           .user-page-appbar-inner{padding:16px 20px}

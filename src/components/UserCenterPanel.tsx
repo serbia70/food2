@@ -205,6 +205,7 @@ export default function UserCenterPanel(props: Props) {
   } = props;
 
   const variant = variantProp ?? 'modal';
+  const isPageVariant = variant === 'page';
 
   const { currentShopOrders, otherOrders } = splitOrdersByCurrentShop(history as any[], {
     id: currentShopId,
@@ -278,7 +279,11 @@ export default function UserCenterPanel(props: Props) {
   };
 
   const openShopChat = (order?: any) => {
-    const targetOrder = order || currentShopOrders[0] || null;
+    const targetOrder = order || (isPageVariant ? history[0] : currentShopOrders[0]) || history[0] || null;
+    if (isPageVariant && !targetOrder) {
+      alert('暂无订单，暂时无法联系商家');
+      return;
+    }
     if (targetOrder?.shop_id) {
       setChatShopId(Number(targetOrder.shop_id));
       const nextView = buildUserOrderView(targetOrder, shopMap);
@@ -368,6 +373,76 @@ export default function UserCenterPanel(props: Props) {
         .user-center--page .current-shop-card {
           background: linear-gradient(145deg, rgba(0,177,64,.12) 0%, rgba(255,255,255,1) 46%, rgba(255,209,1,.10) 100%);
           overflow: hidden;
+        }
+
+        .user-center--page .page-overview-card {
+          border-radius: 18px;
+          border: 1px solid rgba(226,232,240,.9);
+          background: rgba(255,255,255,.92);
+          box-shadow: 0 18px 36px rgba(15,23,42,.06);
+          padding: 16px;
+          display: flex;
+          gap: 14px;
+          align-items: flex-start;
+          justify-content: space-between;
+          flex-wrap: wrap;
+        }
+
+        .user-center--page .page-overview-title {
+          font-size: 12px;
+          color: #065f46;
+          font-weight: 900;
+          letter-spacing: .08em;
+          text-transform: uppercase;
+          margin: 0 0 8px;
+        }
+
+        .user-center--page .page-overview-main {
+          font-size: 18px;
+          font-weight: 900;
+          color: #0f172a;
+          line-height: 1.15;
+        }
+
+        .user-center--page .page-overview-sub {
+          margin-top: 6px;
+          font-size: 12px;
+          color: #64748b;
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .user-center--page .page-overview-actions {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .user-center--page .page-pill-link {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 10px 14px;
+          border-radius: 999px;
+          border: 1px solid rgba(203,213,225,.95);
+          background: #fff;
+          color: #0f172a;
+          font-size: 12px;
+          font-weight: 900;
+          cursor: pointer;
+        }
+
+        .user-center--page .page-pill-link.primary {
+          border: none;
+          background: linear-gradient(135deg, #00b140, #00d250);
+          color: #fff;
+          box-shadow: 0 14px 26px rgba(0,177,64,.18);
+        }
+
+        .user-center--page .page-pill-link:active {
+          transform: translateY(1px);
         }
 
         .user-center--page .current-shop-title {
@@ -472,6 +547,11 @@ export default function UserCenterPanel(props: Props) {
           letter-spacing: .02em;
         }
 
+        .user-center--page .user-orders-shell {
+          display: grid;
+          gap: 10px;
+        }
+
         @media (min-width: 768px) {
           .user-center--page {
             gap: 16px;
@@ -483,26 +563,70 @@ export default function UserCenterPanel(props: Props) {
             grid-template-columns: repeat(3, minmax(0, 1fr));
           }
         }
+
+        @media (min-width: 1024px) {
+          .user-center--page {
+            grid-template-columns: 420px 1fr;
+            align-items: start;
+          }
+          .user-center--page .profile-quick-grid {
+            grid-template-columns: 1fr;
+          }
+          .user-center--page .user-orders-shell {
+            grid-column: 2;
+            grid-row: 1 / span 20;
+          }
+        }
       `}</style>
-      <div className="current-shop-card">
-        <div className="current-shop-title">当前店铺</div>
-        <div className="current-shop-name">{currentShopName}</div>
-        <div className="current-shop-meta">{currentShopSlug ? `/${currentShopSlug}` : '未识别店铺 slug'}</div>
-        <div className="shop-actions">
-          <button className="shop-action-btn" onClick={onContinueShop}>返回本店继续下单</button>
-          <button className="shop-action-btn" onClick={onViewAllOrders}>查看全部外卖订单</button>
+      {!isPageVariant ? (
+        <div className="current-shop-card">
+          <div className="current-shop-title">当前店铺</div>
+          <div className="current-shop-name">{currentShopName}</div>
+          <div className="current-shop-meta">{currentShopSlug ? `/${currentShopSlug}` : '未识别店铺 slug'}</div>
+          <div className="shop-actions">
+            <button className="shop-action-btn" onClick={onContinueShop}>返回本店继续下单</button>
+            <button className="shop-action-btn" onClick={onViewAllOrders}>查看全部外卖订单</button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <section className="page-overview-card">
+          <div style={{ flex: 1, minWidth: '240px' }}>
+            <div className="page-overview-title">Platform Center</div>
+            <div className="page-overview-main">{userInfo?.name || userInfo?.phone || '我的账号'}</div>
+            <div className="page-overview-sub">
+              <span>账号: {userInfo?.login_account || userInfo?.phone || '-'}</span>
+              <span>手机号: {userInfo?.phone || '未绑定'}</span>
+              <span>订单: {history.length}{hasMoreHistory ? '+' : ''}</span>
+            </div>
+          </div>
+          <div className="page-overview-actions">
+            <button type="button" className="page-pill-link primary" onClick={onViewAllOrders}>查看订单</button>
+            <button type="button" className="page-pill-link" onClick={onEditNickname}>修改昵称</button>
+            <button type="button" className="page-pill-link" onClick={onEditPhone}>修改手机号</button>
+            <button type="button" className="page-pill-link" onClick={onLogout}>退出登录</button>
+          </div>
+        </section>
+      )}
 
       <div className="profile-quick-grid">
         <div className="profile-quick-card">
-          <div className="profile-quick-title">当前地址摘要</div>
+          <div className="profile-quick-title">地址摘要</div>
           <div className="profile-quick-value">{addressSummary}</div>
         </div>
         <div className="profile-quick-card">
-          <div className="profile-quick-title">当前店铺权益</div>
+          <div className="profile-quick-title">会员权益</div>
           <div className="profile-quick-value">{membershipLabel || '暂无积分或 VIP 权益'}</div>
         </div>
+        {isPageVariant ? (
+          <div className="profile-quick-card">
+            <div className="profile-quick-title">快捷入口</div>
+            <div className="profile-quick-value" style={{ marginTop: '6px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button className="shop-action-btn" onClick={() => setIsAddressEditorOpen(true)}>地址管理</button>
+              <button className="shop-action-btn" onClick={() => setIsCouponPanelOpen(true)}>红包卡券</button>
+              <button className="shop-action-btn" onClick={() => openShopChat()}>联系客服</button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {phoneConflictGuide && (
@@ -515,12 +639,15 @@ export default function UserCenterPanel(props: Props) {
         </div>
       )}
 
-      <div className="tool-link-row">
-        <button className="tool-link-btn" style={{ boxShadow: '0 10px 20px rgba(55,48,163,.10)' }} onClick={() => setIsAddressEditorOpen(true)}>地址管理</button>
-        <button className="tool-link-btn" style={{ boxShadow: '0 10px 20px rgba(55,48,163,.10)' }} onClick={() => setIsCouponPanelOpen(true)}>红包卡券</button>
-        <button className="tool-link-btn" style={{ boxShadow: '0 10px 20px rgba(55,48,163,.10)' }} onClick={() => openShopChat()}>联系客服</button>
-      </div>
+      {!isPageVariant ? (
+        <div className="tool-link-row">
+          <button className="tool-link-btn" style={{ boxShadow: '0 10px 20px rgba(55,48,163,.10)' }} onClick={() => setIsAddressEditorOpen(true)}>地址管理</button>
+          <button className="tool-link-btn" style={{ boxShadow: '0 10px 20px rgba(55,48,163,.10)' }} onClick={() => setIsCouponPanelOpen(true)}>红包卡券</button>
+          <button className="tool-link-btn" style={{ boxShadow: '0 10px 20px rgba(55,48,163,.10)' }} onClick={() => openShopChat()}>联系客服</button>
+        </div>
+      ) : null}
 
+      {!isPageVariant ? (
       <div className="user-profile">
         <div className="user-info-row">
           <div className="user-avatar-circle">{userInfo?.name?.charAt(0) || 'U'}</div>
@@ -539,32 +666,51 @@ export default function UserCenterPanel(props: Props) {
         </div>
         <button className="btn-logout-simple" onClick={onLogout}>退出 / Logout</button>
       </div>
+      ) : null}
 
-      <div className="orders-tip">历史订单 / Istorija narudžbina</div>
-      <div className="history-list">
+      <div className="user-orders-shell">
+        <div className="orders-tip">外卖订单 / Narudžbine</div>
+        <div className="history-list">
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px' }}>加载中...</div>
         ) : history.length === 0 ? (
-          <div className="no-orders">📋 暂无历史订单</div>
+          <div className="no-orders">
+            📋 暂无历史订单
+            {isPageVariant ? (
+              <div style={{ marginTop: '12px' }}>
+                <a href="/" className="page-pill-link primary" style={{ textDecoration: 'none' }}>去首页逛逛</a>
+              </div>
+            ) : null}
+          </div>
         ) : (
           <>
-            <div className="orders-section-block">
-              <div className="orders-section-title">当前店铺订单</div>
-              {currentShopOrders.length > 0 ? currentShopOrders.map(renderInteractiveOrderCard) : (
-                <div style={{ background: '#fff7ed', border: '1px dashed #fdba74', color: '#9a3412', borderRadius: '12px', padding: '14px', fontSize: '13px', lineHeight: 1.7 }}>
-                  {buildCurrentShopEmptyStateMessage(currentShopName)}
-                </div>
-              )}
-            </div>
-            {otherOrders.length > 0 && (
+            {isPageVariant ? (
               <div className="orders-section-block">
-                <div className="orders-section-title" style={{ color: '#475569' }}>其他店铺订单</div>
-                {otherOrders.map(renderInteractiveOrderCard)}
+                <div className="orders-section-title">全部订单</div>
+                {history.map(renderInteractiveOrderCard)}
               </div>
+            ) : (
+              <>
+                <div className="orders-section-block">
+                  <div className="orders-section-title">当前店铺订单</div>
+                  {currentShopOrders.length > 0 ? currentShopOrders.map(renderInteractiveOrderCard) : (
+                    <div style={{ background: '#fff7ed', border: '1px dashed #fdba74', color: '#9a3412', borderRadius: '12px', padding: '14px', fontSize: '13px', lineHeight: 1.7 }}>
+                      {buildCurrentShopEmptyStateMessage(currentShopName)}
+                    </div>
+                  )}
+                </div>
+                {otherOrders.length > 0 && (
+                  <div className="orders-section-block">
+                    <div className="orders-section-title" style={{ color: '#475569' }}>其他店铺订单</div>
+                    {otherOrders.map(renderInteractiveOrderCard)}
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
         {hasMoreHistory && <button className="btn-load-more" onClick={onLoadMore}>{isLoadingMore ? '加载中...' : '加载更多 / Više'}</button>}
+        </div>
       </div>
 
       {isAddressEditorOpen && (

@@ -45,6 +45,7 @@ type Props = {
   onLoadMore?: () => void;
   initialChatOpen?: boolean;
   openChatSignal?: number;
+  onServiceClose?: () => void;
 };
 
 const overlayPanelStyle = {
@@ -202,6 +203,7 @@ export default function UserCenterPanel(props: Props) {
     onLoadMore,
     initialChatOpen,
     openChatSignal,
+    onServiceClose,
   } = props;
 
   const variant = variantProp ?? 'modal';
@@ -744,7 +746,7 @@ export default function UserCenterPanel(props: Props) {
       )}
 
       {isServicePanelOpen && (
-        <div style={overlayPanelStyle} onClick={() => setIsServicePanelOpen(false)}>
+        <div style={overlayPanelStyle} onClick={closeServicePanel}>
           <div style={{ ...overlayCardStyle, maxWidth: '860px', padding: '0', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ background: 'linear-gradient(145deg, #ff6b4a 0%, #ff8a5b 42%, #ffd36e 100%)', padding: '18px 20px', color: '#fff' }}>
               <div style={{ fontSize: '11px', opacity: 0.85, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>联系商家</div>
@@ -830,7 +832,7 @@ export default function UserCenterPanel(props: Props) {
                     }
                   }} style={{ padding: '12px 16px', borderRadius: '12px', border: 'none', background: '#ff4b33', color: '#fff', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 18px rgba(255,75,51,.22)' }}>发送</button>
                 </div>
-                <button onClick={() => setIsServicePanelOpen(false)} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#475569', fontWeight: 700, cursor: 'pointer' }}>关闭</button>
+                <button onClick={closeServicePanel} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#475569', fontWeight: 700, cursor: 'pointer' }}>关闭</button>
               </div>
             </div>
           </div>
@@ -840,3 +842,10 @@ export default function UserCenterPanel(props: Props) {
     </div>
   );
 }
+  const closeServicePanel = () => {
+    setIsServicePanelOpen(false);
+    try {
+      onServiceClose?.();
+    } catch {
+    }
+  };

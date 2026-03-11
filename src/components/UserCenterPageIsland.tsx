@@ -23,6 +23,10 @@ export default function UserCenterPageIsland() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [initialChatOpen, setInitialChatOpen] = useState(false);
   const [historyPhone, setHistoryPhone] = useState('');
+  const [chatReturnTo, setChatReturnTo] = useState('');
+  const [pendingChatShopSlug, setPendingChatShopSlug] = useState('');
+  const [pendingChatShopName, setPendingChatShopName] = useState('');
+  const [pendingChatShopId, setPendingChatShopId] = useState('');
 
   const phoneLike = (value: any) => {
     const v = String(value || '').trim();
@@ -138,12 +142,41 @@ export default function UserCenterPageIsland() {
         setInitialChatOpen(true);
         const shopSlugParam = url.searchParams.get('shop');
         const shopNameParam = url.searchParams.get('shopName');
+        const shopIdParam = url.searchParams.get('shopId');
+        const fromParam = url.searchParams.get('from');
         if (shopSlugParam) setCurrentShopSlug(shopSlugParam);
         if (shopNameParam) setCurrentShopName(shopNameParam);
+        if (shopSlugParam) setPendingChatShopSlug(shopSlugParam);
+        if (shopNameParam) setPendingChatShopName(shopNameParam);
+        if (shopIdParam) setPendingChatShopId(shopIdParam);
+        if (fromParam === 'orders') setChatReturnTo('/orders');
       }
     } catch {
     }
   }, []);
+
+  useEffect(() => {
+    // When opening chat from /orders we might only have slug/name or shopId.
+    // Convert to currentShopId so UserCenterPanel can bind the correct shop chat context.
+    if (!initialChatOpen) return;
+    if (currentShopId) return;
+
+    const idFromQuery = String(pendingChatShopId || '').trim();
+    if (idFromQuery) {
+      setCurrentShopId(idFromQuery);
+      if (pendingChatShopSlug) setCurrentShopSlug(pendingChatShopSlug);
+      if (pendingChatShopName) setCurrentShopName(pendingChatShopName);
+      return;
+    }
+
+    const slug = String(pendingChatShopSlug || '').trim();
+    if (!slug) return;
+    const match = Object.entries(shopMap || {}).find(([, ref]) => String(ref?.slug || '').trim() === slug);
+    if (!match) return;
+    setCurrentShopId(String(match[0] || ''));
+    if (pendingChatShopName) setCurrentShopName(pendingChatShopName);
+    setCurrentShopSlug(slug);
+  }, [initialChatOpen, pendingChatShopId, pendingChatShopSlug, pendingChatShopName, currentShopId, Object.keys(shopMap).length]);
 
   useEffect(() => {
     const loadShopMap = async () => {
@@ -331,6 +364,16 @@ export default function UserCenterPageIsland() {
               }}
             onLoadMore={loadMoreHistory}
             initialChatOpen={initialChatOpen}
+            onServiceClose={() => {
+              if (chatReturnTo) {
+                window.location.href = chatReturnTo;
+                return;
+              }
+              try {
+                window.history.replaceState({}, '', '/user');
+              } catch {
+              }
+            }}
           />
         </div>
       </main>

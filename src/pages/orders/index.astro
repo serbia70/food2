@@ -377,7 +377,7 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
                   <div class="order-shop-name">${view.shopName}</div>
                   <a
                     class="nav-btn nav-cart order-shop-action"
-                    href="/user?openChat=1&shop=${encodeURIComponent(view.shopSlug || '')}&shopName=${encodeURIComponent(view.shopName || '')}"
+                    href="/user?openChat=1&from=orders&shopId=${encodeURIComponent(String(order.shop_id || ''))}&shop=${encodeURIComponent(view.shopSlug || '')}&shopName=${encodeURIComponent(view.shopName || '')}"
                     aria-label="联系商家"
                     title="联系商家"
                     style="background: linear-gradient(135deg, #22c55e, #059669); box-shadow: 0 4px 12px rgba(34,197,94,0.35);"

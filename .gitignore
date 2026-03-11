@@ -19,3 +19,7 @@ pnpm-debug.log*
 
 # Astro
 .astro/
+
+# git worktrees
+.worktrees/
+worktrees/

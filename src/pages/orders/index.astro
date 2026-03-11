@@ -380,8 +380,42 @@ import Layout from '../../layouts/Layout.astro';
 
     async function loadOrders() {
       const user = readUser();
-      const phone = String(user.phone || '').trim();
-      if (!phone) {
+
+      const rawPhone = String(user.phone || '').trim();
+      const sessionToken = String(localStorage.getItem('user_session') || '').trim();
+
+      const phoneLike = (value) => {
+        const v = String(value || '').trim();
+        if (!v) return '';
+        if (/^\+?\d{7,15}$/.test(v)) return v;
+        if (/^0\d{7,15}$/.test(v)) return v;
+        return '';
+      };
+
+      async function loadAddressPhone() {
+        if (!sessionToken) return '';
+        try {
+          const res = await fetch('/api/user/address', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get', sessionToken }),
+          });
+          const data = await res.json();
+          if (!data?.success || !data?.address) return '';
+          let addrObj = {};
+          try {
+            addrObj = JSON.parse(data.address);
+          } catch {
+            addrObj = { phone: '' };
+          }
+          return phoneLike(addrObj.phone);
+        } catch {
+          return '';
+        }
+      }
+
+      const primaryPhone = phoneLike(rawPhone);
+      if (!primaryPhone) {
         setView('auth');
         return;
       }
@@ -389,15 +423,30 @@ import Layout from '../../layouts/Layout.astro';
       setView('loading');
 
       try {
-        const res = await fetch(`/api/user/history?phone=${encodeURIComponent(phone)}&page=1&limit=50`);
-        const data = await res.json();
-        if (!res.ok || !data?.success) {
-          throw new Error(data?.error || '读取订单失败');
+        async function fetchOrdersByPhone(phone) {
+          const res = await fetch(`/api/user/history?phone=${encodeURIComponent(phone)}&page=1&limit=50`);
+          const data = await res.json();
+          if (!res.ok || !data?.success) {
+            throw new Error(data?.error || '读取订单失败');
+          }
+          const sourceOrders = Array.isArray(data.orders)
+            ? data.orders
+            : Array.isArray(data.history)
+              ? data.history
+              : [];
+          return filterUserVisibleOrders(sourceOrders);
         }
 
-        const sourceOrders = Array.isArray(data.orders) ? data.orders : Array.isArray(data.history) ? data.history : [];
-        const orders = filterUserVisibleOrders(sourceOrders);
-        const shopMap = await loadShopMap();
+        const [shopMap, addrPhone] = await Promise.all([loadShopMap(), loadAddressPhone()]);
+
+        let orders = await fetchOrdersByPhone(primaryPhone);
+
+        // 兼容：下单联系人手机号与账号手机号不一致时，尝试用地址里的手机号再拉一次。
+        if (!orders.length && addrPhone && addrPhone !== primaryPhone) {
+          const addrOrders = await fetchOrdersByPhone(addrPhone);
+          orders = addrOrders;
+        }
+
         const summaries = buildShopMembershipSummaries(orders, shopMap);
 
         renderOverview(summaries, orders);
@@ -414,8 +463,10 @@ import Layout from '../../layouts/Layout.astro';
 
   <style>
     .orders-page {
-      min-height: 100vh;
-      padding: 20px 16px 100px;
+      height: 100vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 20px 16px calc(110px + env(safe-area-inset-bottom, 0px));
       background:
         radial-gradient(circle at top left, rgba(0, 177, 64, 0.14), transparent 28%),
         linear-gradient(180deg, #f8fbf8 0%, #eef4ef 100%);

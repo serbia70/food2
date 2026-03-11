@@ -22,31 +22,106 @@ export default function UserCenterPageIsland() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [initialChatOpen, setInitialChatOpen] = useState(false);
+  const [historyPhone, setHistoryPhone] = useState('');
 
-  const fetchHistory = async (phone: string, page = 1, isAppend = false) => {
-    if (!phone) return;
-    if (isAppend) setIsLoadingMore(true);
-    else setLoading(true);
+  const phoneLike = (value: any) => {
+    const v = String(value || '').trim();
+    if (!v) return '';
+    if (/^\+?\d{7,15}$/.test(v)) return v;
+    if (/^0\d{7,15}$/.test(v)) return v;
+    return '';
+  };
+
+  const loadAddressPhone = async () => {
+    const sessionToken = String(localStorage.getItem('user_session') || '').trim();
+    if (!sessionToken) return '';
 
     try {
-      const res = await fetch(`/api/user/history?phone=${phone}&page=${page}&limit=10`);
-      const data = await res.json();
-      if (data.success) {
-        const visibleHistory = filterUserVisibleOrders(data.orders || data.history || []);
-        const nextHistory = isAppend ? [...history, ...visibleHistory] : visibleHistory;
-        setHistory(nextHistory);
-        setHasMoreHistory(data.hasMore || false);
+      const res = await fetch('/api/user/address', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get', sessionToken }),
+      });
+      const data = await res.json().catch(() => ({} as any));
+      if (!data?.success || !data?.address) return '';
 
-        const sourceOrder = nextHistory[0];
-        if (sourceOrder) {
-          const view = buildUserOrderView(sourceOrder as any, shopMap);
-          setCurrentShopName(view.shopName || '当前店铺');
-          setCurrentShopSlug(view.shopSlug || '');
-          setCurrentShopId(String((sourceOrder as any)?.shop_id || (sourceOrder as any)?.restaurant_id || ''));
+      let addrObj: any = {};
+      try {
+        addrObj = JSON.parse(data.address);
+        if (typeof addrObj !== 'object') throw new Error('invalid');
+      } catch {
+        addrObj = { phone: '' };
+      }
+
+      return phoneLike(addrObj.phone);
+    } catch {
+      return '';
+    }
+  };
+
+  const fetchHistoryOnce = async (phone: string, page = 1, limit = 10) => {
+    const clean = phoneLike(phone);
+    if (!clean) return { orders: [] as any[], hasMore: false };
+
+    const res = await fetch(`/api/user/history?phone=${encodeURIComponent(clean)}&page=${page}&limit=${limit}`);
+    const data = await res.json().catch(() => ({} as any));
+    if (!data?.success) return { orders: [] as any[], hasMore: false };
+
+    const visible = filterUserVisibleOrders(data.orders || data.history || []);
+    return { orders: visible, hasMore: Boolean(data.hasMore) };
+  };
+
+  const syncShopContextFromHistory = (orders: any[]) => {
+    const sourceOrder = orders?.[0];
+    if (!sourceOrder) return;
+    const view = buildUserOrderView(sourceOrder as any, shopMap);
+    setCurrentShopName(view.shopName || '当前店铺');
+    setCurrentShopSlug(view.shopSlug || '');
+    setCurrentShopId(String((sourceOrder as any)?.shop_id || (sourceOrder as any)?.restaurant_id || ''));
+  };
+
+  const loadHistoryWithFallback = async () => {
+    const primaryPhone = phoneLike(userInfo?.phone);
+    if (!primaryPhone) return;
+
+    setLoading(true);
+    try {
+      let usedPhone = primaryPhone;
+      let result = await fetchHistoryOnce(primaryPhone, 1, 10);
+
+      if (!result.orders.length) {
+        const addrPhone = await loadAddressPhone();
+        if (addrPhone && addrPhone !== primaryPhone) {
+          const alt = await fetchHistoryOnce(addrPhone, 1, 10);
+          if (alt.orders.length) {
+            usedPhone = addrPhone;
+            result = alt;
+          }
         }
       }
+
+      setHistoryPhone(usedPhone);
+      setHistory(result.orders as any);
+      setHasMoreHistory(Boolean(result.hasMore));
+      syncShopContextFromHistory(result.orders);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreHistory = async () => {
+    const phone = phoneLike(historyPhone || userInfo?.phone);
+    if (!phone) return;
+
+    setIsLoadingMore(true);
+    try {
+      const page = Math.floor(history.length / 10) + 1;
+      const result = await fetchHistoryOnce(phone, page, 10);
+      if (result.orders.length) {
+        setHistory((prev) => ([...(prev || []), ...(result.orders as any)] as any));
+      }
+      setHasMoreHistory(Boolean(result.hasMore));
+    } finally {
       setIsLoadingMore(false);
     }
   };
@@ -95,9 +170,8 @@ export default function UserCenterPageIsland() {
   }, []);
 
   useEffect(() => {
-    if (userInfo?.phone) {
-      fetchHistory(userInfo.phone);
-    }
+    if (!userInfo?.phone) return;
+    loadHistoryWithFallback();
   }, [userInfo?.phone, Object.keys(shopMap).length]);
 
   useEffect(() => {
@@ -161,7 +235,8 @@ export default function UserCenterPageIsland() {
       localStorage.setItem('food_order_user', JSON.stringify(nextUser));
       localStorage.setItem('user_info', JSON.stringify(nextUser));
       setUserInfo(nextUser as User);
-      fetchHistory(nextPhone);
+      setHistoryPhone(phoneLike(nextPhone));
+      loadHistoryWithFallback();
     } catch {
       alert('网络错误');
     }
@@ -249,12 +324,12 @@ export default function UserCenterPageIsland() {
             onEditNickname={handleEditNickname}
             onEditPhone={handleEditPhone}
             onLogout={handleLogout}
-            onConflictLogin={() => {
-              if (!phoneConflictGuide?.loginHref) return;
-              handleLogout();
-              window.location.href = phoneConflictGuide.loginHref;
-            }}
-            onLoadMore={() => fetchHistory(userInfo?.phone || '', Math.floor(history.length / 10) + 1, true)}
+              onConflictLogin={() => {
+                if (!phoneConflictGuide?.loginHref) return;
+                handleLogout();
+                window.location.href = phoneConflictGuide.loginHref;
+              }}
+            onLoadMore={loadMoreHistory}
             initialChatOpen={initialChatOpen}
           />
         </div>

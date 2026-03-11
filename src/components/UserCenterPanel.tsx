@@ -932,7 +932,18 @@ export default function UserCenterPanel(props: Props) {
                 type="button"
                 aria-label="关闭"
                 title="关闭"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  closeServicePanel();
+                }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  closeServicePanel();
+                }}
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   closeServicePanel();
                 }}
@@ -940,8 +951,8 @@ export default function UserCenterPanel(props: Props) {
                   position: 'absolute',
                   top: '12px',
                   right: '12px',
-                  width: '34px',
-                  height: '34px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '999px',
                   border: 'none',
                   background: 'rgba(255,255,255,.18)',
@@ -949,6 +960,8 @@ export default function UserCenterPanel(props: Props) {
                   fontSize: '20px',
                   fontWeight: 900,
                   cursor: 'pointer',
+                  zIndex: 2,
+                  pointerEvents: 'auto',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',

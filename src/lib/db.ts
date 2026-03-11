@@ -76,7 +76,7 @@ import { runMigrations } from './db-migrations';
 // @ts-ignore
 if (!global.dbInitialized) {
   try {
-    // 浼樺厛杩愯杩佺Щ绯荤粺
+    // 优先运行迁移系统
     runMigrations(db);
 
     // Legacy init removed

@@ -1,58 +1,84 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
 ---
 
 <Layout title="订单中心">
   <div class="orders-page">
-    <section class="hero-card">
-      <div>
-        <p class="eyebrow">Order Center</p>
-        <h1>我的订单</h1>
-        <p class="hero-text">按店铺查看历史订单、积分和 VIP 权益，清楚知道每一单来自哪家店。</p>
+    <header class="orders-appbar">
+      <div class="orders-appbar-inner">
+        <div class="orders-title">
+          <div class="orders-title-eyebrow">Order Center</div>
+          <div class="orders-title-main">我的订单</div>
+        </div>
+        <div class="orders-appbar-actions">
+          <a href="/" class="orders-appbar-link">返回首页</a>
+        </div>
       </div>
-      <a href="/" class="ghost-link">返回首页</a>
-    </section>
+    </header>
 
-    <section id="orders-auth" class="state-card" style="display:none;">
-      <h2>请先登录</h2>
-      <p>登录后即可查看你在不同店铺的订单与会员权益。</p>
-      <div class="actions">
-        <a href="/user/login" class="primary-btn">去登录</a>
-        <a href="/user/login?mode=register" class="secondary-btn">去注册</a>
+    <main class="orders-main" role="main">
+      <div class="orders-container">
+        <section class="orders-intro-card">
+          <div class="orders-intro-text">
+            <div class="orders-intro-head">按店铺查看历史订单、积分和 VIP 权益</div>
+            <div class="orders-intro-sub">清楚知道每一单来自哪家店，进行中订单也会在这里汇总。</div>
+          </div>
+          <div class="orders-intro-actions">
+            <a href="/" class="orders-pill-link">去首页逛逛</a>
+          </div>
+        </section>
+
+        <section id="orders-auth" class="state-card" style="display:none;">
+          <h2>请先登录</h2>
+          <p>登录后即可查看你在不同店铺的订单与会员权益。</p>
+          <div class="actions">
+            <a href="/user/login" class="primary-btn">去登录</a>
+            <a href="/user/login?mode=register" class="secondary-btn">去注册</a>
+          </div>
+        </section>
+
+        <section id="orders-loading" class="state-card" style="display:none;">
+          <h2>加载中...</h2>
+          <p>正在读取你的订单与店铺权益。</p>
+        </section>
+
+        <section id="orders-error" class="state-card error" style="display:none;">
+          <h2>订单加载失败</h2>
+          <p id="orders-error-text">请稍后重试。</p>
+        </section>
+
+        <div class="orders-ready-grid">
+          <section id="membership-section" class="orders-panel" style="display:none;">
+            <div id="overview-hero" class="overview-hero"></div>
+            <div class="orders-panel-card">
+              <div class="orders-panel-head">
+                <h2>店铺权益</h2>
+                <span class="section-tip">积分和 VIP 按店铺分别统计</span>
+              </div>
+              <div id="membership-list" class="membership-rail"></div>
+            </div>
+          </section>
+
+          <section id="orders-section" class="orders-panel" style="display:none;">
+            <div class="orders-panel-card">
+              <div class="orders-panel-head">
+                <h2>全部订单</h2>
+                <span id="orders-count" class="section-tip"></span>
+              </div>
+              <div id="orders-empty" class="state-card" style="display:none;">
+                <h2>暂无订单</h2>
+                <p>你还没有历史订单，先去逛逛首页吧。</p>
+              </div>
+              <div id="orders-list" class="orders-groups"></div>
+            </div>
+          </section>
+        </div>
       </div>
-    </section>
-
-    <section id="orders-loading" class="state-card" style="display:none;">
-      <h2>加载中...</h2>
-      <p>正在读取你的订单与店铺权益。</p>
-    </section>
-
-    <section id="orders-error" class="state-card error" style="display:none;">
-      <h2>订单加载失败</h2>
-      <p id="orders-error-text">请稍后重试。</p>
-    </section>
-
-    <section id="membership-section" style="display:none;">
-      <div id="overview-hero" class="overview-hero"></div>
-      <div class="section-head">
-        <h2>店铺权益</h2>
-        <span class="section-tip">积分和 VIP 按店铺分别统计</span>
-      </div>
-      <div id="membership-list" class="membership-rail"></div>
-    </section>
-
-    <section id="orders-section" style="display:none;">
-      <div class="section-head">
-        <h2>全部订单</h2>
-        <span id="orders-count" class="section-tip"></span>
-      </div>
-      <div id="orders-empty" class="state-card" style="display:none;">
-        <h2>暂无订单</h2>
-        <p>你还没有历史订单，先去逛逛首页吧。</p>
-      </div>
-      <div id="orders-list" class="orders-groups"></div>
-    </section>
+    </main>
   </div>
+
+  <PlatformBottomNav active="orders" />
 
   <script is:inline>
     function filterUserVisibleOrders(orders) {
@@ -471,25 +497,152 @@ import Layout from '../../layouts/Layout.astro';
         radial-gradient(circle at top left, rgba(0, 177, 64, 0.14), transparent 28%),
         linear-gradient(180deg, #f8fbf8 0%, #eef4ef 100%);
     }
+
+    .orders-appbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: rgba(248, 251, 248, 0.82);
+      backdrop-filter: saturate(140%) blur(10px);
+      border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+      margin: -20px -16px 0;
+      padding: 0 16px;
+    }
+
+    .orders-appbar-inner {
+      max-width: 1160px;
+      margin: 0 auto;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 14px 0;
+    }
+
+    .orders-title-eyebrow {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #047857;
+      opacity: 0.95;
+    }
+
+    .orders-title-main {
+      font-size: 18px;
+      font-weight: 900;
+      color: #0f172a;
+      line-height: 1.1;
+      margin-top: 2px;
+    }
+
+    .orders-appbar-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .orders-appbar-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #0f172a;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 12px;
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+    }
+
+    .orders-appbar-link:active { transform: translateY(1px); }
+
+    .orders-main { padding: 14px 0 0; }
+
+    .orders-container { max-width: 1160px; margin: 0 auto; }
+
+    .orders-intro-card {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      box-shadow: 0 18px 36px rgba(15, 23, 42, 0.06);
+      border-radius: 22px;
+      padding: 16px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .orders-intro-head { font-weight: 900; color: #0f172a; font-size: 14px; }
+    .orders-intro-sub { margin-top: 6px; color: #64748b; font-size: 12px; line-height: 1.7; max-width: 640px; }
+
+    .orders-pill-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(203, 213, 225, 0.95);
+      background: #fff;
+      color: #0f172a;
+      font-size: 12px;
+      font-weight: 900;
+      text-decoration: none;
+    }
+
+    .orders-pill-link:active { transform: translateY(1px); }
+
+    .orders-ready-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .orders-panel-card {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      box-shadow: 0 18px 36px rgba(15, 23, 42, 0.06);
+      border-radius: 22px;
+      padding: 14px;
+    }
+
+    .orders-panel-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 6px 2px 12px;
+    }
+
+    .orders-panel-head h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 900;
+      color: #0f172a;
+    }
     .hero-card, .state-card, .membership-card, .order-card {
       background: rgba(255, 255, 255, 0.94);
       border: 1px solid rgba(203, 213, 225, 0.7);
       box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
       backdrop-filter: blur(8px);
     }
-    .hero-card {
-      border-radius: 24px;
-      padding: 22px;
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 18px;
+
+    /* 保留原来的 auth/loading/error 卡片视觉，但让它与新容器一致 */
+    .state-card {
+      border-radius: 20px;
+      padding: 20px;
+      margin-bottom: 14px;
     }
-    .eyebrow { margin: 0 0 6px; font-size: 12px; color: #047857; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
-    h1 { margin: 0 0 8px; font-size: 30px; color: #0f172a; }
-    .hero-text { margin: 0; color: #475569; line-height: 1.7; max-width: 560px; }
-    .ghost-link, .primary-btn, .secondary-btn {
+    .state-card h2 { margin: 0 0 8px; color: #0f172a; }
+    .state-card p { margin: 0 0 14px; color: #64748b; line-height: 1.7; }
+    .state-card.error { border-color: rgba(248, 113, 113, 0.35); background: rgba(254, 242, 242, 0.92); }
+
+    .primary-btn, .secondary-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -498,25 +651,9 @@ import Layout from '../../layouts/Layout.astro';
       text-decoration: none;
       font-weight: 700;
     }
-    .ghost-link { color: #065f46; background: #ecfdf5; }
     .primary-btn { background: #00b140; color: #fff; }
     .secondary-btn { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
     .actions { display: flex; gap: 10px; flex-wrap: wrap; }
-    .state-card {
-      border-radius: 20px;
-      padding: 20px;
-      margin-bottom: 18px;
-    }
-    .state-card h2, .section-head h2 { margin: 0 0 8px; color: #0f172a; }
-    .state-card p { margin: 0 0 14px; color: #64748b; line-height: 1.7; }
-    .state-card.error { border-color: rgba(248, 113, 113, 0.35); background: rgba(254, 242, 242, 0.92); }
-    .section-head {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
-      margin: 20px 0 12px;
-    }
     .section-tip { color: #64748b; font-size: 12px; }
     .overview-hero { margin-bottom: 14px; }
     .overview-card {
@@ -626,14 +763,27 @@ import Layout from '../../layouts/Layout.astro';
     .status-chip.status-done { background: #ecfdf5; color: #047857; }
     .status-chip.status-closed { background: #f1f5f9; color: #475569; }
     @media (max-width: 640px) {
-      .hero-card { flex-direction: column; }
-      h1 { font-size: 26px; }
       .overview-stats { grid-template-columns: 1fr; }
       .membership-card-top, .order-card-head { flex-direction: column; }
       .membership-badges { justify-content: flex-start; }
       .order-body-grid { grid-template-columns: 1fr; }
       .order-head-right { align-items: flex-start; }
       .order-amount { font-size: 18px; }
+    }
+
+    @media (min-width: 900px) {
+      .orders-ready-grid {
+        grid-template-columns: 420px 1fr;
+        align-items: start;
+      }
+      #membership-section { grid-column: 1; }
+      #orders-section { grid-column: 2; }
+    }
+
+    @media (min-width: 768px) {
+      .orders-page { padding: 18px 20px calc(110px + env(safe-area-inset-bottom, 0px)); }
+      .orders-appbar { margin: -18px -20px 0; padding: 0 20px; }
+      .orders-title-main { font-size: 20px; }
     }
   </style>
 </Layout>

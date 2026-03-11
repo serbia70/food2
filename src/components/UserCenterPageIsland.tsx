@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'preact/hooks';
-import Layout from '../layouts/Layout.astro';
 import UserCenterPanel from './UserCenterPanel';
 import { getUserInfo, clearUser as clearUserInfo } from '../lib/userStore';
 import type { Order, User } from '../types';
@@ -184,7 +183,7 @@ export default function UserCenterPageIsland() {
 
   if (!isLoggedIn || !userInfo) {
     return (
-      <div className="user-page-shell">
+      <div className="user-page-shell user-page-shell--guest">
         <section className="user-page-guest">
           <p className="user-page-eyebrow">Account Hub</p>
           <h1>请先登录</h1>
@@ -194,70 +193,139 @@ export default function UserCenterPageIsland() {
             <a href="/user/login?mode=register" className="user-page-secondary">去注册</a>
           </div>
         </section>
+        <nav className="bottom-nav" aria-label="平台导航">
+          <a href="/" className="nav-item">
+            <span>🏠</span>
+            <span>首页</span>
+          </a>
+          <a href="/orders" className="nav-item">
+            <span>📄</span>
+            <span>订单</span>
+          </a>
+          <a href="/messages" className="nav-item">
+            <span>💬</span>
+            <span>消息</span>
+          </a>
+          <a href="/user" className="nav-item active">
+            <span>👤</span>
+            <span>我的</span>
+          </a>
+        </nav>
         <style>{`
-          .user-page-shell{min-height:100vh;background:radial-gradient(circle at top left, rgba(0,177,64,.14), transparent 28%),linear-gradient(180deg,#f8fbf8 0%,#eef4ef 100%);padding:18px}
-          .user-page-guest{max-width:880px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:24px;padding:24px;box-shadow:0 18px 32px rgba(15,23,42,.06)}
+          .user-page-shell{min-height:100vh;background:radial-gradient(circle at top left, rgba(0,177,64,.16), transparent 35%),radial-gradient(circle at 80% 10%, rgba(255,209,1,.14), transparent 32%),linear-gradient(180deg,#f7fbf7 0%,#eef6ef 100%);padding:18px 18px 96px}
+          .user-page-guest{max-width:920px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:22px;padding:24px 22px;box-shadow:0 18px 36px rgba(15,23,42,.08)}
           .user-page-eyebrow{margin:0 0 8px;color:#047857;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
           .user-page-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
           .user-page-primary,.user-page-secondary{display:inline-flex;align-items:center;justify-content:center;padding:11px 16px;border-radius:999px;text-decoration:none;font-weight:700}
           .user-page-primary{background:#00b140;color:#fff}.user-page-secondary{background:#fff;color:#334155;border:1px solid #cbd5e1}
+
+          .bottom-nav{position:fixed;bottom:0;left:0;width:100%;background:#fff;border-top:1px solid #e5e7eb;display:flex;justify-content:space-around;padding:10px 0 calc(10px + env(safe-area-inset-bottom, 0px));z-index:1000}
+          .nav-item{display:flex;flex-direction:column;align-items:center;text-decoration:none;color:#94a3b8;font-size:10px;gap:2px}
+          .nav-item.active{color:#00b140}
+          .nav-item span:first-child{font-size:20px}
         `}</style>
       </div>
     );
   }
 
   return (
-    <div className="user-page-shell">
-      <div className="user-page-overlay-shell">
-        <div className="user-page-content-shell">
-          <div className="page-modal-header">
-            <button className="page-modal-close" onClick={() => (window.location.href = currentShopSlug ? `/${currentShopSlug}` : '/')}>×</button>
+    <div className="user-page-shell user-page-shell--page">
+      <header className="user-page-appbar">
+        <div className="user-page-appbar-inner">
+          <div className="user-page-title">
+            <div className="user-page-title-eyebrow">Account</div>
+            <div className="user-page-title-main">个人中心</div>
           </div>
-          <div className="page-modal-body">
-            <UserCenterPanel
-              userInfo={userInfo}
-              currentShopName={currentShopName}
-              currentShopSlug={currentShopSlug}
-              currentShopId={currentShopId}
-              addressSummary={addressSummary}
-              membershipLabel={currentShopMembership.label || '暂无积分或 VIP 权益'}
-              history={history as any[]}
-              shopMap={shopMap}
-              loading={loading}
-              hasMoreHistory={hasMoreHistory}
-              isLoadingMore={isLoadingMore}
-              phoneConflictGuide={phoneConflictGuide}
-              onContinueShop={() => {
-                if (currentShopSlug) window.location.href = `/${currentShopSlug}`;
-                else window.location.href = '/';
-              }}
-              onViewAllOrders={() => (window.location.href = '/orders')}
-              onManageAddress={() => (window.location.href = '/user/address')}
-              onCoupons={() => (window.location.href = '/user/coupon')}
-              onService={() => (window.location.href = '/user/service')}
-              onEditNickname={handleEditNickname}
-              onEditPhone={handleEditPhone}
-              onLogout={handleLogout}
-        onConflictLogin={() => {
-          if (!phoneConflictGuide?.loginHref) return;
-          handleLogout();
-          window.location.href = phoneConflictGuide.loginHref;
-        }}
-        onLoadMore={() => fetchHistory(userInfo?.phone || '', Math.floor(history.length / 10) + 1, true)}
-        initialChatOpen={initialChatOpen}
-      />
+          <div className="user-page-appbar-actions">
+            {currentShopSlug ? (
+              <a className="user-page-appbar-link" href={`/${currentShopSlug}`}>进入当前店铺</a>
+            ) : null}
+            <a className="user-page-appbar-link" href="/">返回首页</a>
           </div>
         </div>
-      </div>
+      </header>
+
+      <main className="user-page-main" role="main">
+        <div className="user-page-container">
+          <UserCenterPanel
+            variant="page"
+            userInfo={userInfo}
+            currentShopName={currentShopName}
+            currentShopSlug={currentShopSlug}
+            currentShopId={currentShopId}
+            addressSummary={addressSummary}
+            membershipLabel={currentShopMembership.label || '暂无积分或 VIP 权益'}
+            history={history as any[]}
+            shopMap={shopMap}
+            loading={loading}
+            hasMoreHistory={hasMoreHistory}
+            isLoadingMore={isLoadingMore}
+            phoneConflictGuide={phoneConflictGuide}
+            onContinueShop={() => {
+              if (currentShopSlug) window.location.href = `/${currentShopSlug}`;
+              else window.location.href = '/';
+            }}
+            onViewAllOrders={() => (window.location.href = '/orders')}
+            onManageAddress={() => (window.location.href = '/user/address')}
+            onCoupons={() => (window.location.href = '/user/coupon')}
+            onService={() => (window.location.href = '/user/service')}
+            onEditNickname={handleEditNickname}
+            onEditPhone={handleEditPhone}
+            onLogout={handleLogout}
+            onConflictLogin={() => {
+              if (!phoneConflictGuide?.loginHref) return;
+              handleLogout();
+              window.location.href = phoneConflictGuide.loginHref;
+            }}
+            onLoadMore={() => fetchHistory(userInfo?.phone || '', Math.floor(history.length / 10) + 1, true)}
+            initialChatOpen={initialChatOpen}
+          />
+        </div>
+      </main>
+
+      <nav className="bottom-nav" aria-label="平台导航">
+        <a href="/" className="nav-item">
+          <span>🏠</span>
+          <span>首页</span>
+        </a>
+        <a href="/orders" className="nav-item">
+          <span>📄</span>
+          <span>订单</span>
+        </a>
+        <a href="/messages" className="nav-item">
+          <span>💬</span>
+          <span>消息</span>
+        </a>
+        <a href="/user" className="nav-item active">
+          <span>👤</span>
+          <span>我的</span>
+        </a>
+      </nav>
+
       <style>{`
-        .user-page-shell{min-height:100vh;background:rgba(15,23,42,.72);padding:0}
-        .user-page-overlay-shell{min-height:100vh;display:flex;align-items:flex-end;justify-content:center}
-        .user-page-content-shell{background:#fff;width:100%;max-width:880px;border-radius:24px 24px 0 0;min-height:86vh;max-height:96vh;display:flex;flex-direction:column;overflow:hidden;position:relative;box-shadow:0 24px 48px rgba(15,23,42,.22)}
-        .page-modal-header{padding:15px;display:flex;justify-content:flex-end}
-        .page-modal-close{border:none;background:#f1f5f9;width:32px;height:32px;border-radius:50%;font-size:20px;cursor:pointer}
-        .page-modal-body{flex:1;overflow-y:auto;padding:0 18px 110px}
-        .user-page-shell .history-list{padding-bottom:24px}
-        @media (min-width:768px){.user-page-overlay-shell{align-items:center;padding:24px}.user-page-content-shell{border-radius:28px;min-height:min(880px,92vh);max-height:92vh;width:min(880px,100%)}.page-modal-body{padding:0 24px 118px}}
+        .user-page-shell{min-height:100vh;background:radial-gradient(circle at 12% 0%, rgba(0,177,64,.16), transparent 38%),radial-gradient(circle at 86% 12%, rgba(255,209,1,.12), transparent 36%),linear-gradient(180deg,#f7fbf7 0%,#eef6ef 100%);padding:0}
+
+        .user-page-appbar{position:sticky;top:0;z-index:30;background:rgba(247,251,247,.82);backdrop-filter:saturate(140%) blur(10px);border-bottom:1px solid rgba(226,232,240,.9)}
+        .user-page-appbar-inner{max-width:960px;margin:0 auto;display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding:14px 16px}
+        .user-page-title-eyebrow{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#047857;opacity:.95}
+        .user-page-title-main{font-size:18px;font-weight:900;color:#0f172a;line-height:1.1;margin-top:2px}
+        .user-page-appbar-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+        .user-page-appbar-link{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#0f172a;text-decoration:none;font-weight:800;font-size:12px;box-shadow:0 10px 20px rgba(15,23,42,.05)}
+        .user-page-appbar-link:active{transform:translateY(1px)}
+
+        .user-page-main{padding:14px 0 96px}
+        .user-page-container{max-width:960px;margin:0 auto;padding:0 16px}
+
+        .bottom-nav{position:fixed;bottom:0;left:0;width:100%;background:#fff;border-top:1px solid #e5e7eb;display:flex;justify-content:space-around;padding:10px 0 calc(10px + env(safe-area-inset-bottom, 0px));z-index:1000}
+        .nav-item{display:flex;flex-direction:column;align-items:center;text-decoration:none;color:#94a3b8;font-size:10px;gap:2px}
+        .nav-item.active{color:#00b140}
+        .nav-item span:first-child{font-size:20px}
+
+        @media (min-width:768px){
+          .user-page-appbar-inner{padding:16px 20px}
+          .user-page-container{padding:0 20px}
+          .user-page-title-main{font-size:20px}
+        }
       `}</style>
     </div>
   );

@@ -351,6 +351,138 @@ export default function UserCenterPanel(props: Props) {
           from { opacity: 0; transform: translateY(14px) scale(.98); }
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
+
+        .user-center--page {
+          display: grid;
+          gap: 14px;
+          padding-bottom: 10px;
+        }
+
+        .user-center--page .current-shop-card,
+        .user-center--page .user-profile {
+          border-radius: 18px;
+          border: 1px solid rgba(226,232,240,.9);
+          box-shadow: 0 18px 36px rgba(15,23,42,.06);
+        }
+
+        .user-center--page .current-shop-card {
+          background: linear-gradient(145deg, rgba(0,177,64,.12) 0%, rgba(255,255,255,1) 46%, rgba(255,209,1,.10) 100%);
+          overflow: hidden;
+        }
+
+        .user-center--page .current-shop-title {
+          color: #065f46;
+          font-weight: 900;
+          letter-spacing: .06em;
+          text-transform: uppercase;
+        }
+
+        .user-center--page .current-shop-name {
+          font-size: 18px;
+          color: #0f172a;
+        }
+
+        .user-center--page .current-shop-meta {
+          color: #64748b;
+        }
+
+        .user-center--page .shop-actions {
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .user-center--page .shop-action-btn {
+          border-radius: 999px;
+          padding: 10px 14px;
+          font-weight: 900;
+        }
+
+        .user-center--page .profile-quick-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+
+        .user-center--page .profile-quick-card {
+          border-radius: 18px;
+          border: 1px solid rgba(226,232,240,.9);
+          box-shadow: 0 16px 30px rgba(15,23,42,.05);
+        }
+
+        .user-center--page .tool-link-row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .user-center--page .tool-link-btn {
+          width: 100%;
+          justify-content: center;
+          border-radius: 14px;
+          padding: 12px 12px;
+          background: rgba(255,255,255,.92);
+          border: 1px solid rgba(226,232,240,.9);
+          box-shadow: 0 16px 26px rgba(15,23,42,.06);
+          color: #0f172a;
+        }
+
+        .user-center--page .tool-link-btn:active {
+          transform: translateY(1px);
+        }
+
+        .user-center--page .user-profile {
+          background: #fff;
+        }
+
+        .user-center--page .user-avatar-circle {
+          width: 56px;
+          height: 56px;
+          border-radius: 18px;
+        }
+
+        .user-center--page .btn-logout-simple {
+          border-radius: 999px;
+          padding: 10px 14px;
+        }
+
+        .user-center--page .orders-tip {
+          margin: 10px 6px 0;
+          padding-bottom: 0;
+          color: #334155;
+          font-weight: 900;
+        }
+
+        .user-center--page .history-order-card {
+          margin: 0 0 12px;
+          border-radius: 18px;
+          border: 1px solid rgba(226,232,240,.9);
+          box-shadow: 0 16px 28px rgba(15,23,42,.05);
+        }
+
+        .user-center--page .orders-section-block {
+          border-radius: 18px;
+          border: 1px solid rgba(226,232,240,.9);
+          background: rgba(255,255,255,.92);
+          box-shadow: 0 16px 28px rgba(15,23,42,.04);
+          padding: 14px;
+        }
+
+        .user-center--page .orders-section-title {
+          font-size: 13px;
+          letter-spacing: .02em;
+        }
+
+        @media (min-width: 768px) {
+          .user-center--page {
+            gap: 16px;
+          }
+          .user-center--page .profile-quick-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .user-center--page .tool-link-row {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+        }
       `}</style>
       <div className="current-shop-card">
         <div className="current-shop-title">当前店铺</div>

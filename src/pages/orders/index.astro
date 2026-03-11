@@ -376,12 +376,13 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
                 <div class="order-shop-row">
                   <div class="order-shop-name">${view.shopName}</div>
                   <a
-                    class="order-shop-action"
+                    class="nav-btn nav-cart order-shop-action"
                     href="/user?openChat=1&shop=${encodeURIComponent(view.shopSlug || '')}&shopName=${encodeURIComponent(view.shopName || '')}"
                     aria-label="联系商家"
                     title="联系商家"
+                    style="background: linear-gradient(135deg, #22c55e, #059669); box-shadow: 0 4px 12px rgba(34,197,94,0.35);"
                   >
-                    <span class="order-shop-action-icon" aria-hidden="true">💬</span>
+                    <span aria-hidden="true" style="font-size:20px; line-height:1;">💬</span>
                   </a>
                 </div>
                 <div class="order-meta">#${order.order_no || order.id || '-'} · 取餐号 ${pickupNo || '-'}</div>
@@ -699,21 +700,14 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
     .membership-shop-name, .order-shop-name { font-size: 18px; font-weight: 900; color: #0f172a; }
     .order-shop-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .order-shop-action {
-      width: 34px;
-      height: 34px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 999px;
-      border: 1px solid rgba(16, 185, 129, 0.35);
-      background: linear-gradient(135deg, #22c55e, #059669);
+      width: 48px;
+      height: 48px;
+      padding: 0;
+      border-radius: 50%;
       color: #fff;
       text-decoration: none;
-      box-shadow: 0 14px 24px rgba(0, 177, 64, 0.22);
       flex: 0 0 auto;
     }
-    .order-shop-action-icon { font-size: 18px; line-height: 1; }
-    .order-shop-action:active { transform: translateY(1px); }
     .membership-shop-slug, .order-shop-slug { margin-left: 6px; font-size: 12px; color: #94a3b8; font-weight: 600; }
     .membership-badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .membership-meta, .order-submeta {

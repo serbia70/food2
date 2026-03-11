@@ -24,9 +24,6 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
             <div class="orders-intro-head">按店铺查看历史订单、积分和 VIP 权益</div>
             <div class="orders-intro-sub">清楚知道每一单来自哪家店，进行中订单也会在这里汇总。</div>
           </div>
-          <div class="orders-intro-actions">
-            <a href="/" class="orders-pill-link">去首页逛逛</a>
-          </div>
         </section>
 
         <section id="orders-auth" class="state-card" style="display:none;">
@@ -582,21 +579,7 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
     .orders-intro-head { font-weight: 900; color: #0f172a; font-size: 14px; }
     .orders-intro-sub { margin-top: 6px; color: #64748b; font-size: 12px; line-height: 1.7; max-width: 640px; }
 
-    .orders-pill-link {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 10px 14px;
-      border-radius: 999px;
-      border: 1px solid rgba(203, 213, 225, 0.95);
-      background: #fff;
-      color: #0f172a;
-      font-size: 12px;
-      font-weight: 900;
-      text-decoration: none;
-    }
-
-    .orders-pill-link:active { transform: translateY(1px); }
+    /* .orders-pill-link removed: only keep the appbar back-home action */
 
     .orders-ready-grid {
       display: grid;

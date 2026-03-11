@@ -345,6 +345,9 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
 
         group.orders.forEach((order) => {
         const view = buildUserOrderView(order, shopMap);
+        const statusLabel = getStatusLabel(order.status);
+        const statusClass = getStatusClass(order.status);
+
         const card = document.createElement('article');
         card.className = `order-card ${statusClass}`;
 
@@ -355,9 +358,6 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
         const timeText = order.created_at
           ? new Date(order.created_at).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
           : '-';
-
-        const statusLabel = getStatusLabel(order.status);
-        const statusClass = getStatusClass(order.status);
 
         const pickupNo = String(order.order_no || order.id || '').slice(-3);
         const shopBadge = (view.shopName || '?').trim().charAt(0).toUpperCase();

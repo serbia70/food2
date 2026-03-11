@@ -373,7 +373,10 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
             <div class="order-shop-block">
               <div class="shop-badge">${shopBadge || '店'}</div>
               <div>
-                <div class="order-shop-name">${view.shopName}</div>
+                <div class="order-shop-row">
+                  <div class="order-shop-name">${view.shopName}</div>
+                  <a class="order-shop-action" href="/user?openChat=1&shop=${encodeURIComponent(view.shopSlug || '')}&shopName=${encodeURIComponent(view.shopName || '')}">联系商家</a>
+                </div>
                 <div class="order-meta">#${order.order_no || order.id || '-'} · 取餐号 ${pickupNo || '-'}</div>
               </div>
             </div>
@@ -687,6 +690,23 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
       border-bottom: 1px dashed rgba(226, 232, 240, 0.85);
     }
     .membership-shop-name, .order-shop-name { font-size: 18px; font-weight: 900; color: #0f172a; }
+    .order-shop-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .order-shop-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      background: rgba(255, 255, 255, 0.9);
+      color: #065f46;
+      text-decoration: none;
+      font-size: 11px;
+      font-weight: 900;
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.05);
+      white-space: nowrap;
+    }
+    .order-shop-action:active { transform: translateY(1px); }
     .membership-shop-slug, .order-shop-slug { margin-left: 6px; font-size: 12px; color: #94a3b8; font-weight: 600; }
     .membership-badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .membership-meta, .order-submeta {

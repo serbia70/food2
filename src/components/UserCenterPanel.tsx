@@ -117,8 +117,16 @@ function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onC
     itemNodes = '商品解析失败';
   }
 
+  const statusClass = order.status === 'pending'
+    ? 'status-pending'
+    : order.status === 'confirmed' || order.status === 'delivering'
+      ? 'status-active'
+      : order.status === 'completed'
+        ? 'status-done'
+        : 'status-closed';
+
   return (
-    <div key={`${order.order_no || idx}`} className="history-order-card">
+    <div key={`${order.order_no || idx}`} className={`history-order-card ${statusClass}`}>
       <div className="order-top">
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
@@ -161,10 +169,10 @@ function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onC
         </div>
       )}
 
-      <div className="order-summary-shell">
-        <div className="order-summary-title">商品摘要</div>
-        <div className="order-content" style={{ fontSize: '13px', color: '#4a5568' }}>{itemNodes}</div>
-      </div>
+        <div className="order-summary-shell">
+          <div className="order-summary-title">商品摘要</div>
+          <div className="order-content" style={{ fontSize: '13px', color: '#4a5568' }}>{itemNodes}</div>
+        </div>
 
       {addressSummary && (
         <div className="order-address-shell">
@@ -541,8 +549,14 @@ export default function UserCenterPanel(props: Props) {
           margin: 0 0 12px;
           border-radius: 18px;
           border: 1px solid rgba(226,232,240,.9);
+          border-left: 6px solid rgba(0, 177, 64, 0.22);
           box-shadow: 0 16px 28px rgba(15,23,42,.05);
         }
+
+        .user-center--page .history-order-card.status-pending { border-left-color: rgba(249, 115, 22, 0.55); }
+        .user-center--page .history-order-card.status-active { border-left-color: rgba(29, 78, 216, 0.55); }
+        .user-center--page .history-order-card.status-done { border-left-color: rgba(4, 120, 87, 0.55); }
+        .user-center--page .history-order-card.status-closed { border-left-color: rgba(100, 116, 139, 0.45); }
 
         .user-center--page .orders-section-block {
           border-radius: 18px;

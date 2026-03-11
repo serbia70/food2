@@ -1,9 +1,11 @@
 // API config
-export const API_BASE_URL = 'https://api.serbia70.com';
+export const API_BASE_URL =
+  (import.meta as any).env?.PUBLIC_API_URL || 'http://localhost:3030';
 
 // Master auth token (frontend-visible by design for current flow)
+// NOTE: do NOT provide a usable default token in frontend.
 export const MASTER_TOKEN =
-  (import.meta as any).env?.PUBLIC_MASTER_TOKEN || 'master-token';
+  (import.meta as any).env?.PUBLIC_MASTER_TOKEN || '';
 
 // MQTT config (avoid hardcoded credentials in pages)
 export const MQTT_BROKER =

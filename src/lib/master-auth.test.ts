@@ -36,8 +36,8 @@ test('请求头和 cookie 都缺失时回退到默认 token', () => {
   assert.equal(auth, 'Bearer fallback-token');
 });
 
-test('master fallback token 与后端保持一致', () => {
-  assert.equal(MASTER_TOKEN, 'master-token');
+test('master token 缺失时不应存在可用默认值', () => {
+  assert.equal(MASTER_TOKEN, '');
 });
 
 test('严格模式下没有 header 和 cookie 时不应回退默认 token', () => {

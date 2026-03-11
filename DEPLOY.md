@@ -4,14 +4,12 @@ This frontend now builds with `@astrojs/cloudflare` (`output: server`).
 
 ## 1) Required env vars (Cloudflare project)
 - `PUBLIC_API_URL` = your Go backend base URL, e.g. `https://api.your-domain.com`
-- `PUBLIC_MASTER_TOKEN` = must match backend `MEITUAN_MASTER_TOKEN`
-- optional (browser MQTT):
-  - `PUBLIC_MQTT_BROKER`
-  - `PUBLIC_MQTT_USERNAME`
-  - `PUBLIC_MQTT_PASSWORD`
-- optional (server-side MQTT proxy routes):
-  - `MQTT_USERNAME`
-  - `MQTT_PASSWORD`
+
+## Secrets / auth
+- Do **NOT** expose secrets as `PUBLIC_*` variables. Anything prefixed with `PUBLIC_` is bundled and browser-visible.
+- `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` should be treated as **server-only secrets** (remove from Pages "public" env).
+- Prefer backend-issued auth (session cookie / short-lived token) and have the frontend call backend routes that enforce authorization.
+- If you still need MQTT credentials, provide them via server-side routes / proxy and keep them in non-public env vars (e.g. `MQTT_USERNAME`, `MQTT_PASSWORD`).
 
 ## 2) Build command
 Use one package manager consistently. Recommended now:

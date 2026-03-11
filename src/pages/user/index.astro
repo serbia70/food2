@@ -1,8 +1,10 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import UserCenterPageIsland from '../../components/UserCenterPageIsland';
+import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
 ---
 
 <Layout title="个人中心">
   <UserCenterPageIsland client:load />
+  <PlatformBottomNav active="user" />
 </Layout>

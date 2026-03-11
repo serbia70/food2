@@ -193,24 +193,7 @@ export default function UserCenterPageIsland() {
             <a href="/user/login?mode=register" className="user-page-secondary">去注册</a>
           </div>
         </section>
-        <nav className="bottom-nav" aria-label="平台导航">
-          <a href="/" className="nav-item">
-            <span>🏠</span>
-            <span>首页</span>
-          </a>
-          <a href="/orders" className="nav-item">
-            <span>📄</span>
-            <span>订单</span>
-          </a>
-          <a href="/messages" className="nav-item">
-            <span>💬</span>
-            <span>消息</span>
-          </a>
-          <a href="/user" className="nav-item active">
-            <span>👤</span>
-            <span>我的</span>
-          </a>
-        </nav>
+        <div className="user-page-guest-note">未登录也可以浏览首页与店铺，登录后可同步订单与权益。</div>
         <style>{`
           .user-page-shell{min-height:100vh;background:radial-gradient(circle at top left, rgba(0,177,64,.16), transparent 35%),radial-gradient(circle at 80% 10%, rgba(255,209,1,.14), transparent 32%),linear-gradient(180deg,#f7fbf7 0%,#eef6ef 100%);padding:18px 18px 96px}
           .user-page-guest{max-width:920px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:22px;padding:24px 22px;box-shadow:0 18px 36px rgba(15,23,42,.08)}
@@ -218,11 +201,8 @@ export default function UserCenterPageIsland() {
           .user-page-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
           .user-page-primary,.user-page-secondary{display:inline-flex;align-items:center;justify-content:center;padding:11px 16px;border-radius:999px;text-decoration:none;font-weight:700}
           .user-page-primary{background:#00b140;color:#fff}.user-page-secondary{background:#fff;color:#334155;border:1px solid #cbd5e1}
+          .user-page-guest-note{max-width:920px;margin:12px auto 0;color:#64748b;font-size:12px;line-height:1.6;padding:0 4px}
 
-          .bottom-nav{position:fixed;bottom:0;left:0;width:100%;background:#fff;border-top:1px solid #e5e7eb;display:flex;justify-content:space-around;padding:10px 0 calc(10px + env(safe-area-inset-bottom, 0px));z-index:1000}
-          .nav-item{display:flex;flex-direction:column;align-items:center;text-decoration:none;color:#94a3b8;font-size:10px;gap:2px}
-          .nav-item.active{color:#00b140}
-          .nav-item span:first-child{font-size:20px}
         `}</style>
       </div>
     );
@@ -283,25 +263,6 @@ export default function UserCenterPageIsland() {
         </div>
       </main>
 
-      <nav className="bottom-nav" aria-label="平台导航">
-        <a href="/" className="nav-item">
-          <span>🏠</span>
-          <span>首页</span>
-        </a>
-        <a href="/orders" className="nav-item">
-          <span>📄</span>
-          <span>订单</span>
-        </a>
-        <a href="/messages" className="nav-item">
-          <span>💬</span>
-          <span>消息</span>
-        </a>
-        <a href="/user" className="nav-item active">
-          <span>👤</span>
-          <span>我的</span>
-        </a>
-      </nav>
-
       <style>{`
         .user-page-shell{min-height:100vh;background:radial-gradient(circle at 12% 0%, rgba(0,177,64,.16), transparent 38%),radial-gradient(circle at 86% 12%, rgba(255,209,1,.12), transparent 36%),linear-gradient(180deg,#f7fbf7 0%,#eef6ef 100%);padding:0}
 
@@ -315,11 +276,6 @@ export default function UserCenterPageIsland() {
 
         .user-page-main{padding:14px 0 96px}
         .user-page-container{max-width:960px;margin:0 auto;padding:0 16px}
-
-        .bottom-nav{position:fixed;bottom:0;left:0;width:100%;background:#fff;border-top:1px solid #e5e7eb;display:flex;justify-content:space-around;padding:10px 0 calc(10px + env(safe-area-inset-bottom, 0px));z-index:1000}
-        .nav-item{display:flex;flex-direction:column;align-items:center;text-decoration:none;color:#94a3b8;font-size:10px;gap:2px}
-        .nav-item.active{color:#00b140}
-        .nav-item span:first-child{font-size:20px}
 
         @media (min-width:768px){
           .user-page-appbar-inner{padding:16px 20px}

@@ -351,6 +351,14 @@ export default function UserCenterPanel(props: Props) {
   const selectedOrderDetail = selectedOrder ? buildOrderDetailState(selectedOrder) : null;
   const customerConversations = buildCustomerConversationList(allChatMessages as any[], shopMap as any);
 
+  const closeServicePanel = () => {
+    setIsServicePanelOpen(false);
+    try {
+      onServiceClose?.();
+    } catch {
+    }
+  };
+
   return (
     <div className={`user-center user-center--${variant}`}>
       <style>{`
@@ -842,10 +850,3 @@ export default function UserCenterPanel(props: Props) {
     </div>
   );
 }
-  const closeServicePanel = () => {
-    setIsServicePanelOpen(false);
-    try {
-      onServiceClose?.();
-    } catch {
-    }
-  };

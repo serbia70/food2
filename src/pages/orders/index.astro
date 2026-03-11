@@ -263,7 +263,10 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
     function renderMemberships(summaries) {
       membershipListEl.innerHTML = '';
       if (!summaries.length) {
-        membershipListEl.innerHTML = '<div class="membership-empty">还没有可展示的店铺权益，等你下第一单后这里会更丰富。</div>';
+        const empty = document.createElement('div');
+        empty.className = 'membership-empty';
+        empty.textContent = '还没有可展示的店铺权益，等你下第一单后这里会更丰富。';
+        membershipListEl.replaceChildren(empty);
         return;
       }
 

@@ -927,9 +927,38 @@ export default function UserCenterPanel(props: Props) {
       {isServicePanelOpen && (
         <div style={overlayPanelStyle} onClick={closeServicePanel}>
           <div style={{ ...overlayCardStyle, maxWidth: '860px', padding: '0', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ background: 'linear-gradient(145deg, #ff6b4a 0%, #ff8a5b 42%, #ffd36e 100%)', padding: '18px 20px', color: '#fff' }}>
+            <div style={{ background: 'linear-gradient(145deg, #ff6b4a 0%, #ff8a5b 42%, #ffd36e 100%)', padding: '18px 20px', color: '#fff', position: 'relative' }}>
+              <button
+                type="button"
+                aria-label="关闭"
+                title="关闭"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeServicePanel();
+                }}
+                style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '999px',
+                  border: 'none',
+                  background: 'rgba(255,255,255,.18)',
+                  color: '#fff',
+                  fontSize: '20px',
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                ×
+              </button>
+
               <div style={{ fontSize: '11px', opacity: 0.85, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>联系商家</div>
-              <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '4px' }}>{chatContext.shopName}</div>
+              <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '4px', paddingRight: '44px' }}>{chatContext.shopName}</div>
               <div style={{ fontSize: '12px', opacity: 0.88, marginTop: '4px' }}>{chatContext.shopSlug ? `/${chatContext.shopSlug}` : '当前店铺会话'}</div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '0', minHeight: '440px' }}>

@@ -184,6 +184,112 @@ function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onC
   );
 }
 
+function buildOrderItemLines(order: any): string[] {
+  try {
+    const items = typeof order?.items_json === 'string' ? JSON.parse(order.items_json) : order?.items_json;
+    const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
+    return (itemsArray as any[])
+      .filter(Boolean)
+      .map((i: any) => {
+        const name = String(i?.name || '').trim() || '商品';
+        const sub = String(i?.subName || i?.sub_name || '').trim();
+        const qty = Number(i?.quantity || 0) || 0;
+        const subText = sub ? ` (${sub})` : '';
+        return `${name}${subText} x${qty || 1}`;
+      });
+  } catch {
+    return [];
+  }
+}
+
+function getStatusClass(orderStatus: any): 'status-pending' | 'status-active' | 'status-done' | 'status-closed' {
+  const s = String(orderStatus || '').toLowerCase();
+  if (s === 'pending') return 'status-pending';
+  if (s === 'confirmed' || s === 'delivering') return 'status-active';
+  if (s === 'completed') return 'status-done';
+  return 'status-closed';
+}
+
+function renderOrderCardPage(order: any, idx: number, shopMap: UserOrderShopMap, onContactShop?: (order: any) => void): ComponentChildren {
+  const view = buildUserOrderView(order, shopMap);
+  const statusLabel = renderStatus(order);
+  const statusClass = getStatusClass(order?.status);
+
+  const pickupNo = String(order?.order_no || order?.id || '').slice(-3);
+  const shopBadge = (view.shopName || '?').trim().charAt(0).toUpperCase();
+  const cleanShopSlug = view.shopSlug && view.shopSlug !== view.shopName ? view.shopSlug : '';
+
+  const timeText = order?.created_at
+    ? new Date(order.created_at).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '-';
+
+  const addressSummary = String(order?.table_info || '')
+    .replace(/\s*\[货到付款\/Cash\].*$/u, '')
+    .replace(/\s*\(备注:.*$/u, '')
+    .trim();
+  const shortAddress = addressSummary.length > 58 ? `${addressSummary.slice(0, 58)}...` : addressSummary;
+
+  const itemPreview = buildOrderItemLines(order).slice(0, 2);
+
+  return (
+    <article key={`${order?.order_no || idx}`} className={`order-card ${statusClass}`}>
+      <div className="order-card-head">
+        <div className="order-shop-block">
+          <div className="shop-badge">{shopBadge || '店'}</div>
+          <div>
+            <div className="order-shop-row">
+              <div className="order-shop-name">{view.shopName}</div>
+              <button
+                type="button"
+                className="nav-btn nav-cart order-shop-action"
+                aria-label="联系商家"
+                title="联系商家"
+                style={{ background: 'linear-gradient(135deg, #22c55e, #059669)', boxShadow: '0 4px 12px rgba(34,197,94,0.35)' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onContactShop?.(order);
+                }}
+              >
+                <span aria-hidden="true" style={{ fontSize: '20px', lineHeight: 1 }}>💬</span>
+              </button>
+            </div>
+            <div className="order-meta">#{order?.order_no || order?.id || '-'} · 取餐号 {pickupNo || '-'}</div>
+          </div>
+        </div>
+
+        <div className="order-head-right">
+          <span className={`status-chip ${statusClass}`}>{statusLabel}</span>
+          <div className="order-amount">{Number(order?.total_amount || 0).toLocaleString()} RSD</div>
+        </div>
+      </div>
+
+      <div className="order-submeta compact">
+        <span className="time-pill">{timeText}</span>
+        {cleanShopSlug ? <span className="slug-pill">/{cleanShopSlug}</span> : null}
+        {view.membershipLabel ? (
+          <span className={`mini-tag ${view.isVip ? 'vip' : 'points'}`}>{view.membershipLabel}</span>
+        ) : null}
+      </div>
+
+      <div className="order-body-grid">
+        <div className="order-summary-box">
+          <div className="summary-title">商品摘要</div>
+          <div className="order-items">
+            {itemPreview.length ? itemPreview.map((line, lineIdx) => <div key={lineIdx} className="order-item">• {line}</div>) : <div className="order-item">暂无商品明细</div>}
+          </div>
+        </div>
+
+        {addressSummary ? (
+          <div className="order-location-card">
+            <div className="summary-title">配送地址</div>
+            <div className="order-location">📍 {shortAddress}</div>
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
 export default function UserCenterPanel(props: Props) {
   const {
     variant: variantProp,
@@ -352,7 +458,7 @@ export default function UserCenterPanel(props: Props) {
 
   const renderInteractiveOrderCard = (order: any, idx: number) => (
     <div style={{ cursor: 'default' }}>
-      {renderOrderCard(order, idx, shopMap, openShopChat)}
+      {isPageVariant ? renderOrderCardPage(order, idx, shopMap, openShopChat) : renderOrderCard(order, idx, shopMap, openShopChat)}
     </div>
   );
 
@@ -557,6 +663,57 @@ export default function UserCenterPanel(props: Props) {
         .user-center--page .history-order-card.status-active { border-left-color: rgba(29, 78, 216, 0.55); }
         .user-center--page .history-order-card.status-done { border-left-color: rgba(4, 120, 87, 0.55); }
         .user-center--page .history-order-card.status-closed { border-left-color: rgba(100, 116, 139, 0.45); }
+
+        /* /orders parity: reuse order-card layout in /user page variant */
+        .user-center--page .order-card {
+          border-radius: 22px;
+          padding: 18px;
+          background: rgba(255,255,255,0.96);
+          border: 1px solid rgba(226,232,240,0.9);
+          border-left: 6px solid rgba(0, 177, 64, 0.22);
+          box-shadow: 0 18px 40px rgba(15,23,42,0.08);
+          position: relative;
+        }
+
+        .user-center--page .order-card.status-pending { border-left-color: rgba(249, 115, 22, 0.55); }
+        .user-center--page .order-card.status-active { border-left-color: rgba(29, 78, 216, 0.55); }
+        .user-center--page .order-card.status-done { border-left-color: rgba(4, 120, 87, 0.55); }
+        .user-center--page .order-card.status-closed { border-left-color: rgba(100, 116, 139, 0.45); }
+
+        .user-center--page .order-card:active { transform: translateY(1px); }
+
+        .user-center--page .order-shop-block { display: flex; gap: 12px; align-items: center; }
+        .user-center--page .shop-badge { width: 46px; height: 46px; border-radius: 16px; background: linear-gradient(135deg, #00b140, #00d250); color: #fff; font-weight: 900; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 12px 20px rgba(0,177,64,0.20); }
+        .user-center--page .order-card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding-bottom: 10px; border-bottom: 1px dashed rgba(226, 232, 240, 0.85); }
+        .user-center--page .order-shop-name { font-size: 18px; font-weight: 900; color: #0f172a; }
+        .user-center--page .order-shop-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .user-center--page .order-shop-action { width: 48px; height: 48px; padding: 0; border-radius: 50%; color: #fff; text-decoration: none; flex: 0 0 auto; }
+        .user-center--page .order-meta { margin-top: 4px; color: #64748b; font-size: 12px; }
+        .user-center--page .order-head-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+        .user-center--page .order-amount { font-size: 22px; font-weight: 900; color: #dc2626; line-height: 1; }
+        .user-center--page .order-submeta.compact { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; color: #64748b; font-size: 12px; gap: 8px; flex-wrap: wrap; }
+        .user-center--page .time-pill { display: inline-flex; align-items: center; background: #fff7ed; color: #9a3412; border-radius: 999px; padding: 5px 10px; font-weight: 700; }
+        .user-center--page .slug-pill { display: inline-flex; align-items: center; background: #f8fafc; color: #64748b; border-radius: 999px; padding: 5px 10px; font-weight: 700; }
+        .user-center--page .mini-tag { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; }
+        .user-center--page .mini-tag.vip { background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; }
+        .user-center--page .mini-tag.points { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+        .user-center--page .order-body-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; margin-top: 12px; }
+        .user-center--page .order-summary-box { border-radius: 18px; padding: 12px; background: linear-gradient(180deg, rgba(236,253,245,0.70) 0%, rgba(255,255,255,1) 100%); border: 1px solid rgba(167,243,208,0.55); }
+        .user-center--page .order-location-card { border-radius: 18px; padding: 12px; background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%); border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 8px; }
+        .user-center--page .summary-title { font-size: 12px; color: #065f46; margin-bottom: 8px; font-weight: 900; letter-spacing: 0.02em; }
+        .user-center--page .order-items { color: #334155; display: grid; gap: 6px; font-size: 13px; }
+        .user-center--page .order-location { color: #475569; font-size: 13px; line-height: 1.5; }
+        .user-center--page .status-chip.status-pending { background: #fff7ed; color: #c2410c; }
+        .user-center--page .status-chip.status-active { background: #eff6ff; color: #1d4ed8; }
+        .user-center--page .status-chip.status-done { background: #ecfdf5; color: #047857; }
+        .user-center--page .status-chip.status-closed { background: #f1f5f9; color: #475569; }
+
+        @media (max-width: 640px) {
+          .user-center--page .order-card-head { flex-direction: column; }
+          .user-center--page .order-body-grid { grid-template-columns: 1fr; }
+          .user-center--page .order-head-right { align-items: flex-start; }
+          .user-center--page .order-amount { font-size: 18px; }
+        }
 
         .user-center--page .orders-section-block {
           border-radius: 18px;

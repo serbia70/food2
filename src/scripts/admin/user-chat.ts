@@ -58,10 +58,7 @@ function showAdminChatBadge() {
 }
 
 function ensureGlobalChatBell() {
-  // Removed: global bell button (we use dock button to match user chat UX)
-  return;
-
-  // Removed: we use the in-panel dock button for a consistent UX with user-side chat.
+  // Intentionally left blank (chat entry uses the dock button).
 }
 
 function ensureChatDockButton() {
@@ -145,14 +142,6 @@ function setContainerMessage(container: HTMLElement | null, text: string, color 
   container.replaceChildren(div);
 }
 
-function escapeHtml(raw: string) {
-  return String(raw || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 function createAdminChatMessageNode(message: any) {
   const role = String(message?.sender_role || '');
@@ -321,61 +310,187 @@ async function loadCustomerSummary(phone: string) {
 
 		const summary = buildCustomerSummary(phone, currentCustomerOrders, currentCustomerReservations);
 		currentCustomerSummary = summary;
+		recentOrdersExpanded = false;
 
-		const latestItems = summary.latestOrder ? buildOrderItemsPreview(summary.latestOrder, { maxItems: 3 }) : { zh: '', sr: '', totalItems: 0 };
-		const latestItemsRow = (latestItems.zh || latestItems.sr)
-			? `
-				<div style="margin-top:6px;display:flex;gap:12px;font-size:12px;color:#475569;">
-					<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(`Jela: ${latestItems.sr || latestItems.zh}`)}</span>
-					<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(`菜品: ${latestItems.zh || latestItems.sr}`)}</span>
-				</div>
-			`
-			: '';
-		summaryEl.innerHTML = `
-		  <div style="font-size:12px;color:#64748b;font-weight:800;">客户最近记录 / Istorija kupca</div>
-		  <div style="display:grid;gap:8px;">
-			<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;">
-			  <div style="font-size:12px;color:#64748b;margin-bottom:6px;">最近外卖 / Poslednja porudzbina</div>
-			  <div style="font-weight:700;color:#0f172a;">${summary.latestOrder ? `#${summary.latestOrder.order_no}` : '暂无外卖订单 / Nema porudzbine'}</div>
-			  ${summary.latestOrder ? `
-				${latestItemsRow}
-				<div style="margin-top:6px;font-size:12px;color:#475569;">金额 / Iznos: ${Number(summary.latestOrder.total_amount || 0).toLocaleString()} RSD</div>
-				<div style="margin-top:4px;font-size:12px;color:#64748b;line-height:1.6;">地址 / Adresa: ${String(summary.latestOrder.table_info || '').replace(/\s*\[货到付款\/Cash\].*$/u, '').replace(/\s*\(备注:.*$/u, '').trim()}</div>
-				<button id="admin-chat-recent-orders-toggle" type="button" style="margin-top:8px;padding:6px 10px;border:none;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">查看最近10单</button>
-				<div id="admin-chat-recent-orders-list" style="display:none;margin-top:10px;display:grid;gap:8px;"></div>
-			  ` : ''}
-			</div>
-        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;">
-          <div style="font-size:12px;color:#64748b;margin-bottom:6px;">最近预约 / Poslednja rezervacija</div>
-           <div style="font-weight:700;color:#0f172a;">${currentShopReservationEnabled ? (summary.latestReservation ? String(summary.latestReservation.reservation_time || '有预约') : '暂无预约记录 / Nema rezervacije') : '当前店铺未开启预约 / Rezervacije nisu ukljucene'}</div>
-        </div>
-      </div>
-    `;
+		const cleanAddress = (raw: any) =>
+			String(raw || '')
+				.replace(/\s*\[货到付款\/Cash\].*$/u, '')
+				.replace(/\s*\(备注:.*$/u, '')
+				.trim();
 
-    const toggleBtn = document.getElementById('admin-chat-recent-orders-toggle');
-    const listEl = document.getElementById('admin-chat-recent-orders-list');
-    if (toggleBtn && listEl) {
-      const renderRecentOrders = () => {
-        if (!currentCustomerSummary?.recentOrders?.length) {
-          listEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;">暂无更多外卖记录</div>';
-          return;
-        }
-        listEl.innerHTML = currentCustomerSummary.recentOrders.map((order: any) => `
-          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px;display:grid;gap:4px;">
-            <div style="font-weight:700;color:#0f172a;">#${order.order_no || '-'}</div>
-            <div style="font-size:12px;color:#475569;">${Number(order.total_amount || 0).toLocaleString()} RSD</div>
-            <div style="font-size:12px;color:#64748b;line-height:1.6;">${String(order.table_info || '').replace(/\s*\[货到付款\/Cash\].*$/u, '').replace(/\s*\(备注:.*$/u, '').trim()}</div>
-          </div>
-        `).join('');
-      };
+		const latestOrder = summary.latestOrder;
+		const latestItems = latestOrder
+			? buildOrderItemsPreview(latestOrder, { maxItems: 3 })
+			: { zh: '', sr: '', totalItems: 0 };
 
-      toggleBtn.addEventListener('click', () => {
-        recentOrdersExpanded = !recentOrdersExpanded;
-        listEl.style.display = recentOrdersExpanded ? 'grid' : 'none';
-        toggleBtn.textContent = recentOrdersExpanded ? '收起最近10单 / Sklopi' : '查看最近10单 / Prikazi 10';
-        if (recentOrdersExpanded) renderRecentOrders();
-      });
-    }
+		const title = document.createElement('div');
+		setStyles(title, { fontSize: '12px', color: '#64748b', fontWeight: '800' });
+		title.textContent = '客户最近记录 / Istorija kupca';
+
+		const grid = document.createElement('div');
+		setStyles(grid, { display: 'grid', gap: '8px' });
+
+		const orderCard = document.createElement('div');
+		setStyles(orderCard, {
+			background: '#fff',
+			border: '1px solid #e5e7eb',
+			borderRadius: '12px',
+			padding: '10px 12px',
+		});
+
+		const orderLabel = document.createElement('div');
+		setStyles(orderLabel, { fontSize: '12px', color: '#64748b', marginBottom: '6px' });
+		orderLabel.textContent = '最近外卖 / Poslednja porudzbina';
+
+		const orderTitle = document.createElement('div');
+		setStyles(orderTitle, { fontWeight: '700', color: '#0f172a' });
+		orderTitle.textContent = latestOrder ? `#${latestOrder.order_no}` : '暂无外卖订单 / Nema porudzbine';
+
+		orderCard.append(orderLabel, orderTitle);
+
+		if (latestOrder) {
+			if (latestItems.zh || latestItems.sr) {
+				const row = document.createElement('div');
+				setStyles(row, {
+					marginTop: '6px',
+					display: 'flex',
+					gap: '12px',
+					fontSize: '12px',
+					color: '#475569',
+				});
+
+				const left = document.createElement('span');
+				setStyles(left, {
+					flex: '1',
+					minWidth: '0',
+					whiteSpace: 'nowrap',
+					overflow: 'hidden',
+					textOverflow: 'ellipsis',
+				});
+				left.textContent = `Jela: ${latestItems.sr || latestItems.zh}`;
+
+				const right = document.createElement('span');
+				setStyles(right, {
+					flex: '1',
+					minWidth: '0',
+					whiteSpace: 'nowrap',
+					overflow: 'hidden',
+					textOverflow: 'ellipsis',
+				});
+				right.textContent = `菜品: ${latestItems.zh || latestItems.sr}`;
+
+				row.append(left, right);
+				orderCard.appendChild(row);
+			}
+
+			const amount = document.createElement('div');
+			setStyles(amount, { marginTop: '6px', fontSize: '12px', color: '#475569' });
+			amount.textContent = `金额 / Iznos: ${Number(latestOrder.total_amount || 0).toLocaleString()} RSD`;
+
+			const address = document.createElement('div');
+			setStyles(address, {
+				marginTop: '4px',
+				fontSize: '12px',
+				color: '#64748b',
+				lineHeight: '1.6',
+			});
+			address.textContent = `地址 / Adresa: ${cleanAddress(latestOrder.table_info)}`;
+
+			const toggleBtn = document.createElement('button');
+			toggleBtn.id = 'admin-chat-recent-orders-toggle';
+			toggleBtn.type = 'button';
+			setStyles(toggleBtn, {
+				marginTop: '8px',
+				padding: '6px 10px',
+				border: 'none',
+				borderRadius: '999px',
+				background: '#eff6ff',
+				color: '#1d4ed8',
+				fontWeight: '700',
+				cursor: 'pointer',
+			});
+			toggleBtn.textContent = '查看最近10单 / Prikazi 10';
+
+			const listEl = document.createElement('div');
+			listEl.id = 'admin-chat-recent-orders-list';
+			setStyles(listEl, { marginTop: '10px', display: 'grid', gap: '8px' });
+			listEl.style.display = 'none';
+
+			const renderRecentOrders = () => {
+				if (!currentCustomerSummary?.recentOrders?.length) {
+					const empty = document.createElement('div');
+					setStyles(empty, { fontSize: '12px', color: '#94a3b8' });
+					empty.textContent = '暂无更多外卖记录';
+					listEl.replaceChildren(empty);
+					return;
+				}
+
+				const nodes = currentCustomerSummary.recentOrders.map((order: any) => {
+					const card = document.createElement('div');
+					setStyles(card, {
+						background: '#f8fafc',
+						border: '1px solid #e2e8f0',
+						borderRadius: '10px',
+						padding: '10px',
+						display: 'grid',
+						gap: '4px',
+					});
+
+					const no = document.createElement('div');
+					setStyles(no, { fontWeight: '700', color: '#0f172a' });
+					no.textContent = `#${order.order_no || '-'}`;
+
+					const price = document.createElement('div');
+					setStyles(price, { fontSize: '12px', color: '#475569' });
+					price.textContent = `${Number(order.total_amount || 0).toLocaleString()} RSD`;
+
+					const addr = document.createElement('div');
+					setStyles(addr, { fontSize: '12px', color: '#64748b', lineHeight: '1.6' });
+					addr.textContent = cleanAddress(order.table_info);
+
+					card.append(no, price, addr);
+					return card;
+				});
+
+				listEl.replaceChildren(...nodes);
+			};
+
+			toggleBtn.addEventListener('click', () => {
+				recentOrdersExpanded = !recentOrdersExpanded;
+				listEl.style.display = recentOrdersExpanded ? 'grid' : 'none';
+				toggleBtn.textContent = recentOrdersExpanded
+					? '收起最近10单 / Sklopi'
+					: '查看最近10单 / Prikazi 10';
+				if (recentOrdersExpanded) renderRecentOrders();
+			});
+
+			orderCard.append(amount, address, toggleBtn, listEl);
+		}
+
+		const reservationCard = document.createElement('div');
+		setStyles(reservationCard, {
+			background: '#fff',
+			border: '1px solid #e5e7eb',
+			borderRadius: '12px',
+			padding: '10px 12px',
+		});
+
+		const reservationLabel = document.createElement('div');
+		setStyles(reservationLabel, { fontSize: '12px', color: '#64748b', marginBottom: '6px' });
+		reservationLabel.textContent = '最近预约 / Poslednja rezervacija';
+
+		const reservationValue = document.createElement('div');
+		setStyles(reservationValue, { fontWeight: '700', color: '#0f172a' });
+		reservationValue.textContent = currentShopReservationEnabled
+			? summary.latestReservation
+				? String(summary.latestReservation.reservation_time || '有预约')
+				: '暂无预约记录 / Nema rezervacije'
+			: '当前店铺未开启预约 / Rezervacije nisu ukljucene';
+
+		reservationCard.append(reservationLabel, reservationValue);
+
+		grid.append(orderCard, reservationCard);
+		summaryEl.replaceChildren(title, grid);
   } catch {
     setContainerMessage(summaryEl as HTMLElement, '客户摘要加载失败', '#ef4444');
   }

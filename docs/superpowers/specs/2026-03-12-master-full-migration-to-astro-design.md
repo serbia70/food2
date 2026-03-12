@@ -88,6 +88,7 @@
 
 ### 直接调用接口（已识别）
 - `POST /api/master/login`
+- `POST /api/master/logout`
 - `GET /api/master/init`
 - `POST /api/master/manage`
 - `POST /api/master/backup`
@@ -114,12 +115,13 @@
 | action / endpoint | 类型 | 高危 | 旧页入口（按钮/区域） | 最小 payload 字段 | 预期结果/回显 | 已迁移 | 已手工验收 |
 |---|---|---|---|---|---|---|---|
 | POST /api/master/login | endpoint | 否 | 登录弹窗/页 | username,password | 返回 token 并建立 cookie | ☐ | ☐ |
+| POST /api/master/logout | endpoint | 否 | 顶部退出按钮/401 引导 | - | 清理 master_token cookie，返回 ok | ☐ | ☐ |
 | GET /api/master/init | endpoint | 否 | 首屏加载 | - | 返回 shops/settings 等 | ☐ | ☐ |
-| POST /api/master/manage (action=update_settings) | action | 否 | 设置 tab | payload | 保存成功并刷新 init | ☐ | ☐ |
+| POST /api/master/manage (action=update_settings) | action | 否 | 设置 tab | TBD(从旧页提取字段) | 保存成功并刷新 init | ☐ | ☐ |
 | POST /api/master/manage (action=update_categories) | action | 否 | 类目 tab | payload | 保存成功并刷新 init | ☐ | ☐ |
 | POST /api/master/manage (action=update_rate_center) | action | 否 | 费率/提成 tab | payload | 保存成功并刷新 init | ☐ | ☐ |
-| POST /api/master/manage (action=get_shop_billing) | action | 否 | 店铺账单入口 | shop_id/slug? | 返回账单数据并展示 | ☐ | ☐ |
-| POST /api/master/manage (action=adjust_shop_balance) | action | 是（大额） | 充值入口 | shop_id, amount, note? | 余额变更并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=get_shop_billing) | action | 否 | 店铺账单入口 | TBD(从旧页提取字段；以旧页实际发送为准) | 返回账单数据并展示 | ☐ | ☐ |
+| POST /api/master/manage (action=adjust_shop_balance) | action | 是 | 充值入口 | TBD(从旧页提取字段；以旧页实际发送为准) | 余额变更并回显 | ☐ | ☐ |
 | POST /api/master/manage (action=update_shop) | action | 否 | 店铺编辑弹窗 | shop fields | 更新并回显 | ☐ | ☐ |
 | POST /api/master/manage (action=set_shop_plan) | action | 否 | 套餐设置 | shop_id, plan | 更新并回显 | ☐ | ☐ |
 | POST /api/master/manage (action=create_shop) | action | 否 | 创建店铺 | shop fields | 创建并回显 | ☐ | ☐ |
@@ -129,9 +131,9 @@
 | POST /api/master/manage (action=batch_update_commission) | action | 是（批量） | 批量提成 | payload | 批量更新并回显 | ☐ | ☐ |
 | POST /api/master/manage (action=approve_renew) | action | 否 | 续费审批 | shop_id, amount? | 审批成功并回显 | ☐ | ☐ |
 | POST /api/master/manage (action=reject_renew) | action | 否 | 续费审批 | shop_id, reason? | 驳回成功并回显 | ☐ | ☐ |
-| POST /api/master/backup | endpoint | 是 | 备份管理 | action=list/create/delete, backupName? | 列表/创建/删除回显 | ☐ | ☐ |
-| POST /api/master/restore | endpoint | 是 | 恢复面板 | backupName/backupId 等 | 恢复并强提示风险 | ☐ | ☐ |
-| POST /api/master/upload | endpoint | 否 | 上传入口 | multipart? | 返回 URL/标识并展示 | ☐ | ☐ |
+| POST /api/master/backup | endpoint | 是 | 备份管理 | JSON：`{ action: "list" | "create" | "delete", backupName?: string }`（以旧页实际发送为准） | 列表刷新/创建后可见/删除后不可见 | ☐ | ☐ |
+| POST /api/master/restore | endpoint | 是 | 恢复面板 | 透传旧页请求体（可能为 JSON 或 multipart；以旧页实际发送为准），核心标识：`backupName` | 恢复并强提示风险，建议刷新 init/重新登录 | ☐ | ☐ |
+| POST /api/master/upload | endpoint | 否 | 上传入口 | 透传请求体（通常为 `multipart/form-data`，字段名以旧页为准） | 返回后端响应并在 UI 展示结果 | ☐ | ☐ |
 
 ## 数据流与状态策略
 - 核心数据源：`GET /api/master/init`
@@ -152,20 +154,24 @@
 
 ## 认证 / 401 / 退出
 - token：只用 HttpOnly cookie `master_token`
-- cookie 属性要求（实现时必须满足，避免线上差异）：
-  - `HttpOnly: true`
-  - `Secure: true`（生产环境与 https 下必须）
-  - `SameSite: Lax`（允许站内跳转场景；如后续无第三方嵌入需求，可升级为 Strict）
-  - `Path: /`
-  - `Max-Age`: 12h（或与后端 token 过期策略一致）
+- cookie 属性要求（按环境）：
+  - 生产环境（https）：
+    - `HttpOnly: true`
+    - `Secure: true`
+    - `SameSite: Lax`（允许站内跳转场景；如后续无第三方嵌入需求，可升级为 Strict）
+    - `Path: /`
+    - `Max-Age`: 12h（或与后端 token 过期策略一致）
+  - 本地开发（http）：允许 `Secure: false`（否则 cookie 无法写入，登录会失败）
 - API 代理：`resolveMasterAuth(... allowFallbackToken:false)`，避免 fallback token 后门
-- CSRF posture（最小要求）：
-  - 所有会改变状态的 `/api/master/*`（POST/PUT/DELETE）在代理层应校验 `Origin`/`Referer` 为同源（缺失或不匹配则拒绝）
-  - 作为补充，前端请求应默认携带同源 cookie（浏览器默认即可）
+- CSRF posture（最小要求，避免误伤 SSR/非浏览器请求）：
+  - 仅对 **浏览器发起** 的状态变更请求执行同源校验：
+    - 若请求包含 `Origin` 或 `Referer`，则必须为同源，否则拒绝。
+    - 若请求缺少 `Origin/Referer`，则仅当存在浏览器信号（例如 `Sec-Fetch-Site: same-origin`）时放行；否则拒绝。
+  - 说明：`GET /api/master/init` 为只读，可不做上述校验。
 - 401：统一 UI 引导“去登录”，并提供“退出”（调用 `/api/master/logout` 清 cookie）
 
 ## 高危动作防误触规则（不删功能）
-高危动作（至少）：`delete_shop`、`restore`、`trigger_backup`，以及批量/大额变更。
+高危动作（至少）：`delete_shop`、`restore`、`trigger_backup`、`batch_update_commission`、`adjust_shop_balance`（充值/扣款一律按高危处理，不设金额阈值）。
 
 统一交互规则：
 1. 二次确认弹窗：展示 action + 关键参数
@@ -186,7 +192,7 @@
 6. 下线旧页：Go 不再暴露 `/master.html`
 
 ## 旧页下线与切换策略
-- 最终状态：Go 侧不再 `StaticFile("/master.html", ...)`，访问 `/master.html` 应返回 404（或 410）。
+- 最终状态：Go 侧不再 `StaticFile("/master.html", ...)`，访问 `/master.html` 应返回 **404**。
 - 安全要求：如果 Go 后端对公网可直达，则必须同样不提供旧页（避免绕过新 UI 的安全/确认策略）。
 
 ## 风险与约束

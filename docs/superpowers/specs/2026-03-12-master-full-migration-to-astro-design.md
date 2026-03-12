@@ -42,7 +42,7 @@
 ### 页面/路由
 - `/master/login`：登录入口
 - `/master`：控制台入口（唯一）
-- `/api/master/*`：同域代理层（Cloudflare 环境下转发至 Go `https://api.serbia70.com/`）
+- `/api/master/*`：同域代理层（Cloudflare 环境下转发至 Go 后端；后端 base URL 通过环境变量配置，禁止硬编码）
 
 ### 前端边界划分（建议）
 1. `meituanAstro/src/pages/api/master/*`：只做鉴权解析（cookie → Authorization）+ 转发，不做业务逻辑。
@@ -70,7 +70,23 @@
 - `commission`：批量提成（batch_update_commission）
 
 ## 功能清单（必须 100% 覆盖）
-### 直接调用接口
+
+### 口径：以旧页为唯一真相（Source of Truth）
+本迁移的“100% 覆盖”必须可验证，不能靠记忆/感觉。
+
+**真相来源**
+- `meituanGo/static/master.html`（以及其引用的任何静态脚本/资源，如未来存在）
+
+**强制步骤（作为上线门禁）**
+- 从旧页中提取：
+  - 所有调用的 endpoint（method + path）
+  - 所有 `manage.action` 值
+  - 每个 action 的最小必填字段（从旧页构造 payload 的代码推断）
+- 将提取结果填入本节的“功能清单表”，并在实现验收时逐项勾选。
+
+> 备注：本设计稿当前先列出已识别的 action/endpoint，最终以提取结果为准，若发现漏项必须补齐。
+
+### 直接调用接口（已识别）
 - `POST /api/master/login`
 - `GET /api/master/init`
 - `POST /api/master/manage`
@@ -78,7 +94,7 @@
 - `POST /api/master/restore`
 - `POST /api/master/upload`
 
-### manage action（来自旧页）
+### manage action（已识别）
 - `update_settings`
 - `update_categories`
 - `update_rate_center`
@@ -94,15 +110,58 @@
 - `approve_renew`
 - `reject_renew`
 
+### Action 覆盖勾检表（上线前必须全绿）
+| action / endpoint | 类型 | 高危 | 旧页入口（按钮/区域） | 最小 payload 字段 | 预期结果/回显 | 已迁移 | 已手工验收 |
+|---|---|---|---|---|---|---|---|
+| POST /api/master/login | endpoint | 否 | 登录弹窗/页 | username,password | 返回 token 并建立 cookie | ☐ | ☐ |
+| GET /api/master/init | endpoint | 否 | 首屏加载 | - | 返回 shops/settings 等 | ☐ | ☐ |
+| POST /api/master/manage (action=update_settings) | action | 否 | 设置 tab | payload | 保存成功并刷新 init | ☐ | ☐ |
+| POST /api/master/manage (action=update_categories) | action | 否 | 类目 tab | payload | 保存成功并刷新 init | ☐ | ☐ |
+| POST /api/master/manage (action=update_rate_center) | action | 否 | 费率/提成 tab | payload | 保存成功并刷新 init | ☐ | ☐ |
+| POST /api/master/manage (action=get_shop_billing) | action | 否 | 店铺账单入口 | shop_id/slug? | 返回账单数据并展示 | ☐ | ☐ |
+| POST /api/master/manage (action=adjust_shop_balance) | action | 是（大额） | 充值入口 | shop_id, amount, note? | 余额变更并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=update_shop) | action | 否 | 店铺编辑弹窗 | shop fields | 更新并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=set_shop_plan) | action | 否 | 套餐设置 | shop_id, plan | 更新并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=create_shop) | action | 否 | 创建店铺 | shop fields | 创建并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=delete_shop) | action | 是 | 删除店铺 | shop_id/slug | 删除并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=update_password) | action | 是 | 改密码 | password | 成功提示/重新登录策略 | ☐ | ☐ |
+| POST /api/master/manage (action=trigger_backup) | action | 是 | 触发备份 | - 或 options | 触发成功并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=batch_update_commission) | action | 是（批量） | 批量提成 | payload | 批量更新并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=approve_renew) | action | 否 | 续费审批 | shop_id, amount? | 审批成功并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=reject_renew) | action | 否 | 续费审批 | shop_id, reason? | 驳回成功并回显 | ☐ | ☐ |
+| POST /api/master/backup | endpoint | 是 | 备份管理 | action=list/create/delete, backupName? | 列表/创建/删除回显 | ☐ | ☐ |
+| POST /api/master/restore | endpoint | 是 | 恢复面板 | backupName/backupId 等 | 恢复并强提示风险 | ☐ | ☐ |
+| POST /api/master/upload | endpoint | 否 | 上传入口 | multipart? | 返回 URL/标识并展示 | ☐ | ☐ |
+
 ## 数据流与状态策略
 - 核心数据源：`GET /api/master/init`
+
+### SSR 与代理路径（必须明确且一致）
+为了满足“线上请求必须走同域 `/api/master/*` 代理”的约束：
+- `/master` 的 SSR 获取 init 时，应优先请求 **同域** `GET /api/master/init`（而非直连 Go）。
+- 代理层从 cookie 解析 `master_token` 并注入 `Authorization` 转发到 Go。
+
+这样保证：
+- 浏览器与 SSR 都走同一条代理链路
+- Cloudflare 环境下不会因为跨域/直连策略导致行为不一致
+
+### 刷新策略
 - SSR 首屏：在 `/master` 服务器端获取 init 并渲染首屏；缺 cookie 则 302 `/master/login`
 - 客户端刷新：提供“刷新数据”按钮，重新请求 init
 - 写操作后刷新：任意 action 成功后默认刷新一次 init，确保一致性（降低前端 patch 风险）
 
 ## 认证 / 401 / 退出
 - token：只用 HttpOnly cookie `master_token`
+- cookie 属性要求（实现时必须满足，避免线上差异）：
+  - `HttpOnly: true`
+  - `Secure: true`（生产环境与 https 下必须）
+  - `SameSite: Lax`（允许站内跳转场景；如后续无第三方嵌入需求，可升级为 Strict）
+  - `Path: /`
+  - `Max-Age`: 12h（或与后端 token 过期策略一致）
 - API 代理：`resolveMasterAuth(... allowFallbackToken:false)`，避免 fallback token 后门
+- CSRF posture（最小要求）：
+  - 所有会改变状态的 `/api/master/*`（POST/PUT/DELETE）在代理层应校验 `Origin`/`Referer` 为同源（缺失或不匹配则拒绝）
+  - 作为补充，前端请求应默认携带同源 cookie（浏览器默认即可）
 - 401：统一 UI 引导“去登录”，并提供“退出”（调用 `/api/master/logout` 清 cookie）
 
 ## 高危动作防误触规则（不删功能）
@@ -121,10 +180,14 @@
 ## 验收清单
 1. 登录/退出：cookie 设置与清理正确；/master 未登录跳 /master/login
 2. init：总览与店铺列表渲染正常
-3. manage actions：上述全部 action 均可触发且结果可见
-4. 独立接口：backup list/create/delete；restore；upload
+3. manage actions：Action 覆盖勾检表中全部 action 均可触发且结果可见
+4. 独立接口：backup(list/create/delete)、restore、upload 均可用且有回显
 5. 401/错误态：不会白屏，有明确 CTA
 6. 下线旧页：Go 不再暴露 `/master.html`
+
+## 旧页下线与切换策略
+- 最终状态：Go 侧不再 `StaticFile("/master.html", ...)`，访问 `/master.html` 应返回 404（或 410）。
+- 安全要求：如果 Go 后端对公网可直达，则必须同样不提供旧页（避免绕过新 UI 的安全/确认策略）。
 
 ## 风险与约束
 - 一次性下线旧页意味着必须保障功能覆盖与回归验证；建议上线前至少进行一轮“逐项点检”

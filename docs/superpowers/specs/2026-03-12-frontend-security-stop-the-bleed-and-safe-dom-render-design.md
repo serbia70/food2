@@ -44,6 +44,12 @@
   3) 经 `pnpm run build` 验证不影响产物。
 - 仓库结构层面的“根目录大规模删改”不在本轮自动执行；如需要迁移/收敛仓库结构，另起设计与验证。
 
+## 现状与差距（实现前）
+- `meituanAstro/wrangler.toml` 目前包含 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 三个键，且应保持空字符串（由 `scripts/security-secrets.test.mjs` 约束）。
+- `scripts/check-no-unsafe-dom-apis.test.mjs` 目前仅检查 `src/scripts/admin/user-chat.ts` 是否包含 `.innerHTML` 与 `insertAdjacentHTML`，覆盖面不足以证明“全 src 归零”。
+- `src/components/UserModal.tsx` 目前存在 `dangerouslySetInnerHTML` 用法，需要在实现中移除。
+- `src/config.ts` 仍读取 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_*`，与“敏感项移出前端”目标存在冲突，需要在实现中改造/降级。
+
 ## 方案（采用）
 采用“止血 + 最小行为变更”方案：
 
@@ -57,14 +63,17 @@
 - 在 **`meituanAstro/` 范围内** 扫描并替换为安全 DOM 渲染（`createElement`/`textContent`/`replaceChildren`）。
 
 3) **防回归（明确可执行）**：
-- 将现有检查脚本纳入常规验证，并补齐覆盖面：
+- 将现有检查脚本纳入常规验证，并在本轮实现中补齐覆盖面：
   - `meituanAstro/scripts/security-secrets.test.mjs`：继续作为“wrangler.toml 空值哨兵”检测。
-  - `meituanAstro/scripts/check-no-unsafe-dom-apis.test.mjs`：本轮将其从“单文件检查”扩展为**递归扫描 `meituanAstro/src/**`（至少覆盖 `src/components`、`src/scripts`、`src/pages`、`src/lib`）**，对以下字符串做阻断：
+  - `meituanAstro/scripts/check-no-unsafe-dom-apis.test.mjs`：本轮将其从“单文件检查”扩展为**递归扫描 `meituanAstro/src/**`（至少覆盖 `src/components`、`src/scripts`、`src/pages`、`src/lib`）**，对以下 sink 字符串做阻断：
     - `innerHTML`
     - `insertAdjacentHTML`
     - `outerHTML`
     - `document.write`
     - `dangerouslySetInnerHTML`
+
+> 说明：当前仓库版本的 `check-no-unsafe-dom-apis.test.mjs` 覆盖面不足；扩展后的脚本是本轮实现的一部分，验收以扩展后脚本运行结果为准。
+
 - 本地至少确保可以用 node 直接运行这些脚本（CI 是否启用可选，但本轮必须保证本地验收可复现）。
 
 4) **功能影响边界（与“敏感项移出前端”对齐）**：
@@ -77,7 +86,7 @@
   - `meituanAstro/wrangler.toml` 中 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 三个键**必须存在且值必须为 `""`**（作为“空值哨兵”，用于检测仓库未提交真实凭据）。
 - Cloudflare Pages 项目环境变量中：不得为上述 `PUBLIC_*` 配置任何真实值（最好直接不配置这三项；如必须存在也只能为空）。
   - 仓库中不存在 `wrangler-dev.log`、`dev-server*.log` 等可能记录环境变量的日志文件。
-- **构建产物侧**：对 `meituanAstro/dist/` 扫描，不应出现上述敏感 key 或其疑似值。
+- **构建产物侧**：对 `meituanAstro/dist/` 扫描，不应出现上述敏感 key（以及常见的 MQTT 凭据 key）。本轮以“关键字扫描”作为止血验收（避免要求精确值匹配导致误报/漏报）。
 
 ### B. 危险 DOM sink API 为 0（业务代码）
 - 扫描 `meituanAstro/src/`（递归） 与 `meituanAstro/scripts/`：
@@ -88,8 +97,11 @@
 - 在 `meituanAstro/` 下：
   - `pnpm run dev`（核心路径可用：至少覆盖 `/admin/02`）
   - `pnpm run build`
-  - `node scripts/check-no-unsafe-dom-apis.test.mjs`
   - `node scripts/security-secrets.test.mjs`
+  - `node scripts/check-no-unsafe-dom-apis.test.mjs`（以本轮扩展后的递归扫描为准）
+  - `node -e "const {execSync}=require('node:child_process');const out=execSync(process.platform==='win32'?'where pnpm':'which pnpm',{encoding:'utf8'});process.stdout.write(out)"`（确认 pnpm 可用，避免环境差异）
+  - `node -e "const {execSync}=require('node:child_process');const out=execSync('git diff --name-only HEAD~1..HEAD',{encoding:'utf8'});console.log(out)"`（提交后检查变更文件列表，确保符合边界）
+  - `node -e "const {execSync}=require('node:child_process');const out=execSync('git grep -n \\\"PUBLIC_MASTER_TOKEN\\\" -- dist || true',{encoding:'utf8'});console.log(out)"`（对 dist 做关键字扫描；实现时可扩展到更多关键词）
 
 ### D. 变更集边界
 - 本轮提交的变更应限制在：`meituanAstro/**` 与必要的忽略/日志治理文件；不得包含仓库根目录的大规模删除（避免误操作导致结构损坏）。

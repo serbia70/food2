@@ -2,6 +2,7 @@ import { atom, map } from "nanostores";
 import { DEFAULT_USER_PASSWORD } from "./clientConfig";
 
 const KEY_USER = "food_order_user";
+const KEY_LEGACY_USER = "user_info";
 const KEY_SESSION = "user_session";
 
 export interface UserState {
@@ -34,8 +35,27 @@ export const $sessionToken = atom<string | null>(null);
 if (typeof localStorage !== "undefined") {
   try {
     const storedUser = localStorage.getItem(KEY_USER);
+    const storedLegacyUser = localStorage.getItem(KEY_LEGACY_USER);
+
+    let parsedUser: Partial<UserState> | null = null;
     if (storedUser) {
-      const data = JSON.parse(storedUser) as Partial<UserState>;
+      try {
+        parsedUser = JSON.parse(storedUser) as Partial<UserState>;
+      } catch {
+        parsedUser = null;
+      }
+    }
+
+    if (!parsedUser && storedLegacyUser) {
+      try {
+        parsedUser = JSON.parse(storedLegacyUser) as Partial<UserState>;
+      } catch {
+        parsedUser = null;
+      }
+    }
+
+    if (parsedUser) {
+      const data = parsedUser;
       $userStore.set({
         ...defaultState,
         ...data,

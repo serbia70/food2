@@ -66,6 +66,10 @@ git commit -m "docs(master): fill parity checklist payloads"
 
 ### Task 2: 确保 `/master` SSR 与浏览器都走同域 `/api/master/*`
 
+- [ ] **Step 0: Proxy-only 审计（必须）**
+  - 在改代码前先全局搜索，确保 master 相关实现不会直连 Go 后端 `/api/master/*`（不得使用 `${API_BASE_URL}/api/master/*` 或硬编码 URL）。
+  - 目标：所有 master 请求一律是相对路径 `/api/master/*`。
+
 **Files:**
 - Modify: `meituanAstro/src/pages/master/index.astro`
 
@@ -283,10 +287,16 @@ git commit -m "feat(master): implement shop create and edit flows"
 ### Task 11: Backup / Restore / Upload / Trigger backup
 
 **Files:**
+- Verify/Modify: `meituanAstro/src/pages/api/master/restore.ts`
+- Verify/Modify: `meituanAstro/src/pages/api/master/upload.ts`
 - Modify: `meituanAstro/src/components/master/MasterCodeBackupCard.astro`
 - Modify: `meituanAstro/src/components/master/MasterDataBackupCard.astro`
 - Modify/Create: `meituanAstro/src/components/master/MasterRestorePanel.astro`
 - Modify/Create: `meituanAstro/src/components/master/MasterUploadPanel.astro`
+
+- [ ] **Step 0: 验证 restore/upload 代理具备 multipart 透传能力（必须先做）**
+  - 要求：不得在 proxy route 中调用 `request.json()` 之类破坏 multipart 的解析；必须把请求体原样转发给 Go。
+  - 校验点：`Content-Type: multipart/form-data; boundary=...` 必须能被 Go 收到；不要手动重写 boundary。
 
 - [ ] **Step 1: backup list/create/delete**（走 `/api/master/backup`，并刷新列表）
 - [ ] **Step 2: trigger_backup**（走 manage，高危确认）

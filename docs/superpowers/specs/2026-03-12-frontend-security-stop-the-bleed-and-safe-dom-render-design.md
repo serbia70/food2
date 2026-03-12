@@ -27,11 +27,13 @@
   - 属性使用 `setAttribute`
 
 ### B. 敏感配置策略
-- **前端（仓库 + Cloudflare 前端环境 + 浏览器）不再持有**：
+- **前端（仓库 + Cloudflare 前端环境 + 浏览器）不再持有“可用”的凭据**：
   - master token
   - MQTT username/password
-- 浏览器侧仅允许使用非敏感公开配置：`PUBLIC_API_URL`（指向后端 base URL）。
-- 任何需要“特权”的能力（如 master 管理）必须转移到后端鉴权链路完成；前端不得通过“万能 token”直连后端做特权操作。
+- 浏览器侧运行时代码仅允许依赖非敏感公开配置：`PUBLIC_API_URL`（指向后端 base URL）。
+- 本轮为“仅前端止血”，不要求完成后端能力迁移：
+  - 若当前存在前端依赖万能 token / MQTT 凭据的能力，本轮允许**临时降级/隐藏该能力**，以确保前端不再持有可用凭据。
+  - 后端化（鉴权链路/接口改造）属于后续工作：需要另起 spec 明确后端最小配合与验收。
 
 > 线上动作（非代码）：按“已泄露”标准轮换 master token、MQTT 账号密码。
 
@@ -56,7 +58,7 @@
 1) **凭据治理止血**：
 - **仓库侧**：不在版本库中提交任何可用凭据值；对历史/日志进行清理并完善忽略规则。
   - 允许在 `wrangler.toml` 中保留 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 三个键作为“空值哨兵”（必须始终为 `""`），用于自动化检测“未提交真实凭据”。
-  - 但这三个键**不得在 Cloudflare Pages 的环境变量中被赋真实值**，且不得在前端运行时作为能力依赖。
+  - 但这三个键**不得在 Cloudflare Pages 的环境变量中被赋真实值**，且前端运行时代码不得读取/依赖它们（仅用于仓库层面的“空值哨兵”检测）。
 - **Cloudflare Pages/Workers 侧**：确保不存在任何可用的 master/MQTT 凭据（不以 `PUBLIC_` 形式提供；如曾配置过视为已泄露，需轮换）。
 
 2) **危险 DOM sink API 归零**：
@@ -65,7 +67,7 @@
 3) **防回归（明确可执行）**：
 - 将现有检查脚本纳入常规验证，并在本轮实现中补齐覆盖面：
   - `meituanAstro/scripts/security-secrets.test.mjs`：继续作为“wrangler.toml 空值哨兵”检测。
-  - `meituanAstro/scripts/check-no-unsafe-dom-apis.test.mjs`：本轮将其从“单文件检查”扩展为**递归扫描 `meituanAstro/src/**`（至少覆盖 `src/components`、`src/scripts`、`src/pages`、`src/lib`）**，对以下 sink 字符串做阻断：
+  - `meituanAstro/scripts/check-no-unsafe-dom-apis.test.mjs`：本轮将其从“单文件检查”扩展为**递归扫描 `meituanAstro/src/**`**，并对以下 sink 字符串做阻断：
     - `innerHTML`
     - `insertAdjacentHTML`
     - `outerHTML`
@@ -84,14 +86,16 @@
 ### A. 秘密/凭据不在前端
 - **仓库侧**：
   - `meituanAstro/wrangler.toml` 中 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 三个键**必须存在且值必须为 `""`**（作为“空值哨兵”，用于检测仓库未提交真实凭据）。
+  - 业务代码（`meituanAstro/src/**`）不得读取/依赖 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD`（即便它们为空也不应成为运行时依赖）。
 - Cloudflare Pages 项目环境变量中：不得为上述 `PUBLIC_*` 配置任何真实值（最好直接不配置这三项；如必须存在也只能为空）。
-  - 仓库中不存在 `wrangler-dev.log`、`dev-server*.log` 等可能记录环境变量的日志文件。
-- **构建产物侧**：对 `meituanAstro/dist/` 扫描，不应出现上述敏感 key（以及常见的 MQTT 凭据 key）。本轮以“关键字扫描”作为止血验收（避免要求精确值匹配导致误报/漏报）。
+- 仓库中不存在 `wrangler-dev.log`、`dev-server*.log` 等可能记录环境变量的日志文件。
+- **构建产物侧**：对 `meituanAstro/dist/` 做文件系统级关键字扫描，确保不出现上述敏感 key（以及常见的 MQTT 凭据 key）。本轮以“关键字扫描”作为止血验收。
 
 ### B. 危险 DOM sink API 为 0（业务代码）
-- 扫描 `meituanAstro/src/`（递归） 与 `meituanAstro/scripts/`：
-  - 禁止：`innerHTML`、`insertAdjacentHTML`、`outerHTML`、`document.write`、`dangerouslySetInnerHTML`
-  - 允许：检查脚本/测试中出现这些字符串用于断言（必须明确标注为“检查用途”）。
+- 以“业务代码 = `meituanAstro/src/**`”作为硬边界（避免把检查脚本自身的断言字符串算作违规）：
+  - 扫描目标：`meituanAstro/src/**`（递归）
+  - 禁止 sink 字符串：`innerHTML`、`insertAdjacentHTML`、`outerHTML`、`document.write`、`dangerouslySetInnerHTML`
+- `meituanAstro/scripts/**` 允许包含上述字符串（用于检测），但实现中应避免在业务脚本目录下混入检测脚本。
 
 ### C. 可执行验收命令
 - 在 `meituanAstro/` 下：
@@ -101,7 +105,7 @@
   - `node scripts/check-no-unsafe-dom-apis.test.mjs`（以本轮扩展后的递归扫描为准）
   - `node -e "const {execSync}=require('node:child_process');const out=execSync(process.platform==='win32'?'where pnpm':'which pnpm',{encoding:'utf8'});process.stdout.write(out)"`（确认 pnpm 可用，避免环境差异）
   - `node -e "const {execSync}=require('node:child_process');const out=execSync('git diff --name-only HEAD~1..HEAD',{encoding:'utf8'});console.log(out)"`（提交后检查变更文件列表，确保符合边界）
-  - `node -e "const {execSync}=require('node:child_process');const out=execSync('git grep -n \\\"PUBLIC_MASTER_TOKEN\\\" -- dist || true',{encoding:'utf8'});console.log(out)"`（对 dist 做关键字扫描；实现时可扩展到更多关键词）
+  - `node -e "const fs=require('node:fs');const path=require('node:path');const root=path.join(process.cwd(),'dist');const needles=['PUBLIC_MASTER_TOKEN','PUBLIC_MQTT_USERNAME','PUBLIC_MQTT_PASSWORD','MQTT_USERNAME','MQTT_PASSWORD'];function walk(dir){for(const ent of fs.readdirSync(dir,{withFileTypes:true})){const fp=path.join(dir,ent.name);if(ent.isDirectory())walk(fp);else{const buf=fs.readFileSync(fp);for(const n of needles){if(buf.includes(Buffer.from(n))){console.error('FOUND',n,'in',fp);process.exitCode=1;}}}}}if(fs.existsSync(root))walk(root);if(process.exitCode)process.exit(1);"`（对 dist 做文件系统级关键字扫描，覆盖未跟踪产物）
 
 ### D. 变更集边界
 - 本轮提交的变更应限制在：`meituanAstro/**` 与必要的忽略/日志治理文件；不得包含仓库根目录的大规模删除（避免误操作导致结构损坏）。

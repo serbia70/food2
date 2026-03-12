@@ -1,6 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
-import { API_BASE_URL, MASTER_TOKEN } from '../../../config';
+import { API_BASE_URL } from '../../../config';
 
 export const prerender = false;
 
@@ -18,14 +18,10 @@ const parseJSON = <T = any>(raw: any, fallback: T): T => {
 
 let shopRes: Response;
 let orderRes: Response;
-let masterRes: Response | null;
 try {
-  [shopRes, orderRes, masterRes] = await Promise.all([
+  [shopRes, orderRes] = await Promise.all([
     fetch(`${API_BASE_URL}/${encodeURIComponent(slug)}/info`),
     fetch(`${API_BASE_URL}/${encodeURIComponent(slug)}/order/${encodeURIComponent(order_no)}`),
-    fetch(`${API_BASE_URL}/api/master/init`, {
-      headers: { Authorization: `Bearer ${MASTER_TOKEN}` },
-    }).catch(() => null as any),
   ]);
 } catch {
   return new Response('Upstream unavailable', { status: 503 });
@@ -44,8 +40,19 @@ try {
   return new Response('Invalid upstream response', { status: 502 });
 }
 const settings = parseJSON<any>(shop?.settings, {});
-const masterData = masterRes && masterRes.ok ? await masterRes.json().catch(() => ({})) : {};
-const masterSettings = masterData?.settings || {};
+
+// Public master settings (no auth) for footer/contact display.
+// Ensures the order-view page can resolve fallback contact + mqtt settings without a master token.
+let publicMasterSettings: any = {};
+try {
+  const homeRes = await fetch(`${API_BASE_URL}/api/home`);
+  if (homeRes.ok) {
+    const d = await homeRes.json();
+    publicMasterSettings = d?.settings || {};
+  }
+} catch {}
+
+const masterSettings = publicMasterSettings || {};
 
 const phone =
   String(settings?.contact?.phone || settings?.phone || shop?.phone || masterSettings?.footer_phone || '');

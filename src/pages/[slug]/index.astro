@@ -7,7 +7,7 @@ import UserModal from '../../components/UserModal';
 import ReservationModal from '../../components/ReservationModal';
 import ShopChatModal from '../../components/ShopChatModal';
 import TablePageEntryIsland from '../../components/shop/TablePageEntryIsland.tsx';
-import { API_BASE_URL, MASTER_TOKEN } from '../../config';
+import { API_BASE_URL } from '../../config';
 import { classifyShopResponseStatus } from '../../lib/shop-status';
 import { shouldRetryStream } from '../../lib/stream-retry';
 import {
@@ -91,16 +91,8 @@ const activeMenu = (Array.isArray(rawMenu) ? rawMenu : [])
   .filter((cat: any) => Array.isArray(cat.products) && cat.products.length > 0);
 
 
+// Keep masterSettings for compatibility, but do not depend on master auth in public pages.
 let masterSettings: any = {};
-try {
-  const masterRes = await fetch(`${API_BASE_URL}/api/master/init`, {
-    headers: { Authorization: `Bearer ${MASTER_TOKEN}` },
-  });
-  if (masterRes.ok) {
-    const d = await masterRes.json();
-    masterSettings = d?.settings || {};
-  }
-} catch {}
 
 // Public master settings (no auth) for footer/contact display.
 // Ensures the shop page footer matches `/master?tab=settings` without requiring a master token.

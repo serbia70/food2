@@ -1,4 +1,4 @@
-import { MQTT_BROKER, MQTT_PASSWORD, MQTT_USERNAME } from '../config';
+import { MQTT_BROKER } from '../config';
 
 let mqttClient: any = null;
 let mqttInitInFlight = false;
@@ -78,8 +78,6 @@ export function ensureUserChatRealtime(options: {
 		},
 	};
 
-	if (String(MQTT_USERNAME || '').trim()) connectOptions.userName = String(MQTT_USERNAME || '').trim();
-	if (String(MQTT_PASSWORD || '').trim()) connectOptions.password = String(MQTT_PASSWORD || '');
 
 	try {
 		mqttClient.connect(connectOptions);

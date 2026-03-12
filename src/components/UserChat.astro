@@ -2,18 +2,14 @@
 interface Props {
   restaurantId: string;
   mqttBroker?: string;
-  mqttUsername?: string;
-  mqttPassword?: string;
 }
 
-  import { MQTT_BROKER, MQTT_USERNAME, MQTT_PASSWORD } from '../config';
+  import { MQTT_BROKER } from '../config';
 
-  const { restaurantId, mqttBroker, mqttUsername, mqttPassword } = Astro.props;
+  const { restaurantId, mqttBroker } = Astro.props;
 
   // Prefer per-page settings passed from the shop page; fallback to global config.
   const effectiveMqttBroker = String(mqttBroker || MQTT_BROKER || '');
-  const effectiveMqttUsername = String(mqttUsername || MQTT_USERNAME || '');
-  const effectiveMqttPassword = String(mqttPassword || MQTT_PASSWORD || '');
 ---
 
 <div id="chat-fab" onclick="window.dispatchEvent(new Event('open-shop-chat-modal'))" style="
@@ -49,7 +45,7 @@ interface Props {
 
 <script src="/vendor/mqttws31.min.js" is:inline></script>
 
-<script define:vars={{ restaurantId, mqttBroker: effectiveMqttBroker, mqttUsername: effectiveMqttUsername, mqttPassword: effectiveMqttPassword }}>
+<script define:vars={{ restaurantId, mqttBroker: effectiveMqttBroker }}>
   let chatOpen = false;
   let userPhone = '';
   const shopSlug = restaurantId;
@@ -372,8 +368,6 @@ interface Props {
       },
     };
 
-    if (String(mqttUsername || '').trim()) opts.userName = String(mqttUsername || '').trim();
-    if (String(mqttPassword || '').trim()) opts.password = String(mqttPassword || '');
 
     try {
       mqttClient.connect(opts);

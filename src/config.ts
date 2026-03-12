@@ -6,14 +6,16 @@ export const API_BASE_URL =
 // NOTE: master token must never be read from PUBLIC_* runtime env.
 export const MASTER_TOKEN = '';
 
-// MQTT config (avoid hardcoded credentials in pages)
+// MQTT config
+// NOTE: Do not read credentials from PUBLIC_* env vars (browser-visible).
 export const MQTT_BROKER =
   (import.meta as any).env?.PUBLIC_MQTT_BROKER ||
   'wss://mqtt.serbia70.com:443/mqtt';
-export const MQTT_USERNAME =
-  (import.meta as any).env?.PUBLIC_MQTT_USERNAME || '';
-export const MQTT_PASSWORD =
-  (import.meta as any).env?.PUBLIC_MQTT_PASSWORD || '';
+
+// Credentials removed from frontend. Keep placeholders to avoid breaking imports in
+// older code paths (should not be used).
+export const MQTT_USERNAME = '';
+export const MQTT_PASSWORD = '';
 
 export const APP_NAME = 'MeituanGo';
 export const APP_VERSION = '1.0.0';

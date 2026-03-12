@@ -195,6 +195,58 @@ func TestUserHistorySessionTokenUnknownReturns401(t *testing.T) {
 	}
 }
 
+func TestUserHistoryLegacyLoginPhoneInputReturnsCanonicalSessionToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupMobileAuthDB(t)
+
+	// Seed user: login_account=888, phone=0613083899
+	if _, err := db.DB.Exec("INSERT INTO users (phone, name, password, login_account) VALUES ('0613083899', 'User', 'secret', '888')"); err != nil {
+		t.Fatalf("seed user failed: %v", err)
+	}
+
+	r := gin.New()
+	r.POST("/api/user/history", UserHistory)
+
+	// Login using phone as login_account input (legacy behavior allows lookup by phone)
+	req := httptest.NewRequest(http.MethodPost, "/api/user/history", strings.NewReader(`{"login_account":"0613083899","password":"secret"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "\"sessionToken\":\"888\"") {
+		t.Fatalf("expected canonical sessionToken 888, got %s", body)
+	}
+}
+
+func TestUserHistoryLegacyLoginDoesNotLeakPasswordField(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupMobileAuthDB(t)
+
+	if _, err := db.DB.Exec("INSERT INTO users (phone, name, password, login_account) VALUES ('0613083899', 'User', 'secret', '888')"); err != nil {
+		t.Fatalf("seed user failed: %v", err)
+	}
+
+	r := gin.New()
+	r.POST("/api/user/history", UserHistory)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/user/history", strings.NewReader(`{"login_account":"888","password":"secret"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	bodyLower := strings.ToLower(w.Body.String())
+	if strings.Contains(bodyLower, "\"password\"") {
+		t.Fatalf("did not expect password field in response, got %s", w.Body.String())
+	}
+}
+
 func TestUserUpdateReturnsReadableErrorWhenPhoneAlreadyExists(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setupMobileAuthDB(t)

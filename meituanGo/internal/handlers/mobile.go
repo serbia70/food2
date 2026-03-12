@@ -237,7 +237,7 @@ func UserHistory(c *gin.Context) {
 	if token != "" {
 		var user db.User
 		err := db.DB.Get(&user, `
-			SELECT id, phone, name, password, login_account, last_address, email, avatar, created_at
+			SELECT id, phone, login_account
 			FROM users
 			WHERE login_account = ?
 			LIMIT 1
@@ -328,9 +328,17 @@ func UserHistory(c *gin.Context) {
 		}
 	}
 
+	sessionToken := acc
+	if user.LoginAccount != nil {
+		canonical := strings.TrimSpace(*user.LoginAccount)
+		if canonical != "" {
+			sessionToken = canonical
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success":      true,
-		"sessionToken": acc,
+		"sessionToken": sessionToken,
 		"user":         user,
 	})
 }

@@ -84,6 +84,10 @@
   - 每个 action 的最小必填字段（从旧页构造 payload 的代码推断）
 - 将提取结果填入本节的“功能清单表”，并在实现验收时逐项勾选。
 
+**上线门禁（不可跳过）**
+- Action 覆盖勾检表中若仍存在任何 `TBD(...)`，视为规格未完成：不得进入实现/上线验收阶段。
+- 每个 action/endpoint 必须补充“旧页证据”（代码行号或片段），便于复核。
+
 > 备注：本设计稿当前先列出已识别的 action/endpoint，最终以提取结果为准，若发现漏项必须补齐。
 
 ### 直接调用接口（已识别）
@@ -112,28 +116,28 @@
 - `reject_renew`
 
 ### Action 覆盖勾检表（上线前必须全绿）
-| action / endpoint | 类型 | 高危 | 旧页入口（按钮/区域） | 最小 payload 字段 | 预期结果/回显 | 已迁移 | 已手工验收 |
-|---|---|---|---|---|---|---|---|
-| POST /api/master/login | endpoint | 否 | 登录弹窗/页 | username,password | 返回 token 并建立 cookie | ☐ | ☐ |
-| POST /api/master/logout | endpoint | 否 | 顶部退出按钮/401 引导 | - | 清理 master_token cookie，返回 ok | ☐ | ☐ |
-| GET /api/master/init | endpoint | 否 | 首屏加载 | - | 返回 shops/settings 等 | ☐ | ☐ |
-| POST /api/master/manage (action=update_settings) | action | 否 | 设置 tab | TBD(从旧页提取字段) | 保存成功并刷新 init | ☐ | ☐ |
-| POST /api/master/manage (action=update_categories) | action | 否 | 类目 tab | payload | 保存成功并刷新 init | ☐ | ☐ |
-| POST /api/master/manage (action=update_rate_center) | action | 否 | 费率/提成 tab | payload | 保存成功并刷新 init | ☐ | ☐ |
-| POST /api/master/manage (action=get_shop_billing) | action | 否 | 店铺账单入口 | TBD(从旧页提取字段；以旧页实际发送为准) | 返回账单数据并展示 | ☐ | ☐ |
-| POST /api/master/manage (action=adjust_shop_balance) | action | 是 | 充值入口 | TBD(从旧页提取字段；以旧页实际发送为准) | 余额变更并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=update_shop) | action | 否 | 店铺编辑弹窗 | shop fields | 更新并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=set_shop_plan) | action | 否 | 套餐设置 | shop_id, plan | 更新并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=create_shop) | action | 否 | 创建店铺 | shop fields | 创建并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=delete_shop) | action | 是 | 删除店铺 | shop_id/slug | 删除并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=update_password) | action | 是 | 改密码 | password | 成功提示/重新登录策略 | ☐ | ☐ |
-| POST /api/master/manage (action=trigger_backup) | action | 是 | 触发备份 | - 或 options | 触发成功并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=batch_update_commission) | action | 是（批量） | 批量提成 | payload | 批量更新并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=approve_renew) | action | 否 | 续费审批 | shop_id, amount? | 审批成功并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=reject_renew) | action | 否 | 续费审批 | shop_id, reason? | 驳回成功并回显 | ☐ | ☐ |
-| POST /api/master/backup | endpoint | 是 | 备份管理 | JSON：`{ action: "list" | "create" | "delete", backupName?: string }`（以旧页实际发送为准） | 列表刷新/创建后可见/删除后不可见 | ☐ | ☐ |
-| POST /api/master/restore | endpoint | 是 | 恢复面板 | 透传旧页请求体（可能为 JSON 或 multipart；以旧页实际发送为准），核心标识：`backupName` | 恢复并强提示风险，建议刷新 init/重新登录 | ☐ | ☐ |
-| POST /api/master/upload | endpoint | 否 | 上传入口 | 透传请求体（通常为 `multipart/form-data`，字段名以旧页为准） | 返回后端响应并在 UI 展示结果 | ☐ | ☐ |
+| action / endpoint | 类型 | 高危 | 旧页入口（按钮/区域） | 旧页证据（行号/片段） | 最小 payload 字段 | 预期结果/回显 | 已迁移 | 已手工验收 |
+|---|---|---|---|---|---|---|---|---|
+| POST /api/master/login | endpoint | 否 | 登录弹窗/页 | TBD(填旧页行号) | username,password | 返回 token 并建立 cookie | ☐ | ☐ |
+| POST /api/master/logout | endpoint | 否 | 顶部退出按钮/401 引导 | TBD(填 Astro 页面/逻辑入口) | - | 清理 master_token cookie，返回 ok | ☐ | ☐ |
+| GET /api/master/init | endpoint | 否 | 首屏加载 | TBD(填旧页行号) | - | 返回 shops/settings 等 | ☐ | ☐ |
+| POST /api/master/manage (action=update_settings) | action | 否 | 设置 tab | TBD(填旧页行号) | TBD(从旧页提取字段) | 保存成功并刷新 init | ☐ | ☐ |
+| POST /api/master/manage (action=update_categories) | action | 否 | 类目 tab | TBD(填旧页行号) | TBD(从旧页提取字段) | 保存成功并刷新 init | ☐ | ☐ |
+| POST /api/master/manage (action=update_rate_center) | action | 否 | 费率/提成 tab | TBD(填旧页行号) | TBD(从旧页提取字段) | 保存成功并刷新 init | ☐ | ☐ |
+| POST /api/master/manage (action=get_shop_billing) | action | 否 | 店铺账单入口 | TBD(填旧页行号) | TBD(从旧页提取字段；以旧页实际发送为准) | 返回账单数据并展示 | ☐ | ☐ |
+| POST /api/master/manage (action=adjust_shop_balance) | action | 是 | 充值入口 | TBD(填旧页行号) | TBD(从旧页提取字段；以旧页实际发送为准) | 余额变更并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=update_shop) | action | 否 | 店铺编辑弹窗 | TBD(填旧页行号) | TBD(从旧页提取字段) | 更新并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=set_shop_plan) | action | 否 | 套餐设置 | TBD(填旧页行号) | TBD(从旧页提取字段) | 更新并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=create_shop) | action | 否 | 创建店铺 | TBD(填旧页行号) | TBD(从旧页提取字段) | 创建并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=delete_shop) | action | 是 | 删除店铺 | TBD(填旧页行号) | TBD(从旧页提取字段) | 删除并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=update_password) | action | 是 | 改密码 | TBD(填旧页行号) | TBD(从旧页提取字段) | 成功提示/重新登录策略 | ☐ | ☐ |
+| POST /api/master/manage (action=trigger_backup) | action | 是 | 触发备份 | TBD(填旧页行号) | TBD(从旧页提取字段) | 触发成功并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=batch_update_commission) | action | 是（批量） | 批量提成 | TBD(填旧页行号) | TBD(从旧页提取字段) | 批量更新并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=approve_renew) | action | 否 | 续费审批 | TBD(填旧页行号) | TBD(从旧页提取字段) | 审批成功并回显 | ☐ | ☐ |
+| POST /api/master/manage (action=reject_renew) | action | 否 | 续费审批 | TBD(填旧页行号) | TBD(从旧页提取字段) | 驳回成功并回显 | ☐ | ☐ |
+| POST /api/master/backup | endpoint | 是 | 备份管理 | TBD(填旧页行号) | JSON：`{ action: "list" | "create" | "delete", backupName?: string }`（以旧页实际发送为准） | 列表刷新/创建后可见/删除后不可见 | ☐ | ☐ |
+| POST /api/master/restore | endpoint | 是 | 恢复面板 | TBD(填旧页行号) | 透传旧页请求体（可能为 JSON 或 multipart；以旧页实际发送为准），核心标识：`backupName` | 恢复并强提示风险，建议刷新 init/重新登录 | ☐ | ☐ |
+| POST /api/master/upload | endpoint | 否 | 上传入口 | TBD(填旧页行号) | 透传请求体（通常为 `multipart/form-data`，字段名以旧页为准） | 返回后端响应并在 UI 展示结果 | ☐ | ☐ |
 
 ## 数据流与状态策略
 - 核心数据源：`GET /api/master/init`
@@ -153,7 +157,7 @@
 - 写操作后刷新：任意 action 成功后默认刷新一次 init，确保一致性（降低前端 patch 风险）
 
 ## 认证 / 401 / 退出
-- token：只用 HttpOnly cookie `master_token`
+- token：只用 HttpOnly cookie `master_token`（可选增强：使用 `__Host-master_token` 以强化约束）
 - cookie 属性要求（按环境）：
   - 生产环境（https）：
     - `HttpOnly: true`
@@ -163,12 +167,19 @@
     - `Max-Age`: 12h（或与后端 token 过期策略一致）
   - 本地开发（http）：允许 `Secure: false`（否则 cookie 无法写入，登录会失败）
 - API 代理：`resolveMasterAuth(... allowFallbackToken:false)`，避免 fallback token 后门
-- CSRF posture（最小要求，避免误伤 SSR/非浏览器请求）：
-  - 仅对 **浏览器发起** 的状态变更请求执行同源校验：
-    - 若请求包含 `Origin` 或 `Referer`，则必须为同源，否则拒绝。
-    - 若请求缺少 `Origin/Referer`，则仅当存在浏览器信号（例如 `Sec-Fetch-Site: same-origin`）时放行；否则拒绝。
-  - 说明：`GET /api/master/init` 为只读，可不做上述校验。
+- CSRF posture（最小可行且不破坏 SSR）
+  - 适用范围：仅对同域 `/api/master/*` 的**状态变更**请求（POST/PUT/PATCH/DELETE）生效；`GET /api/master/init` 不做 CSRF 校验。
+  - 校验规则（确定性算法）：
+    1) 如果请求包含 `Origin`：必须等于当前站点 `origin`，否则 **403**。
+    2) 否则如果请求包含 `Referer`：其 `origin` 必须等于当前站点 `origin`，否则 **403**。
+    3) 否则（两者都缺失）：**放行**（用于 SSR / 非浏览器工具调用），但必须仍通过 cookie 鉴权（HttpOnly `master_token`）与后端权限校验。
+  - 说明：我们优先“同源校验有头就严格、没头不误杀 SSR”，后续如需更强 CSRF 可再评估双重提交 token 等方案。
 - 401：统一 UI 引导“去登录”，并提供“退出”（调用 `/api/master/logout` 清 cookie）
+- 退出/清理 cookie（必须一致）：`/api/master/logout` 必须通过 `Set-Cookie` 清除 cookie，要求：
+  - cookie 名称与登录一致
+  - `Path=/`（与登录保持一致）
+  - `Max-Age=0`（或 `Expires` 设为过去时间）
+  - `HttpOnly/SameSite/Secure` 属性与登录时保持一致（避免出现“同名不同属性 cookie”残留）
 
 ## 高危动作防误触规则（不删功能）
 高危动作（至少）：`delete_shop`、`restore`、`trigger_backup`、`batch_update_commission`、`adjust_shop_balance`（充值/扣款一律按高危处理，不设金额阈值）。

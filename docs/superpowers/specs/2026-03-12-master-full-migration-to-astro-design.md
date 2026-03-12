@@ -118,26 +118,26 @@
 ### Action 覆盖勾检表（上线前必须全绿）
 | action / endpoint | 类型 | 高危 | 旧页入口（按钮/区域） | 旧页证据（行号/片段） | 最小 payload 字段 | 预期结果/回显 | 已迁移 | 已手工验收 |
 |---|---|---|---|---|---|---|---|---|
-| POST /api/master/login | endpoint | 否 | 登录弹窗/页 | TBD(填旧页行号) | username,password | 返回 token 并建立 cookie | ☐ | ☐ |
-| POST /api/master/logout | endpoint | 否 | 顶部退出按钮/401 引导 | TBD(填 Astro 页面/逻辑入口) | - | 清理 master_token cookie，返回 ok | ☐ | ☐ |
-| GET /api/master/init | endpoint | 否 | 首屏加载 | TBD(填旧页行号) | - | 返回 shops/settings 等 | ☐ | ☐ |
-| POST /api/master/manage (action=update_settings) | action | 否 | 设置 tab | TBD(填旧页行号) | TBD(从旧页提取字段) | 保存成功并刷新 init | ☐ | ☐ |
-| POST /api/master/manage (action=update_categories) | action | 否 | 类目 tab | TBD(填旧页行号) | TBD(从旧页提取字段) | 保存成功并刷新 init | ☐ | ☐ |
-| POST /api/master/manage (action=update_rate_center) | action | 否 | 费率/提成 tab | TBD(填旧页行号) | TBD(从旧页提取字段) | 保存成功并刷新 init | ☐ | ☐ |
-| POST /api/master/manage (action=get_shop_billing) | action | 否 | 店铺账单入口 | TBD(填旧页行号) | TBD(从旧页提取字段；以旧页实际发送为准) | 返回账单数据并展示 | ☐ | ☐ |
-| POST /api/master/manage (action=adjust_shop_balance) | action | 是 | 充值入口 | TBD(填旧页行号) | TBD(从旧页提取字段；以旧页实际发送为准) | 余额变更并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=update_shop) | action | 否 | 店铺编辑弹窗 | TBD(填旧页行号) | TBD(从旧页提取字段) | 更新并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=set_shop_plan) | action | 否 | 套餐设置 | TBD(填旧页行号) | TBD(从旧页提取字段) | 更新并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=create_shop) | action | 否 | 创建店铺 | TBD(填旧页行号) | TBD(从旧页提取字段) | 创建并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=delete_shop) | action | 是 | 删除店铺 | TBD(填旧页行号) | TBD(从旧页提取字段) | 删除并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=update_password) | action | 是 | 改密码 | TBD(填旧页行号) | TBD(从旧页提取字段) | 成功提示/重新登录策略 | ☐ | ☐ |
-| POST /api/master/manage (action=trigger_backup) | action | 是 | 触发备份 | TBD(填旧页行号) | TBD(从旧页提取字段) | 触发成功并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=batch_update_commission) | action | 是（批量） | 批量提成 | TBD(填旧页行号) | TBD(从旧页提取字段) | 批量更新并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=approve_renew) | action | 否 | 续费审批 | TBD(填旧页行号) | TBD(从旧页提取字段) | 审批成功并回显 | ☐ | ☐ |
-| POST /api/master/manage (action=reject_renew) | action | 否 | 续费审批 | TBD(填旧页行号) | TBD(从旧页提取字段) | 驳回成功并回显 | ☐ | ☐ |
-| POST /api/master/backup | endpoint | 是 | 备份管理 | TBD(填旧页行号) | JSON：`{ action: "list" | "create" | "delete", backupName?: string }`（以旧页实际发送为准） | 列表刷新/创建后可见/删除后不可见 | ☐ | ☐ |
-| POST /api/master/restore | endpoint | 是 | 恢复面板 | TBD(填旧页行号) | 透传旧页请求体（可能为 JSON 或 multipart；以旧页实际发送为准），核心标识：`backupName` | 恢复并强提示风险，建议刷新 init/重新登录 | ☐ | ☐ |
-| POST /api/master/upload | endpoint | 否 | 上传入口 | TBD(填旧页行号) | 透传请求体（通常为 `multipart/form-data`，字段名以旧页为准） | 返回后端响应并在 UI 展示结果 | ☐ | ☐ |
+| POST /api/master/login | endpoint | 否 | 登录弹窗（“进入系统”） | `meituanGo/static/master.html:573-574,1750-1760` | `username`,`password` | 返回 token（旧页写入 `localStorage.master_token`；新实现改为 HttpOnly cookie） | ☐ | ☐ |
+| POST /api/master/logout | endpoint | 否 | 顶部“退出”按钮 | 旧页**未调用**该接口：仅 `localStorage.removeItem("master_token")`（`master.html:598,1778-1782`）；Astro 已有 `/api/master/logout`：`meituanAstro/src/pages/api/master/logout.ts:5-11` | - | 清理 `master_token` cookie，返回 `{ success: true }` | ☐ | ☐ |
+| GET /api/master/init | endpoint | 否 | 首屏加载（本地有 token 即 init） | `master.html:1742-1748,1784-1807` | - | 返回 `shops/settings` 等（旧页用于渲染店铺与设置） | ☐ | ☐ |
+| POST /api/master/manage (action=update_settings) | action | 否 | “系统设置”Tab → “💾 保存所有设置” | UI：`master.html:789-790,1461-1463`；请求：`master.html:2317-2376` | `mqttBroker`,`footerText`,`footerPhone`,`footerCopyright`,`subscriptionDeliveryCommissionType`,`subscriptionDeliveryCommissionValue`,`businessDeliveryCommissionType`,`businessDeliveryCommissionValue`,`subscriptionFeeRsd`,`businessFeeRsd`,`billingCurrency`,`graceDays`,`retentionDineInDays`,`retentionDeliveryDays`,`statsRetentionMode`,`wechatId`,`wechat_contact_qr`,`alipay_payment_qr`,`wechat_payment_qr`,`exchange_rate`,`imageStorage`,`r2PublicDomain`,`uploadStrictR2`,`backupTime`,`backupRetention`,`backupTarget`,`backupHost`,`backupUser`,`backupPass`,`backupPath`,`backupEndpoint`,`backupBucket` | 保存成功并提示（旧页 `alert("✅ 设置已保存")`） | ☐ | ☐ |
+| POST /api/master/manage (action=update_categories) | action | 否 | “系统设置”Tab → “保存分类配置” | UI：`master.html:791-823`；请求：`master.html:2379-2387` | `payload`（JSON 数组；旧页 `JSON.parse(textarea)` 后直接透传） | 保存成功并提示（旧页 `alert("✅ 分类已更新")`） | ☐ | ☐ |
+| POST /api/master/manage (action=update_rate_center) | action | 否 | “系统设置”Tab → “💾 保存汇率配置” | UI：`master.html:1051-1152`；请求：`master.html:2403-2411` | `base_rate`,`manual_offset`,`daily_step` | 保存成功并提示（旧页 `alert("✅ 汇率已保存")`） | ☐ | ☐ |
+| POST /api/master/manage (action=get_shop_billing) | action | 否 | 店铺列表 → “编辑(✏️)”打开弹窗后自动加载余额 | UI：`master.html:2017-2022,2584-2587`；请求：`master.html:2470-2490` | `id` | 返回账单数据并回显到“当前余额”（旧页更新 `#edit-billing-balance`） | ☐ | ☐ |
+| POST /api/master/manage (action=adjust_shop_balance) | action | 是 | 店铺编辑弹窗 → “💰 钱包充值”面板 → “充值”按钮 | UI：`master.html:1620-1701`；请求：`master.html:2503-2550` | RSD 充值：`id`,`amountRsd`,`entryType`,`note`；CNY 充值：`id`,`sourceCurrency`,`sourceAmount`,`entryType`,`note` | 余额变更并回显（旧页更新余额、清空输入并 `alert("✅ 充值成功")`） | ☐ | ☐ |
+| POST /api/master/manage (action=update_shop) | action | 否 | 店铺编辑弹窗 → “💾 保存” | UI：`master.html:1466-1475,1724-1726`；请求：`master.html:2589-2622` | `id`,`name`,`slug`,`expireDate`,`lastPaidMonth`,`commissionMode`,`commissionType`,`commissionValue`,`enableDelivery`,`enableDineIn`,`enableReservation`,`newPassword` | 更新成功后提示并 `location.reload()` | ☐ | ☐ |
+| POST /api/master/manage (action=set_shop_plan) | action | 否 | 店铺编辑弹窗保存时顺带设置套餐（非独立按钮） | 请求：`master.html:2614-2617` | `id`,`planType` | 更新套餐成功后继续完成保存流程（失败则中断） | ☐ | ☐ |
+| POST /api/master/manage (action=create_shop) | action | 否 | “创建店铺”Tab → “✨ 创建店铺” | UI：`master.html:751-785`；请求：`master.html:2624-2637` | `name`,`phone`,`password` | 创建成功提示并刷新（旧页 `alert("✅ 创建成功: " + res.slug)` + reload） | ☐ | ☐ |
+| POST /api/master/manage (action=delete_shop) | action | 是 | 店铺列表 → 删除按钮（🗑️） | UI：`master.html:2140-2169`；请求：`master.html:2640-2646` | `ID` | 删除成功后刷新（旧页 `location.reload()`） | ☐ | ☐ |
+| POST /api/master/manage (action=update_password) | action | 是 | “系统设置”Tab → “🔑 修改超级密码” → “💾 保存” | UI：`master.html:1212-1225`；请求：`master.html:2649-2661` | `newPassword` | 成功提示并强制重新登录（旧页清 token + reload） | ☐ | ☐ |
+| POST /api/master/manage (action=trigger_backup) | action | 是 | “📦 数据备份与还原” → “⚡ 立即备份并下载 (本地)” | UI：`master.html:1228-1250`；请求：`master.html:2664-2674` | （空对象） | 触发成功并回显 message（旧页 `alert(result.message)`） | ☐ | ☐ |
+| POST /api/master/manage (action=batch_update_commission) | action | 是（批量） | 店铺管理 Tab → “🚀 执行批量替换” | UI：`master.html:643-688`；请求：`master.html:2709-2723` | `oldVal`,`newVal`,`type` | 批量更新并提示变更数量（旧页 `alert(...)` + reload） | ☐ | ☐ |
+| POST /api/master/manage (action=approve_renew) | action | 否 | “待办审核”Tab → “✅ 确认” | UI：`master.html:741-748,1890-1954`；请求：`master.html:2726-2735` | `ID` | 审批成功提示并刷新 | ☐ | ☐ |
+| POST /api/master/manage (action=reject_renew) | action | 否 | “待办审核”Tab → “❌ 驳回” | UI：`master.html:741-748,1890-1954`；请求：`master.html:2738-2745` | `ID` | 驳回成功并刷新 | ☐ | ☐ |
+| POST /api/master/backup | endpoint | 是 | “系统设置”Tab → Code Backup 区域（加载/创建/删除） | 列表：`master.html:2748-2801`；创建：`master.html:2804-2833`；删除：`master.html:2836-2846` | JSON：list：`action`；create/delete：`action`,`backupName`（create 时来自输入框；delete 时来自列表项 name） | 列表刷新/创建后可见/删除后不可见 | ☐ | ☐ |
+| POST /api/master/restore | endpoint | 是 | “📦 数据备份与还原” → “🚀 开始还原”（选择 .zip 文件） | UI：`master.html:1261-1277`；请求：`master.html:2676-2706` | `multipart/form-data`：`file`（zip 文件） | 恢复并强提示风险；成功后提示并刷新 | ☐ | ☐ |
+| POST /api/master/upload | endpoint | 否 | “系统设置”Tab → 各种“上传”按钮（二维码/收款码） | UI：`master.html:1033-1046,1162-1192`；请求：`master.html:2849-2893` | `multipart/form-data`：`file`（image/*） | 返回 `{ success, url }` 并回填到目标 input（旧页 `#<targetId>.value = data.url`） | ☐ | ☐ |
 
 ## 数据流与状态策略
 - 核心数据源：`GET /api/master/init`

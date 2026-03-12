@@ -102,9 +102,23 @@ try {
   }
 } catch {}
 
-const footerPhone = masterSettings.footer_phone || '000000000';
-const footerCopyright = masterSettings.footer_copyright || '© Fast Food';
-const footerText = masterSettings.footer_text || '订餐热线';
+// Public master settings (no auth) for footer/contact display.
+// Ensures the shop page footer matches `/master?tab=settings` without requiring a master token.
+let publicMasterSettings: any = {};
+try {
+  const homeRes = await fetch(`${API_BASE_URL}/api/home`);
+  if (homeRes.ok) {
+    const d = await homeRes.json();
+    publicMasterSettings = d?.settings || {};
+  }
+} catch {}
+
+const footerPhone =
+  publicMasterSettings.footer_phone || publicMasterSettings.footerPhone || masterSettings.footer_phone || '000000000';
+const footerCopyright =
+  publicMasterSettings.footer_copyright || publicMasterSettings.footerCopyright || masterSettings.footer_copyright || '© Fast Food';
+const footerText =
+  publicMasterSettings.footer_text || publicMasterSettings.footerText || masterSettings.footer_text || '订餐热线';
 const mqttBroker = String(settings?.mqtt_broker || masterSettings?.mqtt_broker || 'mqtt.serbia70.com');
 const mqttSecret = String(shop?.mqtt_secret || '');
 const shopId = Number(shop?.id || 0);

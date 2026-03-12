@@ -48,31 +48,39 @@
 采用“止血 + 最小行为变更”方案：
 
 1) **凭据治理止血**：
-- **仓库侧**：移除（或改名避免 PUBLIC 暴露）所有敏感项相关配置；清理并忽略日志。
-- **Cloudflare Pages/Workers 侧**：删除/禁用任何 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 等公开变量配置；敏感项不得以 PUBLIC_ 形式存在。
+- **仓库侧**：不在版本库中提交任何可用凭据值；对历史/日志进行清理并完善忽略规则。
+  - 允许在 `wrangler.toml` 中保留 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 三个键作为“空值哨兵”（必须始终为 `""`），用于自动化检测“未提交真实凭据”。
+  - 但这三个键**不得在 Cloudflare Pages 的环境变量中被赋真实值**，且不得在前端运行时作为能力依赖。
+- **Cloudflare Pages/Workers 侧**：确保不存在任何可用的 master/MQTT 凭据（不以 `PUBLIC_` 形式提供；如曾配置过视为已泄露，需轮换）。
 
 2) **危险 DOM sink API 归零**：
-- 全仓扫描并替换为安全 DOM 渲染（`createElement`/`textContent`/`replaceChildren`）。
+- 在 **`meituanAstro/` 范围内** 扫描并替换为安全 DOM 渲染（`createElement`/`textContent`/`replaceChildren`）。
 
 3) **防回归（明确可执行）**：
-- 将现有检查脚本纳入常规验证：
-  - `meituanAstro/scripts/check-no-unsafe-dom-apis.test.mjs`
-  - `meituanAstro/scripts/security-secrets.test.mjs`
+- 将现有检查脚本纳入常规验证，并补齐覆盖面：
+  - `meituanAstro/scripts/security-secrets.test.mjs`：继续作为“wrangler.toml 空值哨兵”检测。
+  - `meituanAstro/scripts/check-no-unsafe-dom-apis.test.mjs`：本轮将其从“单文件检查”扩展为**递归扫描 `meituanAstro/src/**`（至少覆盖 `src/components`、`src/scripts`、`src/pages`、`src/lib`）**，对以下字符串做阻断：
+    - `innerHTML`
+    - `insertAdjacentHTML`
+    - `outerHTML`
+    - `document.write`
+    - `dangerouslySetInnerHTML`
 - 本地至少确保可以用 node 直接运行这些脚本（CI 是否启用可选，但本轮必须保证本地验收可复现）。
 
 4) **功能影响边界（与“敏感项移出前端”对齐）**：
-- 用户侧聊天/实时能力若依赖浏览器直连 MQTT：本轮允许临时降级为“无实时推送”（或改为轮询/SSE 由后端提供——若需要后端配合，另起 spec）。
+- 用户侧聊天/实时能力当前存在浏览器直连 MQTT 的实现迹象（例如 `src/components/UserChat.astro` 与 `src/lib/user-chat-realtime.ts` 读取 `PUBLIC_MQTT_*`）。由于本轮要求“敏感项全部移出前端”，本轮允许临时降级为“无实时推送/不建立带凭据的 MQTT 连接”（或改为轮询/SSE 由后端提供——若需要后端配合，另起 spec）。
 - 本轮的“仅前端止血”不承诺重建实时链路，只承诺把敏感口令从前端彻底移除。
 
 ## 验收标准（可复现）
 ### A. 秘密/凭据不在前端
 - **仓库侧**：
-  - `meituanAstro/wrangler.toml` 中不存在任何 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 的真实值（本轮目标是彻底移除这些键，避免误配）。
+  - `meituanAstro/wrangler.toml` 中 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 三个键**必须存在且值必须为 `""`**（作为“空值哨兵”，用于检测仓库未提交真实凭据）。
+- Cloudflare Pages 项目环境变量中：不得为上述 `PUBLIC_*` 配置任何真实值（最好直接不配置这三项；如必须存在也只能为空）。
   - 仓库中不存在 `wrangler-dev.log`、`dev-server*.log` 等可能记录环境变量的日志文件。
 - **构建产物侧**：对 `meituanAstro/dist/` 扫描，不应出现上述敏感 key 或其疑似值。
 
 ### B. 危险 DOM sink API 为 0（业务代码）
-- 扫描 `meituanAstro/src/` 与 `meituanAstro/scripts/`：
+- 扫描 `meituanAstro/src/`（递归） 与 `meituanAstro/scripts/`：
   - 禁止：`innerHTML`、`insertAdjacentHTML`、`outerHTML`、`document.write`、`dangerouslySetInnerHTML`
   - 允许：检查脚本/测试中出现这些字符串用于断言（必须明确标注为“检查用途”）。
 
@@ -88,5 +96,6 @@
 
 ## 回滚策略
 - **代码回滚**：以页面/模块为单位提交；若出现行为偏差，可回滚到替换前的单个 commit。
-- **配置回滚**：Cloudflare 环境变量/Secrets 的变更应记录为清单；如需回滚，按清单恢复（注意：凭据轮换通常不可逆，只能再次轮换/重设）。
+- **配置回滚**：Cloudflare Pages 项目环境变量/Secrets 的变更应记录为清单；如需回滚，按清单恢复。
+  - 注意：凭据轮换通常不可逆，只能通过“再次轮换/重设”恢复服务。
 - **不可逆项提醒**：一旦执行线上凭据轮换，旧凭据不应继续使用；回滚只能通过重新设置新凭据完成。

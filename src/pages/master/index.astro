@@ -16,7 +16,7 @@ import MasterShopEditPanel from '../../components/master/MasterShopEditPanel.ast
 import MasterShopManagementTable from '../../components/master/MasterShopManagementTable.astro';
 import MasterShopTopupPanel from '../../components/master/MasterShopTopupPanel.astro';
 import MasterWechatSettingsCard from '../../components/master/MasterWechatSettingsCard.astro';
-import { API_BASE_URL, MASTER_TOKEN } from '../../config';
+import { MASTER_TOKEN } from '../../config';
 import { normalizeMasterTab } from '../../lib/master-active-tab';
 import { buildEditShopSuccessMessage } from '../../lib/master-edit-feedback';
 import { formatCommissionRule } from '../../lib/master-commission-view';
@@ -60,8 +60,14 @@ const shouldShowMasterContent = !loadError;
 
 try {
   const auth = resolveMasterAuth(Astro.request, Astro.cookies, MASTER_TOKEN, { allowFallbackToken: false });
-  const res = await fetch(`${API_BASE_URL}/api/master/init`, {
-    headers: auth ? { Authorization: auth } : {},
+  const cookie = Astro.request.headers.get('cookie') || '';
+  const initUrl = new URL('/api/master/init', Astro.url);
+  const res = await fetch(initUrl, {
+    method: 'GET',
+    headers: {
+      ...(auth ? { Authorization: auth } : {}),
+      ...(cookie ? { cookie } : {}),
+    },
   });
   if (res.ok) {
     const data = await res.json().catch(() => ({}));

@@ -31,8 +31,8 @@ export default function UserCenterPageIsland() {
   const phoneLike = (value: any) => {
     const v = String(value || '').trim();
     if (!v) return '';
-    if (/^\+?\d{7,15}$/.test(v)) return v;
-    if (/^0\d{7,15}$/.test(v)) return v;
+    if (/^\+?\d{1,20}$/.test(v)) return v;
+    if (/^0\d{1,20}$/.test(v)) return v;
     return '';
   };
 
@@ -85,7 +85,13 @@ export default function UserCenterPageIsland() {
   };
 
   const loadHistoryWithFallback = async () => {
-    const primaryPhone = phoneLike(userInfo?.phone);
+    const candidates = [phoneLike(userInfo?.phone), phoneLike((userInfo as any)?.login_account)];
+
+    // If user logged in without a phone, try reading address phone via session token.
+    const addrPhone = await loadAddressPhone();
+    if (addrPhone) candidates.push(addrPhone);
+
+    const primaryPhone = candidates.find(Boolean) || '';
     if (!primaryPhone) return;
 
     setLoading(true);
@@ -93,14 +99,15 @@ export default function UserCenterPageIsland() {
       let usedPhone = primaryPhone;
       let result = await fetchHistoryOnce(primaryPhone, 1, 10);
 
-      if (!result.orders.length) {
-        const addrPhone = await loadAddressPhone();
-        if (addrPhone && addrPhone !== primaryPhone) {
-          const alt = await fetchHistoryOnce(addrPhone, 1, 10);
-          if (alt.orders.length) {
-            usedPhone = addrPhone;
-            result = alt;
-          }
+      for (const phone of candidates) {
+        const clean = phoneLike(phone);
+        if (!clean || clean === usedPhone) continue;
+        if (result.orders.length) break;
+        const alt = await fetchHistoryOnce(clean, 1, 10);
+        if (alt.orders.length) {
+          usedPhone = clean;
+          result = alt;
+          break;
         }
       }
 
@@ -114,7 +121,7 @@ export default function UserCenterPageIsland() {
   };
 
   const loadMoreHistory = async () => {
-    const phone = phoneLike(historyPhone || userInfo?.phone);
+    const phone = phoneLike(historyPhone || userInfo?.phone || (userInfo as any)?.login_account);
     if (!phone) return;
 
     setIsLoadingMore(true);
@@ -203,9 +210,9 @@ export default function UserCenterPageIsland() {
   }, []);
 
   useEffect(() => {
-    if (!userInfo?.phone) return;
+    if (!userInfo) return;
     loadHistoryWithFallback();
-  }, [userInfo?.phone, Object.keys(shopMap).length]);
+  }, [userInfo, Object.keys(shopMap).length]);
 
   useEffect(() => {
     const loadAddressSummary = async () => {

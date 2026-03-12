@@ -35,7 +35,10 @@ export interface RecentUserOrderSummary {
 }
 
 export function filterUserVisibleOrders<T extends RawOrder>(orders: T[]): T[] {
-  return (orders || []).filter((order) => String(order?.order_type || '').trim() === 'delivery');
+  return (orders || []).filter((order) => {
+    const t = String(order?.order_type || '').trim();
+    return t === 'delivery' || t === 'dine_in';
+  });
 }
 
 export function buildRecentUserOrderSummary(orders: RawOrder[]): RecentUserOrderSummary {

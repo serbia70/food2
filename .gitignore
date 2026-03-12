@@ -26,6 +26,7 @@ dev-server.err.log
 
 # Astro
 .astro/
+meituanGo
 
 # git worktrees
 .worktrees/

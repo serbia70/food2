@@ -7,7 +7,8 @@
     "dev:force": "astro dev --force",
     "dev:reset": "node -e \"const fs=require('node:fs');for (const p of ['node_modules/.vite','node_modules/.astro']) fs.rmSync(p,{recursive:true,force:true});\" && astro dev --force",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "test:security": "node --test scripts/check-no-unsafe-dom-apis.test.mjs scripts/check-no-unsafe-dom-apis-repo.test.mjs scripts/check-no-unsafe-dom-apis-go-static.test.mjs scripts/scan-dist-no-unsafe-dom-sinks.test.mjs scripts/user-center-no-login-flash.test.mjs"
   },
   "dependencies": {
     "@astrojs/preact": "^4.1.3",

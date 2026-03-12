@@ -9,6 +9,7 @@ import { mapUserUpdateErrorMessage } from '../lib/user-update-error';
 import { buildPhoneConflictGuide } from '../lib/user-update-guide';
 
 export default function UserCenterPageIsland() {
+  const [bootstrapped, setBootstrapped] = useState(false);
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [history, setHistory] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
@@ -143,6 +144,8 @@ export default function UserCenterPageIsland() {
       setUserInfo(user as User);
       setIsLoggedIn(true);
     }
+    setBootstrapped(true);
+
     try {
       const url = new URL(window.location.href);
       if (url.searchParams.get('openChat') === '1') {
@@ -295,6 +298,23 @@ export default function UserCenterPageIsland() {
   const currentShopMembership = buildCurrentShopMembershipSummary(
     filterOrdersForCurrentShop(history as any[], { id: currentShopId, slug: currentShopSlug }),
   );
+
+  if (!bootstrapped) {
+    return (
+      <div className="user-page-shell user-page-shell--boot">
+        <section className="user-page-boot">
+          <p className="user-page-eyebrow">Account Hub</p>
+          <h1>正在读取登录态…</h1>
+          <p>正在加载个人中心，请稍候。</p>
+        </section>
+        <style>{`
+          .user-page-shell{height:100vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:radial-gradient(circle at top left, rgba(0,177,64,.16), transparent 35%),radial-gradient(circle at 80% 10%, rgba(255,209,1,.14), transparent 32%),linear-gradient(180deg,#f7fbf7 0%,#eef6ef 100%);padding:18px 18px 96px}
+          .user-page-boot{max-width:920px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:22px;padding:24px 22px;box-shadow:0 18px 36px rgba(15,23,42,.08)}
+          .user-page-eyebrow{margin:0 0 8px;color:#047857;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+        `}</style>
+      </div>
+    );
+  }
 
   if (!isLoggedIn || !userInfo) {
     return (

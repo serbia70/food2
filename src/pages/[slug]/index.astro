@@ -114,8 +114,6 @@ const footerText =
 const mqttBroker = String(settings?.mqtt_broker || masterSettings?.mqtt_broker || 'mqtt.serbia70.com');
 const mqttSecret = String(shop?.mqtt_secret || '');
 const shopId = Number(shop?.id || 0);
-const mqttUsername = String(settings?.mqtt_username || masterSettings?.mqtt_username || '');
-const mqttPassword = String(settings?.mqtt_password || masterSettings?.mqtt_password || '');
 
 const phone = settings?.contact?.phone || settings?.phone || shop?.phone || '0613083899';
 const addressForMap = String(settings?.contact?.address || settings?.address || shop?.address || shop?.zone || shop?.name || slug || '').trim();
@@ -685,7 +683,7 @@ const enableReservation = (billingPlanType === 'subscription' || billingPlanType
     {enableReservation && <ReservationModal restaurantId={slug} requiresPreOrder={false} client:load />}
     
     <script src="/vendor/mqttws31.min.js" is:inline></script>
-    <script define:vars={{ slug, shopId, mqttSecret, mqttBroker, mqttUsername, mqttPassword }} is:inline>
+    <script define:vars={{ slug, shopId, mqttSecret, mqttBroker }} is:inline>
       (function () {
         if (window.__shopMqttSyncInited) return;
         window.__shopMqttSyncInited = true;
@@ -853,9 +851,6 @@ const enableReservation = (billingPlanType === 'subscription' || billingPlanType
               setTimeout(initMqtt, 5000);
             },
           };
-
-          if (String(mqttUsername || '').trim()) options.userName = String(mqttUsername || '').trim();
-          if (String(mqttPassword || '').trim()) options.password = String(mqttPassword || '');
 
           client.connect(options);
         }

@@ -601,12 +601,6 @@ function initAdminChatRealtime() {
     },
   };
 
-  // Reuse the same admin settings where possible.
-  try {
-    const settings = getAdminRuntimeState().currentSettings;
-    if (settings?.mqtt_username) opts.userName = String(settings.mqtt_username);
-    if (settings?.mqtt_password) opts.password = String(settings.mqtt_password);
-  } catch (e) {}
 
   try {
     chatMqttClient.connect(opts);

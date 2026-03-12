@@ -11,6 +11,9 @@ yarn-error.log*
 pnpm-debug.log*
 wrangler-dev.log
 
+dev-server.log
+dev-server.err.log
+
 # Cloudflare Wrangler
 .wrangler/
 

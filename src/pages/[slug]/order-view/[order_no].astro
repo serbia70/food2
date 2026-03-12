@@ -87,8 +87,6 @@ if ((!riderName || !riderPhone) && order?.delivery_info) {
 }
 
 const mqttBroker = String(settings?.mqtt_broker || masterSettings?.mqtt_broker || 'mqtt.serbia70.com');
-const mqttUsername = String(settings?.mqtt_username || masterSettings?.mqtt_username || '');
-const mqttPassword = String(settings?.mqtt_password || masterSettings?.mqtt_password || '');
 const mqttSecret = String(shop?.mqtt_secret || '');
 const shopId = Number(shop?.id || 0);
 const orderId = Number(order?.id || 0);
@@ -161,7 +159,7 @@ const reorderUrl = isDeliveryOrder
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" is:inline></script>
-  <script define:vars={{ slug, shopId, mqttSecret, mqttBroker, mqttUsername, mqttPassword, orderId, order_no }} is:inline>
+  <script define:vars={{ slug, shopId, mqttSecret, mqttBroker, orderId, order_no }} is:inline>
     (function () {
       function parseBroker(raw) {
         const v = String(raw || '').trim();
@@ -229,9 +227,6 @@ const reorderUrl = isDeliveryOrder
             setTimeout(initMqtt, 5000);
           },
         };
-
-        if (String(mqttUsername || '').trim()) opts.userName = String(mqttUsername || '').trim();
-        if (String(mqttPassword || '').trim()) opts.password = String(mqttPassword || '');
 
         client.connect(opts);
       }

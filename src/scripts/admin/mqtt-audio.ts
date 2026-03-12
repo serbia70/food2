@@ -46,8 +46,6 @@ export function initMqtt(shopSlug: string, mqttSecret: string, brokerIp: string,
     useSSL: finalSSL,
     timeout: 5,
     keepAliveInterval: 60,
-    userName: settings?.mqtt_username || '',
-    password: settings?.mqtt_password || '',
     onSuccess: () => {
       window.__adminMqttInitInFlight = false;
       updateMqttStatus('connected');

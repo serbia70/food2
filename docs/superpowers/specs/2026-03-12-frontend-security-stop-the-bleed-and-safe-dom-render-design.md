@@ -9,7 +9,7 @@
 
 ## 目标（P0）
 1. **敏感信息止血**：前端仓库与前端部署（Cloudflare）中不再包含任何可用的高权限凭据（master token / MQTT 账号密码）。
-2. **DOM XSS 面清零**：前端业务代码中危险 DOM API 归零（`innerHTML`/`insertAdjacentHTML`/`outerHTML`/`document.write`/`dangerouslySetInnerHTML`）。
+2. **降低 DOM XSS 风险（止血范围）**：前端业务代码中指定危险 DOM sink API 归零（`innerHTML`/`insertAdjacentHTML`/`outerHTML`/`document.write`/`dangerouslySetInnerHTML`）。本轮不承诺覆盖所有潜在 XSS 向量（例如 URL/属性注入、第三方渲染链路等），仅对上述 sink 做“归零止血”。
 3. **可回归验证**：引入/强化自动化检查，防止危险 DOM API 与敏感配置回流。
 4. **低风险、可回滚**：以“最小行为变更”为原则，修改按页面/模块分步落地，保证 `pnpm run dev`、`pnpm run build` 可验证。
 
@@ -46,16 +46,47 @@
 
 ## 方案（采用）
 采用“止血 + 最小行为变更”方案：
-1) 凭据治理止血：从仓库与 CF 前端环境移除敏感值；清理日志并完善 `.gitignore`。
-2) 危险 DOM API 归零：全仓扫描并替换为安全 DOM 渲染。
-3) 防回归：将危险 DOM API 检查脚本纳入常规测试链路（本地可跑，CI 可选）。
 
-## 验收标准
-- `meituanAstro` 仓库内与构建产物中不包含 master/MQTT 真实凭据。
-- 全仓扫描 `meituanAstro`：危险 DOM API 为 0（允许测试/检查脚本中出现用于检测的字符串，但业务代码为 0）。
-- `pnpm run dev` 可运行，核心页面可用（至少覆盖你当前关注的 `/admin/02` 相关路径）。
-- `pnpm run build` 通过。
+1) **凭据治理止血**：
+- **仓库侧**：移除（或改名避免 PUBLIC 暴露）所有敏感项相关配置；清理并忽略日志。
+- **Cloudflare Pages/Workers 侧**：删除/禁用任何 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 等公开变量配置；敏感项不得以 PUBLIC_ 形式存在。
+
+2) **危险 DOM sink API 归零**：
+- 全仓扫描并替换为安全 DOM 渲染（`createElement`/`textContent`/`replaceChildren`）。
+
+3) **防回归（明确可执行）**：
+- 将现有检查脚本纳入常规验证：
+  - `meituanAstro/scripts/check-no-unsafe-dom-apis.test.mjs`
+  - `meituanAstro/scripts/security-secrets.test.mjs`
+- 本地至少确保可以用 node 直接运行这些脚本（CI 是否启用可选，但本轮必须保证本地验收可复现）。
+
+4) **功能影响边界（与“敏感项移出前端”对齐）**：
+- 用户侧聊天/实时能力若依赖浏览器直连 MQTT：本轮允许临时降级为“无实时推送”（或改为轮询/SSE 由后端提供——若需要后端配合，另起 spec）。
+- 本轮的“仅前端止血”不承诺重建实时链路，只承诺把敏感口令从前端彻底移除。
+
+## 验收标准（可复现）
+### A. 秘密/凭据不在前端
+- **仓库侧**：
+  - `meituanAstro/wrangler.toml` 中不存在任何 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 的真实值（本轮目标是彻底移除这些键，避免误配）。
+  - 仓库中不存在 `wrangler-dev.log`、`dev-server*.log` 等可能记录环境变量的日志文件。
+- **构建产物侧**：对 `meituanAstro/dist/` 扫描，不应出现上述敏感 key 或其疑似值。
+
+### B. 危险 DOM sink API 为 0（业务代码）
+- 扫描 `meituanAstro/src/` 与 `meituanAstro/scripts/`：
+  - 禁止：`innerHTML`、`insertAdjacentHTML`、`outerHTML`、`document.write`、`dangerouslySetInnerHTML`
+  - 允许：检查脚本/测试中出现这些字符串用于断言（必须明确标注为“检查用途”）。
+
+### C. 可执行验收命令
+- 在 `meituanAstro/` 下：
+  - `pnpm run dev`（核心路径可用：至少覆盖 `/admin/02`）
+  - `pnpm run build`
+  - `node scripts/check-no-unsafe-dom-apis.test.mjs`
+  - `node scripts/security-secrets.test.mjs`
+
+### D. 变更集边界
+- 本轮提交的变更应限制在：`meituanAstro/**` 与必要的忽略/日志治理文件；不得包含仓库根目录的大规模删除（避免误操作导致结构损坏）。
 
 ## 回滚策略
-- 以页面/模块为单位提交；若出现行为偏差，可回滚到替换前的单个 commit。
-- 配置治理与线上轮换需配套：仓库移除只是止血；轮换才是根治。
+- **代码回滚**：以页面/模块为单位提交；若出现行为偏差，可回滚到替换前的单个 commit。
+- **配置回滚**：Cloudflare 环境变量/Secrets 的变更应记录为清单；如需回滚，按清单恢复（注意：凭据轮换通常不可逆，只能再次轮换/重设）。
+- **不可逆项提醒**：一旦执行线上凭据轮换，旧凭据不应继续使用；回滚只能通过重新设置新凭据完成。

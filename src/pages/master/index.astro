@@ -52,16 +52,14 @@ type ShopSummary = {
 let shops: ShopSummary[] = [];
 let loadError = '';
 let masterSettings: Record<string, any> = {};
-const hasMasterCookie = Boolean(Astro.cookies.get('master_token')?.value);
-const isUnauthorized = loadError === '加载失败 (401)';
-const activeTab = normalizeMasterTab(Astro.url.searchParams.get('tab'));
-const canLoadProtectedMasterActions = hasMasterCookie && !isUnauthorized;
-const shouldShowMasterContent = !loadError;
+
+const MASTER_INIT_PROXY_PATH = '/api/master/init';
+const MASTER_INIT_COOKIE_HEADER = 'cookie';
 
 try {
   const auth = resolveMasterAuth(Astro.request, Astro.cookies, MASTER_TOKEN, { allowFallbackToken: false });
-  const cookie = Astro.request.headers.get('cookie') || '';
-  const initUrl = new URL('/api/master/init', Astro.url);
+  const cookie = Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER) || '';
+  const initUrl = new URL(MASTER_INIT_PROXY_PATH, Astro.url);
   const res = await fetch(initUrl, {
     method: 'GET',
     headers: {
@@ -79,6 +77,12 @@ try {
 } catch (error) {
   loadError = error instanceof Error ? error.message : '加载失败';
 }
+
+const hasMasterCookie = Boolean(Astro.cookies.get('master_token')?.value);
+const isUnauthorized = loadError === '加载失败 (401)';
+const activeTab = normalizeMasterTab(Astro.url.searchParams.get('tab'));
+const canLoadProtectedMasterActions = hasMasterCookie && !isUnauthorized;
+const shouldShowMasterContent = !loadError;
 
 const totals = shops.reduce(
   (acc, shop) => {

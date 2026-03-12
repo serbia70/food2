@@ -79,7 +79,10 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
 
   <script is:inline>
     function filterUserVisibleOrders(orders) {
-      return (orders || []).filter((order) => String(order?.order_type || '').trim() === 'delivery');
+      return (orders || []).filter((order) => {
+        const t = String(order?.order_type || '').trim();
+        return t === 'delivery';
+      });
     }
 
     function pickFirstString(order, keys) {
@@ -261,7 +264,7 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
     }
 
     function renderMemberships(summaries) {
-      membershipListEl.innerHTML = '';
+      membershipListEl.replaceChildren();
       if (!summaries.length) {
         const empty = document.createElement('div');
         empty.className = 'membership-empty';
@@ -271,69 +274,160 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
       }
 
       summaries.forEach((summary) => {
+        const shopName = String(summary?.shopName || '店');
+        const shopSlug = String(summary?.shopSlug || '').trim();
+
         const card = document.createElement('article');
         card.className = 'membership-card';
 
-        const latest = summary.latestOrderAt
+        const top = document.createElement('div');
+        top.className = 'membership-card-top';
+
+        const shopBlock = document.createElement('div');
+        shopBlock.className = 'membership-shop-block';
+
+        const badge = document.createElement('div');
+        badge.className = 'membership-badge';
+        badge.textContent = shopName.trim().charAt(0) || '店';
+
+        const shopMeta = document.createElement('div');
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'membership-shop-name';
+        nameEl.textContent = shopName;
+
+        shopMeta.appendChild(nameEl);
+
+        if (shopSlug) {
+          const slugEl = document.createElement('div');
+          slugEl.className = 'membership-shop-slug';
+          slugEl.textContent = `/${shopSlug}`;
+          shopMeta.appendChild(slugEl);
+        }
+
+        shopBlock.append(badge, shopMeta);
+
+        const badges = document.createElement('div');
+        badges.className = 'membership-badges';
+
+        if (summary?.isVip) {
+          const vip = document.createElement('span');
+          vip.className = 'tag vip';
+          vip.textContent = 'VIP';
+          badges.appendChild(vip);
+        }
+
+        if (summary?.points !== null && summary?.points !== undefined) {
+          const points = document.createElement('span');
+          points.className = 'tag points';
+          points.textContent = `积分 ${summary.points}`;
+          badges.appendChild(points);
+        }
+
+        top.append(shopBlock, badges);
+
+        const latest = summary?.latestOrderAt
           ? new Date(summary.latestOrderAt).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
           : '-';
 
-        card.innerHTML = `
-          <div class="membership-card-top">
-            <div class="membership-shop-block">
-              <div class="membership-badge">${(summary.shopName || '店').trim().charAt(0)}</div>
-              <div>
-                <div class="membership-shop-name">${summary.shopName}</div>
-                ${summary.shopSlug ? `<div class="membership-shop-slug">/${summary.shopSlug}</div>` : ''}
-              </div>
-            </div>
-            <div class="membership-badges">
-              ${summary.isVip ? '<span class="tag vip">VIP</span>' : ''}
-              ${summary.points !== null ? `<span class="tag points">积分 ${summary.points}</span>` : ''}
-            </div>
-          </div>
-          <div class="membership-meta">
-            <span>订单 ${summary.orderCount} 笔</span>
-            <span>最近下单 ${latest}</span>
-          </div>
-        `;
+        const meta = document.createElement('div');
+        meta.className = 'membership-meta';
+
+        const orderCount = document.createElement('span');
+        orderCount.textContent = `订单 ${summary.orderCount} 笔`;
+
+        const latestEl = document.createElement('span');
+        latestEl.textContent = `最近下单 ${latest}`;
+
+        meta.append(orderCount, latestEl);
+
+        card.append(top, meta);
         membershipListEl.appendChild(card);
       });
     }
 
     function renderOverview(summaries, orders) {
       if (!orders.length) {
-        overviewHeroEl.innerHTML = '';
+        overviewHeroEl.replaceChildren();
         return;
       }
 
       const latestOrder = [...orders].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
-      const leadShop = summaries[0];
+      const leadShop = summaries[0] || {};
       const activeCount = orders.filter((order) => ['pending', 'confirmed', 'delivering'].includes(order.status)).length;
-      overviewHeroEl.innerHTML = `
-        <div class="overview-card">
-          <div class="overview-hero-top">
-            <div class="overview-brand-block">
-              <div class="overview-logo">${(leadShop?.shopName || '订').trim().charAt(0)}</div>
-              <div>
-                <div class="overview-brand">${leadShop?.shopName || '我的订单'}</div>
-                <div class="overview-sub">${leadShop?.shopSlug ? `当前店铺 / ${leadShop.shopSlug}` : '移动端订单中心'}</div>
-              </div>
-            </div>
-            <div class="overview-latest-badge">${getStatusLabel(latestOrder?.status || '')}</div>
-          </div>
-          <div class="overview-stats">
-            <div class="stat-box accent"><strong>${orders.length}</strong><span>总订单</span></div>
-            <div class="stat-box warm"><strong>${activeCount}</strong><span>进行中</span></div>
-            <div class="stat-box soft"><strong>${leadShop?.membershipLabel || '普通用户'}</strong><span>当前权益</span></div>
-          </div>
-          <div class="overview-latest">最近订单：#${latestOrder?.order_no || '-'} · ${new Date(latestOrder?.created_at || '').toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
-        </div>
-      `;
+
+      const card = document.createElement('div');
+      card.className = 'overview-card';
+
+      const top = document.createElement('div');
+      top.className = 'overview-hero-top';
+
+      const brandBlock = document.createElement('div');
+      brandBlock.className = 'overview-brand-block';
+
+      const logo = document.createElement('div');
+      logo.className = 'overview-logo';
+      logo.textContent = String(leadShop?.shopName || '订').trim().charAt(0) || '订';
+
+      const brandTextWrap = document.createElement('div');
+
+      const brand = document.createElement('div');
+      brand.className = 'overview-brand';
+      brand.textContent = String(leadShop?.shopName || '我的订单');
+
+      const sub = document.createElement('div');
+      sub.className = 'overview-sub';
+      sub.textContent = leadShop?.shopSlug ? `当前店铺 / ${leadShop.shopSlug}` : '移动端订单中心';
+
+      brandTextWrap.append(brand, sub);
+      brandBlock.append(logo, brandTextWrap);
+
+      const latestBadge = document.createElement('div');
+      latestBadge.className = 'overview-latest-badge';
+      latestBadge.textContent = getStatusLabel(latestOrder?.status || '');
+
+      top.append(brandBlock, latestBadge);
+
+      const stats = document.createElement('div');
+      stats.className = 'overview-stats';
+
+      const statTotal = document.createElement('div');
+      statTotal.className = 'stat-box accent';
+      const totalStrong = document.createElement('strong');
+      totalStrong.textContent = String(orders.length);
+      const totalLabel = document.createElement('span');
+      totalLabel.textContent = '总订单';
+      statTotal.append(totalStrong, totalLabel);
+
+      const statActive = document.createElement('div');
+      statActive.className = 'stat-box warm';
+      const activeStrong = document.createElement('strong');
+      activeStrong.textContent = String(activeCount);
+      const activeLabel = document.createElement('span');
+      activeLabel.textContent = '进行中';
+      statActive.append(activeStrong, activeLabel);
+
+      const statMembership = document.createElement('div');
+      statMembership.className = 'stat-box soft';
+      const memStrong = document.createElement('strong');
+      memStrong.textContent = String(leadShop?.membershipLabel || '普通用户');
+      const memLabel = document.createElement('span');
+      memLabel.textContent = '当前权益';
+      statMembership.append(memStrong, memLabel);
+
+      stats.append(statTotal, statActive, statMembership);
+
+      const latest = document.createElement('div');
+      latest.className = 'overview-latest';
+      const latestTime = new Date(latestOrder?.created_at || '').toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      latest.textContent = `最近订单：#${latestOrder?.order_no || '-'} · ${latestTime}`;
+
+      card.append(top, stats, latest);
+      overviewHeroEl.replaceChildren(card);
     }
 
     function renderOrders(orders, shopMap) {
-      ordersListEl.innerHTML = '';
+      ordersListEl.replaceChildren();
       ordersCountEl.textContent = `共 ${orders.length} 笔`;
       ordersEmptyEl.style.display = orders.length ? 'none' : 'block';
 
@@ -341,118 +435,155 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
       groups.forEach((group) => {
         const section = document.createElement('section');
         section.className = 'order-group';
-        section.innerHTML = `<div class="order-group-title">${group.title}</div>`;
+
+        const title = document.createElement('div');
+        title.className = 'order-group-title';
+        title.textContent = String(group.title || '');
+        section.appendChild(title);
 
         group.orders.forEach((order) => {
-        const view = buildUserOrderView(order, shopMap);
-        const statusLabel = getStatusLabel(order.status);
-        const statusClass = getStatusClass(order.status);
+          const view = buildUserOrderView(order, shopMap);
+          const statusLabel = getStatusLabel(order.status);
+          const statusClass = getStatusClass(order.status);
 
-        const card = document.createElement('article');
-        card.className = `order-card ${statusClass}`;
+          const card = document.createElement('article');
+          card.className = `order-card ${statusClass}`;
 
-        const items = parseItems(order)
-          .map((line) => `<div class="order-item">${line}</div>`)
-          .join('');
+          const timeText = order.created_at
+            ? new Date(order.created_at).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+            : '-';
 
-        const timeText = order.created_at
-          ? new Date(order.created_at).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-          : '-';
+          const pickupNo = String(order.order_no || order.id || '').slice(-3);
+          const shopBadge = (view.shopName || '?').trim().charAt(0).toUpperCase();
+          const cleanShopSlug = view.shopSlug && view.shopSlug !== view.shopName ? view.shopSlug : '';
+          const addressSummary = String(order.table_info || '')
+            .replace(/\s*\[货到付款\/Cash\].*$/u, '')
+            .replace(/\s*\(备注:.*$/u, '')
+            .trim();
+          const shortAddress = addressSummary.length > 58 ? `${addressSummary.slice(0, 58)}...` : addressSummary;
 
-        const pickupNo = String(order.order_no || order.id || '').slice(-3);
-        const shopBadge = (view.shopName || '?').trim().charAt(0).toUpperCase();
-        const itemPreview = parseItems(order).slice(0, 2)
-          .map((line) => `<div class="order-item">${line}</div>`)
-          .join('');
-        const cleanShopSlug = view.shopSlug && view.shopSlug !== view.shopName ? view.shopSlug : '';
-        const addressSummary = String(order.table_info || '')
-          .replace(/\s*\[货到付款\/Cash\].*$/u, '')
-          .replace(/\s*\(备注:.*$/u, '')
-          .trim();
-        const shortAddress = addressSummary.length > 58 ? `${addressSummary.slice(0, 58)}...` : addressSummary;
+          const head = document.createElement('div');
+          head.className = 'order-card-head';
 
-        card.innerHTML = `
-          <div class="order-card-head">
-            <div class="order-shop-block">
-              <div class="shop-badge">${shopBadge || '店'}</div>
-              <div>
-                <div class="order-shop-row">
-                  <div class="order-shop-name">${view.shopName}</div>
-                  <a
-                    class="nav-btn nav-cart order-shop-action"
-                    href="/user?openChat=1&from=orders&shopId=${encodeURIComponent(String(order.shop_id || ''))}&shop=${encodeURIComponent(view.shopSlug || '')}&shopName=${encodeURIComponent(view.shopName || '')}"
-                    aria-label="联系商家"
-                    title="联系商家"
-                    style="background: linear-gradient(135deg, #22c55e, #059669); box-shadow: 0 4px 12px rgba(34,197,94,0.35);"
-                  >
-                    <span aria-hidden="true" style="font-size:20px; line-height:1;">💬</span>
-                  </a>
-                </div>
-                <div class="order-meta">#${order.order_no || order.id || '-'} · 取餐号 ${pickupNo || '-'}</div>
-              </div>
-            </div>
-            <div class="order-head-right">
-              <span class="status-chip ${statusClass}">${statusLabel}</span>
-              <div class="order-amount">${Number(order.total_amount || 0).toLocaleString()} RSD</div>
-            </div>
-          </div>
-          <div class="order-submeta compact">
-            <span class="time-pill">${timeText}</span>
-            ${cleanShopSlug ? `<span class="slug-pill">/${cleanShopSlug}</span>` : ''}
-            ${view.membershipLabel ? `<span class="mini-tag ${view.isVip ? 'vip' : 'points'}">${view.membershipLabel}</span>` : ''}
-          </div>
-          <div class="order-body-grid">
-            <div class="order-summary-box">
-              <div class="summary-title">商品摘要</div>
-              <div class="order-items">${itemPreview}</div>
-            </div>
-            ${addressSummary ? `<div class="order-location-card"><div class="summary-title">配送地址</div><div class="order-location">📍 ${shortAddress}</div></div>` : ''}
-          </div>
-        `;
-        section.appendChild(card);
-      });
-      ordersListEl.appendChild(section);
+          const shopBlock = document.createElement('div');
+          shopBlock.className = 'order-shop-block';
+
+          const badge = document.createElement('div');
+          badge.className = 'shop-badge';
+          badge.textContent = shopBadge || '店';
+
+          const shopMeta = document.createElement('div');
+
+          const shopRow = document.createElement('div');
+          shopRow.className = 'order-shop-row';
+
+          const shopName = document.createElement('div');
+          shopName.className = 'order-shop-name';
+          shopName.textContent = String(view.shopName || '');
+
+          const chatLink = document.createElement('a');
+          chatLink.className = 'nav-btn nav-cart order-shop-action';
+          chatLink.href = `/user?openChat=1&from=orders&shopId=${encodeURIComponent(String(order.shop_id || ''))}&shop=${encodeURIComponent(view.shopSlug || '')}&shopName=${encodeURIComponent(view.shopName || '')}`;
+          chatLink.setAttribute('aria-label', '联系商家');
+          chatLink.title = '联系商家';
+          chatLink.style.cssText = 'background: linear-gradient(135deg, #22c55e, #059669); box-shadow: 0 4px 12px rgba(34,197,94,0.35);';
+          const chatIcon = document.createElement('span');
+          chatIcon.setAttribute('aria-hidden', 'true');
+          chatIcon.style.cssText = 'font-size:20px; line-height:1;';
+          chatIcon.textContent = '💬';
+          chatLink.appendChild(chatIcon);
+
+          shopRow.append(shopName, chatLink);
+
+          const meta = document.createElement('div');
+          meta.className = 'order-meta';
+          meta.textContent = `#${order.order_no || order.id || '-'} · 取餐号 ${pickupNo || '-'}`;
+
+          shopMeta.append(shopRow, meta);
+          shopBlock.append(badge, shopMeta);
+
+          const headRight = document.createElement('div');
+          headRight.className = 'order-head-right';
+
+          const statusChip = document.createElement('span');
+          statusChip.className = `status-chip ${statusClass}`;
+          statusChip.textContent = statusLabel;
+
+          const amount = document.createElement('div');
+          amount.className = 'order-amount';
+          amount.textContent = `${Number(order.total_amount || 0).toLocaleString()} RSD`;
+
+          headRight.append(statusChip, amount);
+          head.append(shopBlock, headRight);
+
+          const submeta = document.createElement('div');
+          submeta.className = 'order-submeta compact';
+
+          const timePill = document.createElement('span');
+          timePill.className = 'time-pill';
+          timePill.textContent = timeText;
+          submeta.appendChild(timePill);
+
+          if (cleanShopSlug) {
+            const slugPill = document.createElement('span');
+            slugPill.className = 'slug-pill';
+            slugPill.textContent = `/${cleanShopSlug}`;
+            submeta.appendChild(slugPill);
+          }
+
+          if (view.membershipLabel) {
+            const tag = document.createElement('span');
+            tag.className = `mini-tag ${view.isVip ? 'vip' : 'points'}`;
+            tag.textContent = String(view.membershipLabel);
+            submeta.appendChild(tag);
+          }
+
+          const grid = document.createElement('div');
+          grid.className = 'order-body-grid';
+
+          const summaryBox = document.createElement('div');
+          summaryBox.className = 'order-summary-box';
+          const summaryTitle = document.createElement('div');
+          summaryTitle.className = 'summary-title';
+          summaryTitle.textContent = '商品摘要';
+          const itemsWrap = document.createElement('div');
+          itemsWrap.className = 'order-items';
+          parseItems(order)
+            .slice(0, 2)
+            .forEach((line) => {
+              const item = document.createElement('div');
+              item.className = 'order-item';
+              item.textContent = String(line || '');
+              itemsWrap.appendChild(item);
+            });
+          summaryBox.append(summaryTitle, itemsWrap);
+          grid.appendChild(summaryBox);
+
+          if (addressSummary) {
+            const locCard = document.createElement('div');
+            locCard.className = 'order-location-card';
+            const locTitle = document.createElement('div');
+            locTitle.className = 'summary-title';
+            locTitle.textContent = '配送地址';
+            const loc = document.createElement('div');
+            loc.className = 'order-location';
+            loc.textContent = `📍 ${shortAddress}`;
+            locCard.append(locTitle, loc);
+            grid.appendChild(locCard);
+          }
+
+          card.append(head, submeta, grid);
+          section.appendChild(card);
+        });
+
+        ordersListEl.appendChild(section);
       });
     }
 
     async function loadOrders() {
-      const user = readUser();
-
-      const rawPhone = String(user.phone || '').trim();
       const sessionToken = String(localStorage.getItem('user_session') || '').trim();
 
-      const phoneLike = (value) => {
-        const v = String(value || '').trim();
-        if (!v) return '';
-        if (/^\+?\d{7,15}$/.test(v)) return v;
-        if (/^0\d{7,15}$/.test(v)) return v;
-        return '';
-      };
-
-      async function loadAddressPhone() {
-        if (!sessionToken) return '';
-        try {
-          const res = await fetch('/api/user/address', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get', sessionToken }),
-          });
-          const data = await res.json();
-          if (!data?.success || !data?.address) return '';
-          let addrObj = {};
-          try {
-            addrObj = JSON.parse(data.address);
-          } catch {
-            addrObj = { phone: '' };
-          }
-          return phoneLike(addrObj.phone);
-        } catch {
-          return '';
-        }
-      }
-
-      const primaryPhone = phoneLike(rawPhone);
-      if (!primaryPhone) {
+      if (!sessionToken) {
         setView('auth');
         return;
       }
@@ -460,29 +591,20 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
       setView('loading');
 
       try {
-        async function fetchOrdersByPhone(phone) {
-          const res = await fetch(`/api/user/history?phone=${encodeURIComponent(phone)}&page=1&limit=50`);
-          const data = await res.json();
-          if (!res.ok || !data?.success) {
-            throw new Error(data?.error || '读取订单失败');
-          }
-          const sourceOrders = Array.isArray(data.orders)
-            ? data.orders
-            : Array.isArray(data.history)
-              ? data.history
-              : [];
-          return filterUserVisibleOrders(sourceOrders);
+        const shopMap = await loadShopMap();
+
+        const res = await fetch('/api/user/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionToken }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || '读取订单失败');
         }
 
-        const [shopMap, addrPhone] = await Promise.all([loadShopMap(), loadAddressPhone()]);
-
-        let orders = await fetchOrdersByPhone(primaryPhone);
-
-        // 兼容：下单联系人手机号与账号手机号不一致时，尝试用地址里的手机号再拉一次。
-        if (!orders.length && addrPhone && addrPhone !== primaryPhone) {
-          const addrOrders = await fetchOrdersByPhone(addrPhone);
-          orders = addrOrders;
-        }
+        const sourceOrders = Array.isArray(data?.orders) ? data.orders : [];
+        const orders = filterUserVisibleOrders(sourceOrders);
 
         const summaries = buildShopMembershipSummaries(orders, shopMap);
 

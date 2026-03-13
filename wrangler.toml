@@ -1,6 +1,6 @@
 name = "food2"
 pages_build_output_dir = "./dist"
-compatibility_date = "2026-03-13"
+compatibility_date = "2026-03-12"
 
 [vars]
 PUBLIC_API_URL = "food2ai.serbia70.com"

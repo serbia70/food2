@@ -1548,7 +1548,8 @@ const shopViewsData = JSON.stringify(shopViews);
             {isUnauthorized ? (
               <div class="notice-actions">
                 <a class="primary-btn" href="/master/login">去登录</a>
-                <button class="ghost-btn" type="button" onclick="logoutMaster()">清理状态后重新登录</button>
+                <button class="ghost-btn" type="button" onclick="logoutMaster()">退出</button>
+                <button class="ghost-btn" type="button" onclick="window.location.reload()">刷新页面</button>
               </div>
             ) : null}
           </div>
@@ -1585,7 +1586,8 @@ const shopViewsData = JSON.stringify(shopViews);
           {loadError || '主控数据加载失败'}
           <div class="notice-actions">
             <a class="primary-btn" href="/master/login">去登录</a>
-            <button class="ghost-btn" type="button" onclick="logoutMaster()">清理状态后重新登录</button>
+            <button class="ghost-btn" type="button" onclick="logoutMaster()">退出</button>
+            <button class="ghost-btn" type="button" onclick="window.location.reload()">刷新页面</button>
           </div>
         </div>
       ) : null}

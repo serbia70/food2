@@ -1,0 +1,13 @@
+{
+  "server": {
+    "port": 3030,
+    "mode": "debug"
+  },
+  "database": {
+    "path": "/opt/meituanGo/data/meituan.db"
+  },
+  "jwt": {
+    "secret": "your-secret-key-change-this-in-prod",
+    "expire_hours": 72
+  }
+}

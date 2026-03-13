@@ -117,6 +117,10 @@ func main() {
 		c.AbortWithStatus(http.StatusNotFound)
 	})
 	r.GET("/favicon.ico", func(c *gin.Context) {
+		p := c.Request.URL.Path
+		referer := c.Request.Referer()
+		ua := c.Request.UserAgent()
+		log.Printf("[legacy] %s -> frontend favicon referer=%q ua=%q", p, referer, ua)
 		target := frontendBase + "/favicon.ico"
 		if raw := c.Request.URL.RawQuery; raw != "" {
 			target += "?" + raw
@@ -124,7 +128,24 @@ func main() {
 		c.Redirect(http.StatusPermanentRedirect, target)
 	})
 	r.GET("/assets/*path", func(c *gin.Context) {
+		p := c.Request.URL.Path
+		referer := c.Request.Referer()
+		ua := c.Request.UserAgent()
+		log.Printf("[legacy] %s -> frontend assets referer=%q ua=%q", p, referer, ua)
+
 		path := c.Param("path")
+		// Only keep the legacy uploads path family. Redirecting other /assets/* paths can create
+		// redirect loops (e.g. frontend treating /assets as a shop slug and server-side fetching
+		// /assets/info via the Go origin, which matches this handler again).
+		if path == "" || path == "/" {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		if !strings.HasPrefix(path, "/uploads/") {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
 		target := frontendBase + "/assets" + path
 		if raw := c.Request.URL.RawQuery; raw != "" {
 			target += "?" + raw
@@ -345,6 +366,9 @@ func main() {
 			return
 		}
 
+		referer := c.Request.Referer()
+		ua := c.Request.UserAgent()
+		log.Printf("[legacy] %s -> frontend noroute referer=%q ua=%q", path, referer, ua)
 		target := frontendBase + path
 		if raw := c.Request.URL.RawQuery; raw != "" {
 			target += "?" + raw

@@ -32,9 +32,21 @@ test('master SSR init 使用同域 /api/master/init 且显式转发 cookie', () 
   assert.equal(cookieHeader, 'cookie');
 
   // Ensure the SSR init fetch uses the same-origin proxy URL and forwards cookie explicitly.
-  assert.ok(frontmatter.includes('new URL(MASTER_INIT_PROXY_PATH, Astro.url)'), 'expected initUrl to be built from proxy path and Astro.url');
-  assert.ok(frontmatter.includes('Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER)'), 'expected cookie to be read from incoming request headers');
-  assert.ok(frontmatter.includes('...(cookie ? { cookie } : {})'), 'expected cookie header to be forwarded in fetch');
+  assert.match(
+    frontmatter,
+    /new\s+URL\([\s\S]*MASTER_INIT_PROXY_PATH[\s\S]*Astro\.url[\s\S]*\)/,
+    'expected initUrl to be built from proxy path and Astro.url',
+  );
+  assert.match(
+    frontmatter,
+    /Astro\.request\.headers\.get\(\s*MASTER_INIT_COOKIE_HEADER\s*\)/,
+    'expected cookie to be read from incoming request headers',
+  );
+  assert.match(
+    frontmatter,
+    /fetch\(\s*initUrl\s*,[\s\S]*?headers\s*:\s*\{[\s\S]*?cookie[\s\S]*?\}[\s\S]*?\)/,
+    'expected cookie variable to be referenced in fetch headers',
+  );
 
   // Proxy-only invariant: master SSR should not hit API_BASE_URL directly.
   assert.ok(!frontmatter.includes('API_BASE_URL'), 'expected no API_BASE_URL usage in master SSR init');

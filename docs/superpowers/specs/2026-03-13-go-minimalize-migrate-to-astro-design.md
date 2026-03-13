@@ -28,10 +28,24 @@
 3. **安全门禁上移**：跨域、鉴权、CSRF/Origin 校验、输入校验等统一在 Astro `/api/**` 层实现（或至少先集中于该层）。
 
 ### 验收
-- 线上 `https://api.serbia70.com/master.html` 返回 **404**。
-- 线上 `https://api.serbia70.com/admin.html` 返回 **404**。
-- 线上 `https://api.serbia70.com/<slug>` 不再直接返回 Go 的 `./static/index.html`（入口转移到 Astro）。
-- 前端代码中不出现对 Go 真实域名的直连（只允许同域 `/api/**`）。
+
+> 本节必须可被自动化/手工明确验证，避免“口径正确但不可验证”。
+
+#### Go 公网域名（https://api.serbia70.com）
+- `GET /master.html` → **404**
+- `GET /admin.html` → **404**
+- `GET /:slug` → **不允许返回 legacy HTML**（即不允许 `200 text/html` 且包含旧 app shell）。推荐行为：**301/308** 重定向到 Cloudflare 规范域名的 `/<slug>`。
+- `GET /assets/*` 与 `GET /favicon.ico` → 必须定义明确行为（redirect 或 404），不得“暂不定义”（否则会被遗留二维码/书签/硬编码引用打穿）。
+
+#### Cloudflare 规范域名（浏览器唯一入口）
+- 关键入口必须可用并可 smoke：
+  - `GET /master` → `200 text/html`
+  - `GET /admin`（或等价入口）→ `200 text/html`
+  - `GET /<slug>` → `200 text/html`
+  - 至少 1 个 `/<slug>` 深链接页面（例如订单详情或预约详情）→ `200 text/html`
+
+#### Proxy-only（浏览器侧网络行为）
+- 浏览器侧请求不得直连 Go 公网域名（包含 XHR/fetch/SSE）。所有浏览器侧 API 调用必须是同域 `/api/**`。
 
 ## 非目标（明确不做）
 
@@ -59,7 +73,7 @@
 - **UI**：shop/admin/master/rider 的所有页面与交互。
 - **BFF（/api/**）**：
   - 鉴权：读取 cookie / header，按角色（master/admin/user/rider）执行一致的鉴权策略。
-  - 安全门禁：Origin/Referer 校验（对状态变更请求）、限流/节流（如需要）、输入校验。
+  - 安全门禁：Phase A 仅要求对状态变更请求做 Origin/Referer 校验与会话鉴权；限流/节流与全量输入校验属于后续增强，避免在入口收口阶段产生范围膨胀。
   - 代理与聚合：统一向 Go 发起请求，隐藏真实后端域名与细节。
 
 #### `meituanGo/`（VPS）
@@ -71,21 +85,30 @@
 
 ### Phase A：入口收口（优先级最高）
 
-**目标**：Go 彻底不再暴露静态页面入口；所有入口改由 Astro 提供。
+**目标**：Go 彻底不再暴露静态页面入口；浏览器入口改由 Cloudflare（Astro）提供；并且把“遗留入口/资产”行为定义清楚（404 或 redirect）。
 
-- Go：移除/禁用静态页路由
-  - `/master.html` 静态页 → 404
-  - `/admin.html` 静态页 → 404
-  - `/:slug` 返回 `./static/index.html` → 移除（由 Astro 对应路由提供页面）
-  - `/assets`：按“唯一入口 CF”原则，逐步消除外部依赖；若短期仍被引用，需在 Astro 侧接管资产或提供迁移映射（不在本 phase 强制一次性完成）。
+#### Phase A 前置清单（必须做）
+在动 Go 路由前，先列出所有“浏览器入口 HTML 路由”，并对每条路由给出明确处置：
+- 已由 Astro 承接
+- 需新增 Astro 路由后才能关闭 Go
+- 明确废弃并定义 404/redirect 策略
 
-- Astro：确保入口可用
-  - `/master` 已存在并可登录（现状）。
-  - `/admin`、`/<slug>`（或项目现有等价路由）应由 Astro 页面承担，并通过 `/api/**` 调用后端。
+至少覆盖：`/master`、`/admin*`、`/<slug>`、一个 `/<slug>` 深链接页面、以及如存在实时能力则包含 SSE 入口。
 
-**验收点**：
-- `api.serbia70.com/master.html`、`api.serbia70.com/admin.html` 均为 404。
-- 任意 `api.serbia70.com/<slug>` 不再直接返回 Go 静态页面。
+#### Go：移除/禁用静态入口（核心）
+- `/master.html` → 404
+- `/admin.html` → 404
+- `/:slug` 返回 `./static/index.html` → 移除（建议改为 redirect 到 Cloudflare 规范域名 `/<slug>`）
+- `/assets/*` 与 `/favicon.ico` → 明确策略（redirect 到 Cloudflare 等价路径，或 404）。不得留作“后续再说”。
+
+#### Astro：确保入口可用
+- `/master` 已存在并可登录（现状）。
+- `/admin`、`/<slug>`（或项目现有等价路由）由 Astro 页面承接，并通过 `/api/**` 调用后端。
+
+#### Phase A 验收点（以“验收口径”章节为准）
+- Go 公网域名上 legacy HTML/入口行为已固定（404/redirect），且不再返回 legacy app HTML。
+- Cloudflare 规范域名上的关键入口与 1 个深链接页面 smoke 通过。
+- 浏览器侧网络请求不直连 Go 公网域名（包含 SSE）。
 
 ### Phase B：页面职责清零 + 历史静态目录收敛
 
@@ -105,8 +128,9 @@
 
 - **最小暴露面**：Go 不对外提供 HTML 页面，显著降低“老页面携带旧逻辑/旧凭证策略”的风险。
 - **统一鉴权口径**：鉴权与敏感操作门禁优先在 Astro `/api/**` 层统一实现；Go 侧继续做最终权限校验（双层防护）。
+- **遗留依赖观测**：Phase A 上线后应记录对 Go 上 legacy 入口与静态资源的访问（至少 path + referer + UA），用于发现遗留二维码/书签/硬编码依赖。
 - **回滚策略**：
-  - 若 Phase A 上线后发现某些老入口仍被外部依赖，可短期恢复单个路由（有审计/日志）并立即安排补齐 Astro 侧入口；避免长期回滚到“Go 继续出页面”的状态。
+  - 若 Phase A 上线后发现某些老入口仍被外部依赖，可短期恢复“单个必要路由”或改为 redirect（需有审计/日志），并立即安排在 Astro 侧补齐入口；避免长期回滚到“Go 继续出页面”的状态。
 
 ## 假设（因本轮不再追加澄清问题，显式锁定）
 

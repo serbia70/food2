@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C .. status --porcelain)",
+      "Bash(cd meituanGo && go test ./...)",
+      "Bash(go test:*)",
+      "Bash(git -C .. status -uno)",
+      "Bash(git rev-parse:*)"
+    ]
+  }
+}

@@ -159,14 +159,9 @@ func main() {
 	})
 
 	// Public Shop Pages & API
-	// e.g., /myshop -> Shop storefront (index.html)
+	// e.g., /myshop -> redirect to frontend storefront
 	// e.g., /myshop/info -> Get Shop Info (JSON)
 	// e.g., /myshop/menu -> Get Menu (JSON)
-	r.GET("/:slug", func(c *gin.Context) {
-		c.File("./static/index.html")
-	})
-	r.GET("/:slug/info", shopHandler.GetShopBySlug)
-	r.GET("/:slug/menu", menuHandler.GetMenu)
 	r.GET("/:slug/admin.html", func(c *gin.Context) {
 		slug := c.Param("slug")
 		target := fmt.Sprintf("%s/admin/%s", frontendBase, url.PathEscape(slug))
@@ -175,6 +170,16 @@ func main() {
 		}
 		c.Redirect(http.StatusFound, target)
 	})
+	r.GET("/:slug", func(c *gin.Context) {
+		slug := c.Param("slug")
+		target := fmt.Sprintf("%s/%s", frontendBase, url.PathEscape(slug))
+		if raw := c.Request.URL.RawQuery; raw != "" {
+			target += "?" + raw
+		}
+		c.Redirect(http.StatusPermanentRedirect, target)
+	})
+	r.GET("/:slug/info", shopHandler.GetShopBySlug)
+	r.GET("/:slug/menu", menuHandler.GetMenu)
 	r.POST("/:slug/order", orderHandler.CreateOrder)
 	r.GET("/:slug/order/:order_no", orderHandler.GetOrder)
 	r.POST("/:slug/reservation", reservationHandler.CreateReservation)

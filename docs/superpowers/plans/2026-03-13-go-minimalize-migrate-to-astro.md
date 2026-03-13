@@ -98,7 +98,16 @@ test('go must not mount legacy static browser entrypoints', () => {
 
   // Legacy HTML serving must be gone.
   mustNotInclude(src, 'c.File("./static/index.html")');
-  mustNotInclude(src, 'NoRoute(');
+
+  // NoRoute is allowed, but it must not serve legacy static HTML.
+  const noRouteIndex = src.indexOf('NoRoute(');
+  if (noRouteIndex !== -1) {
+    const tail = src.slice(noRouteIndex, noRouteIndex + 800);
+    assert.ok(
+      !tail.includes('c.File("./static/index.html")'),
+      'NoRoute must not serve ./static/index.html',
+    );
+  }
 });
 ```
 
@@ -154,50 +163,65 @@ Create `meituanAstro/scripts/check-no-hardcoded-go-origin-in-browser.test.mjs`:
 ```js
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { globSync } from 'node:fs';
+import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-function toPosix(p) {
+const PROJECT = join(__dirname, '..');
+
+const SCAN_ROOTS = [
+  join(PROJECT, 'src', 'pages'),
+  join(PROJECT, 'src', 'components'),
+  join(PROJECT, 'src', 'scripts'),
+];
+
+const EXCLUDED_ROOT = join(PROJECT, 'src', 'pages', 'api');
+
+const ALLOWED_EXTS = new Set(['.astro', '.ts', '.tsx']);
+
+function toPosixPath(p) {
   return p.replaceAll('\\\\', '/');
 }
 
-const PROJECT = resolve(__dirname, '..');
-const EXCLUDED_PREFIX = toPosix(resolve(PROJECT, 'src/pages/api')) + '/';
-
-const BROWSER_GLOBS = [
-  'src/pages/**/*.astro',
-  'src/pages/**/*.ts',
-  'src/pages/**/*.tsx',
-  'src/components/**/*.astro',
-  'src/components/**/*.ts',
-  'src/components/**/*.tsx',
-  'src/scripts/**/*.ts',
-  'src/scripts/**/*.tsx',
-];
-
-// Server-only API routes may legitimately know how to reach Go.
-function isExcluded(file) {
-  return toPosix(file).startsWith(EXCLUDED_PREFIX);
+function extnameLite(p) {
+  const i = p.lastIndexOf('.');
+  return i === -1 ? '' : p.slice(i);
 }
 
-test('browser-facing code must not hardcode Go origin (proxy-only)', () => {
-  const matches = [];
+async function walk(dir) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  entries.sort((a, b) => a.name.localeCompare(b.name));
 
-  for (const pattern of BROWSER_GLOBS) {
-    // Keep the scan limited to src/{pages,components,scripts}/**. Do NOT scan dist/node_modules.
-    for (const file of globSync(toPosix(resolve(PROJECT, pattern)))) {
-      if (isExcluded(file)) continue;
-      const src = readFileSync(file, 'utf8');
-      if (src.includes('api.serbia70.com')) matches.push(file);
+  const out = [];
+  for (const entry of entries) {
+    const abs = join(dir, entry.name);
+    if (abs.startsWith(EXCLUDED_ROOT)) continue;
+
+    if (entry.isDirectory()) {
+      out.push(...(await walk(abs)));
+      continue;
     }
+
+    if (entry.isFile() && ALLOWED_EXTS.has(extnameLite(abs))) out.push(abs);
+  }
+  return out;
+}
+
+test('browser-facing code must not hardcode Go origin (proxy-only)', async () => {
+  // Keep the scan limited to src/{pages,components,scripts}/**. Do NOT scan dist/node_modules.
+  const files = [];
+  for (const root of SCAN_ROOTS) files.push(...(await walk(root)));
+
+  const hits = [];
+  for (const file of files) {
+    const src = await readFile(file, 'utf8');
+    if (src.includes('api.serbia70.com')) hits.push(toPosixPath(relative(PROJECT, file)));
   }
 
-  assert.deepEqual(matches, [], `found hardcoded Go origin in browser-facing code:\n${matches.join('\n')}`);
+  assert.deepEqual(hits, [], `found hardcoded Go origin in browser-facing code:\n${hits.join('\n')}`);
 });
 ```
 
@@ -272,7 +296,9 @@ r.NoRoute(func(c *gin.Context) {
 
 Replace it with a safe default:
 - If path starts with `/api/` → return JSON 404
-- Otherwise → 308 redirect to `frontendBase + path + ?query` (recommended), or plain 404 if you want strict retirement.
+- Otherwise → 308 redirect to `frontendBase + path + ?query` (required by this plan to match spec).
+
+Note: **Do not remove `NoRoute` just to satisfy a gate**. `NoRoute` is acceptable and expected for implementing the spec’s explicit behavior, as long as it does not serve legacy HTML.
 
 Example (recommended redirect):
 
@@ -506,7 +532,18 @@ Run Go with `MEITUAN_FRONTEND_URL=http://127.0.0.1:4321` (or your local Astro po
 - `GET http://127.0.0.1:4321/<slug>/order-view/<order_no>` (or your chosen deep link) → 200 HTML
 
 **Proxy-only runtime check:**
-Open devtools Network on the Astro origin and confirm browser requests are same-origin `/api/**` (no direct requests to Go origin), including any SSE/EventSource connections.
+Open devtools Network on the Astro origin and confirm browser requests are same-origin `/api/**` (no direct requests to Go origin), including SSE/EventSource connections.
+
+If you want quick terminal verification of Go behavior (replace host/port):
+
+```bash
+curl -i "http://127.0.0.1:8080/master.html"
+curl -i "http://127.0.0.1:8080/admin.html"
+curl -i "http://127.0.0.1:8080/test-shop?x=1"
+curl -i "http://127.0.0.1:8080/assets/foo.js"
+curl -i "http://127.0.0.1:8080/favicon.ico"
+curl -i "http://127.0.0.1:8080/api/does-not-exist"
+```
 
 ---
 

@@ -58,6 +58,7 @@ test('master client uses relative /api/master/* paths and JSON for init/manage/b
   await client.init();
   await client.manage('trigger_backup', { foo: 'bar' });
   await client.backup('list');
+  await client.backup('create', 'c1.zip');
   await client.backup('delete', 'b1.zip');
   await client.logout();
 
@@ -74,10 +75,30 @@ test('master client uses relative /api/master/* paths and JSON for init/manage/b
   assert.deepEqual(JSON.parse(String(calls[2].init?.body)), { action: 'list' });
 
   assert.equal(String(calls[3].url), '/api/master/backup');
-  assert.deepEqual(JSON.parse(String(calls[3].init?.body)), { action: 'delete', backupName: 'b1.zip' });
+  assert.deepEqual(JSON.parse(String(calls[3].init?.body)), { action: 'create', backupName: 'c1.zip' });
 
-  assert.equal(String(calls[4].url), '/api/master/logout');
-  assert.equal(calls[4].init?.method, 'POST');
+  assert.equal(String(calls[4].url), '/api/master/backup');
+  assert.deepEqual(JSON.parse(String(calls[4].init?.body)), { action: 'delete', backupName: 'b1.zip' });
+
+  assert.equal(String(calls[5].url), '/api/master/logout');
+  assert.equal(calls[5].init?.method, 'POST');
+});
+
+test('master client backup create/delete require backupName', async () => {
+  const calls: Array<{ url: string | URL; init?: RequestInit }> = [];
+  const mockFetch = async (url: string | URL, init?: RequestInit) => {
+    calls.push({ url, init });
+    return { ok: true, status: 200 } as any;
+  };
+
+  const client = createMasterClient({ fetch: mockFetch as any });
+
+  await assert.rejects(() => client.backup('create'), /backupName/i);
+  await assert.rejects(() => client.backup('create', ''), /backupName/i);
+  await assert.rejects(() => client.backup('create', '   '), /backupName/i);
+  await assert.rejects(() => client.backup('delete'), /backupName/i);
+
+  assert.equal(calls.length, 0, 'should not call fetch when backupName is missing');
 });
 
 test('master client restore/upload support FormData pass-through (no manual Content-Type)', async () => {

@@ -72,8 +72,15 @@ export function createMasterClient(options: CreateMasterClientOptions = {}): Mas
     },
 
     async backup(action, backupName) {
+      const name = String(backupName ?? '').trim();
+      if (action === 'create' || action === 'delete') {
+        if (!name) {
+          throw new Error('backupName is required for backup create/delete');
+        }
+      }
+
       const body: any = { action };
-      if (backupName) body.backupName = backupName;
+      if (name) body.backupName = name;
       const res = await fetchImpl(backupPath, jsonPostInit(body));
       return await safeJson(res);
     },

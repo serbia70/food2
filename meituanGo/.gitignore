@@ -1,0 +1,11 @@
+# Build outputs
+*.exe
+server
+meituan-server
+
+# Local state
+.env
+/data/
+/backups/
+/code_backups/
+**/*.db

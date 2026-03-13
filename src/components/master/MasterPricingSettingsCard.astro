@@ -1,0 +1,133 @@
+---
+import type { MasterSettingsView } from '../../lib/master-settings-view';
+
+const { settings } = Astro.props as { settings: MasterSettingsView };
+---
+
+<section class="settings-card">
+  <div class="settings-head">
+    <div>
+      <div class="settings-title">套餐与提成设置</div>
+      <div class="settings-subtitle">集中管理订阅版 / 商务版月费和配送提成策略。</div>
+    </div>
+  </div>
+
+  <form id="master-pricing-settings-form" class="settings-form" onsubmit="return window.submitMasterPricingSettings ? window.submitMasterPricingSettings(this) : false;">
+    <label>
+      <span>订阅版月费</span>
+      <input name="subscriptionFeeRsd" type="number" min="1" step="1" value={settings.subscriptionFeeRsd} />
+    </label>
+    <label>
+      <span>商务版月费</span>
+      <input name="businessFeeRsd" type="number" min="1" step="1" value={settings.businessFeeRsd} />
+    </label>
+    <label>
+      <span>订阅版提成类型</span>
+      <select name="subscriptionCommissionType">
+        <option value="percentage" selected={settings.subscriptionCommissionType === 'percentage'}>按百分比</option>
+        <option value="per_order" selected={settings.subscriptionCommissionType === 'per_order'}>按单固定额</option>
+      </select>
+    </label>
+    <label>
+      <span>订阅版提成数值</span>
+      <input name="subscriptionCommissionValue" type="number" min="0.1" step="0.1" value={settings.subscriptionCommissionValue} />
+    </label>
+    <label>
+      <span>商务版提成类型</span>
+      <select name="businessCommissionType">
+        <option value="percentage" selected={settings.businessCommissionType === 'percentage'}>按百分比</option>
+        <option value="per_order" selected={settings.businessCommissionType === 'per_order'}>按单固定额</option>
+      </select>
+    </label>
+    <label>
+      <span>商务版提成数值</span>
+      <input name="businessCommissionValue" type="number" min="0.1" step="0.1" value={settings.businessCommissionValue} />
+    </label>
+
+    <div class="settings-actions">
+      <button type="submit" class="settings-submit">保存套餐与提成设置</button>
+      <div id="master-pricing-settings-feedback" class="settings-feedback">单独保存，避免把所有系统设置绑成一次大提交。</div>
+    </div>
+  </form>
+</section>
+
+<style>
+  .settings-card {
+    background: #fff;
+    border: 1px solid #d7dee7;
+    border-left: 4px solid #7c3aed;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+  }
+
+  .settings-head {
+    margin-bottom: 14px;
+  }
+
+  .settings-title {
+    font-size: 20px;
+    font-weight: 900;
+    color: #0f172a;
+  }
+
+  .settings-subtitle {
+    margin-top: 4px;
+    font-size: 13px;
+    color: #64748b;
+  }
+
+  .settings-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .settings-form label {
+    display: grid;
+    gap: 6px;
+  }
+
+  .settings-form span {
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+  }
+
+  .settings-form input,
+  .settings-form select {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    background: #fff;
+  }
+
+  .settings-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 8px;
+  }
+
+  .settings-submit {
+    border: none;
+    border-radius: 10px;
+    padding: 12px 16px;
+    background: #7c3aed;
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .settings-feedback {
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  @media (max-width: 860px) {
+    .settings-form {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

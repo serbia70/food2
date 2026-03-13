@@ -1,0 +1,456 @@
+---
+interface Props {
+  shopSlug: string;
+  shopSettings?: any;
+}
+
+const { shopSlug, shopSettings } = Astro.props;
+
+const pointsSettings = shopSettings?.points || {};
+const pointsPerSpend = pointsSettings.points_per_spend || 20;
+const pointsValue = pointsSettings.points_value || 1;
+---
+
+<div id="tab-marketing" class="tab-content" style="display: none">
+  <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+    <h3 style="margin: 0 0 15px; color: #1d4ed8;">🎯 促销管理</h3>
+    
+    <div style="margin-bottom: 20px;">
+      <button
+        onclick="openPromotionModal()"
+        style="background: #2563eb; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-weight: 600;"
+      >
+        + 添加促销
+      </button>
+    </div>
+
+    <div id="promotions-list">
+      <div style="text-align: center; color: #64748b; padding: 40px;">加载中...</div>
+    </div>
+  </div>
+
+  <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+    <h3 style="margin: 0 0 15px; color: #059669;">⭐ 积分设置</h3>
+    
+    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+      <div style="font-weight: 600; color: #166534;">积分抵扣说明</div>
+      <div style="font-size: 13px; color: #15803d; margin-top: 8px;">
+        • 客户下单时可使用积分抵扣金额<br/>
+        • 消费后自动按比例返还积分<br/>
+        • 积分仅限本店铺使用，不可转让
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+      <div>
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">消费多少RSD累计1积分</label>
+        <input type="number" id="points-per-spend" min="1" value={pointsPerSpend} 
+          style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+      </div>
+      <div>
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">1积分抵扣多少RSD</label>
+        <input type="number" id="points-value" min="0.1" step="0.1" value={pointsValue}
+          style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+      </div>
+    </div>
+    <button onclick="savePointsSettings()" style="background: #059669; color: #fff; border: none; border-radius: 6px; padding: 10px 20px; cursor: pointer; font-weight: 600;">
+      保存积分设置
+    </button>
+  </div>
+</div>
+
+<div id="promotion-modal" class="modal" style="display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); position: fixed; inset: 0; z-index: 1000;">
+  <div style="background: #fff; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+    <h3 id="promotion-modal-title" style="margin: 0 0 20px;">添加促销</h3>
+    
+    <form id="promotion-form">
+      <input type="hidden" id="promotion-id" value="" />
+      
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">促销名称</label>
+        <input type="text" id="promotion-name" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+      </div>
+
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">促销类型</label>
+        <select id="promotion-type" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;">
+          <option value="spend_discount">满减（满X减Y）</option>
+          <option value="percent_discount">折扣（X% off）</option>
+          <option value="bonus_points">赠送积分</option>
+          <option value="special">今日特价</option>
+        </select>
+      </div>
+
+      <div id="promo-special-fields" class="form-group" style="margin-bottom: 15px; display: none;">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">选择特价菜品</label>
+        <div id="promo-product-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px;">
+          <div style="color: #64748b; font-size: 13px;">加载菜品中...</div>
+        </div>
+        <small style="color: #64748b;">选择要设为特价的菜品（可多选）</small>
+      </div>
+
+      <div id="promo-special-price-field" class="form-group" style="margin-bottom: 15px; display: none;">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">特价金额 (RSD)</label>
+        <input type="number" id="promotion-special-price" min="0" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+        <small style="color: #64748b;">设置特价金额（仅对今日特价生效）</small>
+      </div>
+
+      <div id="promo-spend-fields" class="form-group" style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">最低消费 (RSD)</label>
+        <input type="number" id="promotion-min-spend" min="0" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+      </div>
+
+      <div id="promo-discount-fields" class="form-group" style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">减免/折扣值</label>
+        <input type="number" id="promotion-discount" min="0" step="0.1" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+        <small style="color: #64748b;">满减填金额(RSD)，折扣填百分比(1-100)</small>
+      </div>
+
+      <div id="promo-points-fields" class="form-group" style="margin-bottom: 15px; display: none;">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">赠送积分数量</label>
+        <input type="number" id="promotion-bonus-points" min="0" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+      </div>
+
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <input type="checkbox" id="promotion-stackable" />
+          <span>可与其他优惠叠加使用</span>
+        </label>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">开始时间（可选）</label>
+        <input type="datetime-local" id="promotion-start" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+      </div>
+
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">结束时间（可选）</label>
+        <input type="datetime-local" id="promotion-end" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button type="button" onclick="closePromotionModal()" style="padding: 10px 20px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer;">取消</button>
+        <button type="submit" style="padding: 10px 20px; border: none; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; font-weight: 600;">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script define:vars={{ shopSlug }}>
+  let promotionsData = [];
+  let productsData = [];
+
+  function setStyles(el, styles) {
+    Object.entries(styles).forEach(([key, value]) => {
+      el.style[key] = value;
+    });
+  }
+
+  function renderInfo(container, text, styles = {}) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    setStyles(div, styles);
+    container.replaceChildren(div);
+  }
+
+  async function loadPromotions() {
+    try {
+      const res = await fetch('/api/admin/promotions');
+      const data = await res.json();
+      if (data.success) {
+        promotionsData = data.promotions || [];
+        renderPromotions();
+      }
+    } catch (e) {
+      console.error('Failed to load promotions:', e);
+    }
+  }
+
+  async function loadProducts() {
+    try {
+      const res = await fetch(`/${encodeURIComponent(shopSlug)}/menu`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        productsData = [];
+        data.forEach(cat => {
+          (cat.products || []).forEach(p => {
+            productsData.push({ id: p.id, name: p.name, price: p.price });
+          });
+        });
+        renderProductList();
+      }
+    } catch (e) {
+      console.error('Failed to load products:', e);
+    }
+  }
+
+  function renderProductList(selectedIds = []) {
+    const container = document.getElementById('promo-product-list');
+    if (!productsData.length) {
+      renderInfo(container, '暂无菜品', { color: '#64748b', fontSize: '13px' });
+      return;
+    }
+    const nodes = productsData.map((p) => {
+      const label = document.createElement('label');
+      setStyles(label, { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid #f3f4f6', cursor: 'pointer' });
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.name = 'promo-product';
+      input.value = String(p.id);
+      input.checked = selectedIds.includes(p.id);
+      const name = document.createElement('span');
+      name.style.flex = '1';
+      name.textContent = p.name;
+      const price = document.createElement('span');
+      setStyles(price, { color: '#64748b', fontSize: '13px' });
+      price.textContent = `${p.price} RSD`;
+      label.append(input, name, price);
+      return label;
+    });
+    container.replaceChildren(...nodes);
+  }
+
+  function getSelectedProductIds() {
+    const checkboxes = document.querySelectorAll('input[name="promo-product"]:checked');
+    return Array.from(checkboxes).map(cb => parseInt(cb.value));
+  }
+
+  function renderPromotions() {
+    const container = document.getElementById('promotions-list');
+    if (!promotionsData.length) {
+      renderInfo(container, '暂无促销活动的', { textAlign: 'center', color: '#64748b', padding: '40px' });
+      return;
+    }
+    const nodes = promotionsData.map((p) => {
+      const card = document.createElement('div');
+      setStyles(card, { border: '1px solid #e5e7eb', borderRadius: '8px', padding: '15px', marginBottom: '10px', opacity: p.is_active ? '1' : '0.6' });
+      const top = document.createElement('div');
+      setStyles(top, { display: 'flex', justifyContent: 'space-between', alignItems: 'center' });
+      const left = document.createElement('div');
+      const name = document.createElement('span');
+      setStyles(name, { fontWeight: '600', color: '#1f2937' });
+      name.textContent = p.name;
+      const badge = document.createElement('span');
+      setStyles(badge, { marginLeft: '8px', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', background: p.is_active ? '#dcfce7' : '#f3f4f6', color: p.is_active ? '#166534' : '#6b7280' });
+      badge.textContent = p.is_active ? '活动中' : '已停用';
+      left.append(name, badge);
+
+      const actions = document.createElement('div');
+      setStyles(actions, { display: 'flex', gap: '8px' });
+      const makeBtn = (text, handler, styles = {}) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = text;
+        setStyles(btn, { padding: '4px 12px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer', fontSize: '12px', ...styles });
+        btn.addEventListener('click', handler);
+        return btn;
+      };
+      actions.append(
+        makeBtn(p.is_active ? '停用' : '启用', () => togglePromotion(p.id)),
+        makeBtn('编辑', () => editPromotion(p.id)),
+        makeBtn('删除', () => deletePromotion(p.id), { border: '1px solid #fca5a5', color: '#dc2626' }),
+      );
+
+      top.append(left, actions);
+      const desc = document.createElement('div');
+      setStyles(desc, { fontSize: '13px', color: '#64748b', marginTop: '8px' });
+      desc.textContent = renderPromoDesc(p);
+      card.append(top, desc);
+      return card;
+    });
+    container.replaceChildren(...nodes);
+  }
+
+  function renderPromoDesc(p) {
+    if (p.promo_type === 'spend_discount') {
+      return `满 ${p.min_spend_rsd || 0} RSD 减 ${p.discount_amount_rsd || 0} RSD ${p.stackable ? '(可叠加)' : ''}`;
+    } else if (p.promo_type === 'percent_discount') {
+      return `${p.discount_percent || 0}% 折扣 ${p.stackable ? '(可叠加)' : ''}`;
+    } else if (p.promo_type === 'bonus_points') {
+      return `赠送 ${p.bonus_points || 0} 积分`;
+    } else if (p.promo_type === 'special') {
+      let productNames = '多个菜品';
+      if (p.selected_products) {
+        try {
+          const ids = JSON.parse(p.selected_products);
+          const names = productsData.filter(prod => ids.includes(prod.id)).map(prod => prod.name);
+          if (names.length > 0) {
+            productNames = names.slice(0, 3).join(', ') + (names.length > 3 ? '...' : '');
+          }
+        } catch (e) {}
+      }
+      return `今日特价: ${productNames} → ${p.special_price_rsd || 0} RSD`;
+    }
+    return '';
+  }
+
+  window.openPromotionModal = function() {
+    document.getElementById('promotion-modal-title').innerText = '添加促销';
+    document.getElementById('promotion-form').reset();
+    document.getElementById('promotion-id').value = '';
+    document.getElementById('promotion-modal').style.display = 'flex';
+    loadProducts();
+  };
+
+  window.closePromotionModal = function() {
+    document.getElementById('promotion-modal').style.display = 'none';
+  };
+
+  window.editPromotion = function(id) {
+    const p = promotionsData.find(x => x.id === id);
+    if (!p) return;
+    
+    document.getElementById('promotion-modal-title').innerText = '编辑促销';
+    document.getElementById('promotion-id').value = p.id;
+    document.getElementById('promotion-name').value = p.name;
+    document.getElementById('promotion-type').value = p.promo_type;
+    document.getElementById('promotion-min-spend').value = p.min_spend_rsd || '';
+    document.getElementById('promotion-discount').value = p.discount_percent || p.discount_amount_rsd || '';
+    document.getElementById('promotion-bonus-points').value = p.bonus_points || '';
+    document.getElementById('promotion-stackable').checked = p.stackable === 1;
+    document.getElementById('promotion-special-price').value = p.special_price_rsd || '';
+    
+    // Parse selected products
+    let selectedIds = [];
+    if (p.selected_products) {
+      try {
+        selectedIds = JSON.parse(p.selected_products);
+      } catch (e) {}
+    }
+    renderProductList(selectedIds);
+    
+    if (p.starts_at) {
+      document.getElementById('promotion-start').value = p.starts_at.slice(0, 16);
+    }
+    if (p.ends_at) {
+      document.getElementById('promotion-end').value = p.ends_at.slice(0, 16);
+    }
+    
+    updatePromoFields();
+    document.getElementById('promotion-modal').style.display = 'flex';
+  };
+
+  document.getElementById('promotion-type').addEventListener('change', updatePromoFields);
+  
+  function updatePromoFields() {
+    const type = document.getElementById('promotion-type').value;
+    document.getElementById('promo-spend-fields').style.display = type === 'spend_discount' ? 'block' : 'none';
+    document.getElementById('promo-discount-fields').style.display = type === 'percent_discount' ? 'block' : (type === 'spend_discount' ? 'block' : 'none');
+    document.getElementById('promo-points-fields').style.display = type === 'bonus_points' ? 'block' : 'none';
+    document.getElementById('promo-special-fields').style.display = type === 'special' ? 'block' : 'none';
+    document.getElementById('promo-special-price-field').style.display = type === 'special' ? 'block' : 'none';
+  }
+
+  document.getElementById('promotion-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const id = document.getElementById('promotion-id').value;
+    const payload = {
+      name: document.getElementById('promotion-name').value,
+      promo_type: document.getElementById('promotion-type').value,
+      stackable: document.getElementById('promotion-stackable').checked,
+    };
+
+    const type = payload.promo_type;
+    if (type === 'spend_discount') {
+      payload.min_spend_rsd = parseInt(document.getElementById('promotion-min-spend').value) || 0;
+      payload.discount_amount_rsd = parseInt(document.getElementById('promotion-discount').value) || 0;
+    } else if (type === 'percent_discount') {
+      payload.discount_percent = parseFloat(document.getElementById('promotion-discount').value) || 0;
+    } else if (type === 'bonus_points') {
+      payload.bonus_points = parseInt(document.getElementById('promotion-bonus-points').value) || 0;
+    } else if (type === 'special') {
+      payload.selected_products = getSelectedProductIds();
+      payload.special_price_rsd = parseInt(document.getElementById('promotion-special-price').value) || 0;
+      if (!payload.selected_products || payload.selected_products.length === 0) {
+        alert('请至少选择一个菜品作为今日特价');
+        return;
+      }
+      if (payload.special_price_rsd <= 0) {
+        alert('请设置特价金额');
+        return;
+      }
+    }
+
+    const startVal = document.getElementById('promotion-start').value;
+    const endVal = document.getElementById('promotion-end').value;
+    if (startVal) payload.starts_at = startVal;
+    if (endVal) payload.ends_at = endVal;
+
+    try {
+      const url = id ? `/api/admin/promotions/${id}` : '/api/admin/promotions';
+      const method = id ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        closePromotionModal();
+        loadPromotions();
+      } else {
+        alert('操作失败: ' + (data.error || '未知错误'));
+      }
+    } catch (e) {
+      alert('网络错误');
+    }
+  });
+
+  window.togglePromotion = async function(id) {
+    try {
+      const res = await fetch(`/api/admin/promotions/${id}/toggle`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        loadPromotions();
+      } else {
+        alert('操作失败');
+      }
+    } catch (e) {
+      alert('网络错误');
+    }
+  };
+
+  window.deletePromotion = async function(id) {
+    if (!confirm('确认删除该促销？')) return;
+    try {
+      const res = await fetch(`/api/admin/promotions/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        loadPromotions();
+      } else {
+        alert('删除失败');
+      }
+    } catch (e) {
+      alert('网络错误');
+    }
+  };
+
+  window.savePointsSettings = async function() {
+    const pointsPerSpend = parseInt(document.getElementById('points-per-spend').value) || 20;
+    const pointsValue = parseFloat(document.getElementById('points-value').value) || 1;
+    
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          points: {
+            points_per_spend: pointsPerSpend,
+            points_value: pointsValue
+          }
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('积分设置已保存');
+      } else {
+        alert('保存失败: ' + (data.error || '未知错误'));
+      }
+    } catch (e) {
+      alert('网络错误');
+    }
+  };
+
+  loadPromotions();
+</script>

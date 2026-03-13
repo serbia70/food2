@@ -1,0 +1,106 @@
+---
+---
+
+<section class="create-card">
+  <div class="create-head">
+    <div>
+      <div class="create-title">创建店铺</div>
+      <div class="create-subtitle">快速建立新的门店后台与前台入口</div>
+    </div>
+  </div>
+
+  <form id="master-create-shop-form" class="create-form" onsubmit="return window.submitMasterCreateShop ? window.submitMasterCreateShop(this) : false;">
+    <label>
+      <span>店铺名称</span>
+      <input name="name" type="text" placeholder="例如：Shop 03" required />
+    </label>
+    <label>
+      <span>Slug</span>
+      <input name="slug" type="text" placeholder="例如：03" required />
+    </label>
+    <label>
+      <span>初始密码</span>
+      <input name="password" type="text" placeholder="输入后台初始密码" required />
+    </label>
+    <button type="submit" class="create-submit">创建店铺</button>
+  </form>
+
+  <div id="master-create-shop-feedback" class="create-feedback">创建后可直接在下方表格查看并进入后台。</div>
+</section>
+
+<style>
+  .create-card {
+    background: #ffffff;
+    border: 1px solid #d8e1ea;
+    border-left: 4px solid #2f855a;
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+  }
+
+  .create-head {
+    margin-bottom: 14px;
+  }
+
+  .create-title {
+    font-size: 18px;
+    font-weight: 900;
+    color: #0f172a;
+  }
+
+  .create-subtitle {
+    margin-top: 4px;
+    font-size: 13px;
+    color: #64748b;
+  }
+
+  .create-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+    gap: 12px;
+    align-items: end;
+  }
+
+  .create-form label {
+    display: grid;
+    gap: 6px;
+  }
+
+  .create-form span {
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+  }
+
+  .create-form input {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 11px 12px;
+    font-size: 14px;
+    background: #fff;
+  }
+
+  .create-submit {
+    border: none;
+    border-radius: 10px;
+    padding: 11px 18px;
+    background: #2f855a;
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .create-feedback {
+    margin-top: 12px;
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  @media (max-width: 960px) {
+    .create-form {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

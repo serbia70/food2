@@ -1,0 +1,476 @@
+---
+interface Props {
+  restaurantId: string;
+  mqttBroker?: string;
+}
+
+  import { MQTT_BROKER } from '../config';
+
+  const { restaurantId, mqttBroker } = Astro.props;
+
+  // Prefer per-page settings passed from the shop page; fallback to global config.
+  const effectiveMqttBroker = String(mqttBroker || MQTT_BROKER || '');
+---
+
+<div id="chat-fab" onclick="window.dispatchEvent(new Event('open-shop-chat-modal'))" style="
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #22c55e, #059669);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(5,150,105,0.35);
+  cursor: pointer;
+  position: static;
+  font-size: 22px;
+  flex-shrink: 0;
+">
+  💬
+  <span id="chat-badge" style="
+    display: none;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ef4444;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.9);
+    pointer-events: none;
+  "></span>
+</div>
+
+<div id="chat-panel" style="display:none"></div>
+
+<script src="/vendor/mqttws31.min.js" is:inline></script>
+
+<script define:vars={{ restaurantId, mqttBroker: effectiveMqttBroker }}>
+  let chatOpen = false;
+  let userPhone = '';
+  const shopSlug = restaurantId;
+  const shopId = String(parseInt(String(shopSlug), 10) || String(shopSlug)).trim();
+
+  let mqttClient = null;
+  let mqttInitInFlight = false;
+  let mqttRetryCount = 0;
+  let mqttSubscribedTopic = '';
+
+  let audioCtx = null;
+  let audioUnlocked = false;
+  let audioUnlockBound = false;
+
+  const processedMessageKeys = new Set();
+
+  function getUserPhone() {
+    try {
+      // 1. 检查 food_order_user (userStore.ts 使用的 key，最优先)
+      const foodOrderUser = localStorage.getItem('food_order_user');
+      if (foodOrderUser) {
+        const user = JSON.parse(foodOrderUser);
+        if (user.phone) return user.phone;
+        if (user.login_account) return user.login_account;
+      }
+      
+      // 2. 检查 user_info (login.astro 保存的)
+      const userInfo = localStorage.getItem('user_info');
+      if (userInfo) {
+        const user = JSON.parse(userInfo);
+        if (user.phone) return user.phone;
+      }
+      
+      // 3. 检查 auth_data
+      const authData = localStorage.getItem('auth_data');
+      if (authData) {
+        const auth = JSON.parse(authData);
+        if (auth.user && auth.user.phone) return auth.user.phone;
+        if (auth.phone) return auth.phone;
+      }
+      
+      // 4. 检查 user_data
+      const userData = localStorage.getItem('user_data');
+      if (userData) {
+        const user = JSON.parse(userData);
+        if (user.phone) return user.phone;
+      }
+    } catch(e) {}
+    return '';
+  }
+
+  function parseBroker(raw) {
+    const v = String(raw || '').trim();
+    if (!v) return { host: 'mqtt.serbia70.com', port: 443, path: '/mqtt', useSSL: true };
+    if (v.startsWith('ws://') || v.startsWith('wss://')) {
+      try {
+        const u = new URL(v);
+        return {
+          host: u.hostname,
+          port: Number(u.port || (u.protocol === 'wss:' ? 443 : 80)),
+          path: u.pathname || '/mqtt',
+          useSSL: u.protocol === 'wss:',
+        };
+      } catch {}
+    }
+    if (v.indexOf('serbia70.com') !== -1) {
+      return { host: 'mqtt.serbia70.com', port: 443, path: '/mqtt', useSSL: true };
+    }
+    return { host: v, port: 8083, path: '/mqtt', useSSL: false };
+  }
+
+  // Try to unlock audio as early as possible (requires user gesture).
+  bindAudioUnlock();
+
+  function showBadge() {
+    const el = document.getElementById('chat-badge');
+    if (el) el.style.display = 'block';
+  }
+
+  function hideBadge() {
+    const el = document.getElementById('chat-badge');
+    if (el) el.style.display = 'none';
+  }
+
+  function bindAudioUnlock() {
+    if (audioUnlockBound) return;
+    audioUnlockBound = true;
+    const handler = function () {
+      unlockAudio();
+      window.removeEventListener('click', handler);
+      window.removeEventListener('touchstart', handler);
+      window.removeEventListener('keydown', handler);
+    };
+    window.addEventListener('click', handler, { passive: true, once: true });
+    window.addEventListener('touchstart', handler, { passive: true, once: true });
+    window.addEventListener('keydown', handler, { passive: true, once: true });
+  }
+
+  function unlockAudio() {
+    if (audioUnlocked) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try {
+      if (!audioCtx) audioCtx = new AC();
+      audioCtx.resume().then(() => {
+        audioUnlocked = true;
+      }).catch(() => {});
+    } catch (e) {}
+  }
+
+  function beep() {
+    // Prefer voice if available; fallback to beep.
+    try {
+      if (window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (e) {}
+        const u = new SpeechSynthesisUtterance('您有新的聊天信息了');
+        u.lang = 'zh-CN';
+        try { window.speechSynthesis.speak(u); } catch (e) {}
+        return;
+      }
+    } catch (e) {}
+
+    if (!audioUnlocked || !audioCtx) return;
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.value = 880;
+      osc.start();
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.4);
+      osc.stop(audioCtx.currentTime + 0.4);
+    } catch (e) {}
+  }
+
+  function makeMessageKey(p) {
+    const created = String(p && p.created_at ? p.created_at : '').trim();
+    const role = String(p && p.sender_role ? p.sender_role : '').trim();
+    const phone = String(p && p.sender_phone ? p.sender_phone : '').trim();
+    const msg = String(p && p.message ? p.message : '').trim();
+    return `${created}|${role}|${phone}|${msg}`;
+  }
+
+  function appendUserMessage(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    if (Number(payload.shop_id || 0) !== Number(shopId || 0)) return;
+    // Only append messages from the other side (shop/admin). Our own sends already refresh via HTTP.
+    const role = String(payload.sender_role || '').trim();
+    if (role === 'user') return;
+    if (!payload.message) return;
+
+    const key = makeMessageKey(payload);
+    if (processedMessageKeys.has(key)) return;
+    processedMessageKeys.add(key);
+    if (processedMessageKeys.size > 200) {
+      processedMessageKeys.delete(processedMessageKeys.values().next().value);
+    }
+
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+
+    const isUser = String(payload.sender_role || '') === 'user';
+    const createdAt = payload.created_at ? new Date(payload.created_at) : new Date();
+
+    const wrap = document.createElement('div');
+    wrap.style.marginBottom = '10px';
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.alignItems = isUser ? 'flex-end' : 'flex-start';
+
+    const bubble = document.createElement('div');
+    bubble.style.maxWidth = '80%';
+    bubble.style.padding = '8px 12px';
+    bubble.style.borderRadius = '12px';
+    bubble.style.background = isUser ? '#059669' : '#e5e7eb';
+    bubble.style.color = isUser ? '#fff' : '#1f2937';
+    bubble.style.fontSize = '14px';
+    bubble.textContent = String(payload.message);
+
+    const ts = document.createElement('div');
+    ts.style.fontSize = '10px';
+    ts.style.color = '#9ca3af';
+    ts.style.marginTop = '4px';
+    ts.textContent = createdAt.toLocaleString('zh-CN');
+
+    wrap.appendChild(bubble);
+    wrap.appendChild(ts);
+
+    // Clear simple placeholders on first realtime append.
+    if (container.children.length === 1) {
+      const only = container.children[0];
+      if (only && only.textContent && (only.textContent.includes('正在加载') || only.textContent.includes('暂无消息') || only.textContent.includes('加载失败'))) {
+        container.replaceChildren();
+      }
+    }
+
+    container.appendChild(wrap);
+
+    if (chatOpen) {
+      hideBadge();
+      container.scrollTop = container.scrollHeight;
+    } else {
+      showBadge();
+      beep();
+    }
+  }
+
+  function setChatMessagesState(message, color = '#64748b', allowBreak = false) {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    const state = document.createElement('div');
+    state.style.textAlign = 'center';
+    state.style.color = color;
+    state.style.padding = '20px';
+    const parts = String(message || '').split(allowBreak ? /\n/ : /$^/);
+    parts.forEach((part, index) => {
+      if (index > 0) state.appendChild(document.createElement('br'));
+      state.appendChild(document.createTextNode(part));
+    });
+    if (!allowBreak) state.textContent = String(message || '');
+    container.replaceChildren(state);
+  }
+
+  function createUserMessageNode(message) {
+    const wrap = document.createElement('div');
+    wrap.style.marginBottom = '10px';
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.alignItems = message.sender_role === 'user' ? 'flex-end' : 'flex-start';
+
+    const bubble = document.createElement('div');
+    bubble.style.maxWidth = '80%';
+    bubble.style.padding = '8px 12px';
+    bubble.style.borderRadius = '12px';
+    bubble.style.background = message.sender_role === 'user' ? '#059669' : '#e5e7eb';
+    bubble.style.color = message.sender_role === 'user' ? '#fff' : '#1f2937';
+    bubble.style.fontSize = '14px';
+    bubble.textContent = String(message.message || '');
+
+    const time = document.createElement('div');
+    time.style.fontSize = '10px';
+    time.style.color = '#9ca3af';
+    time.style.marginTop = '4px';
+    time.textContent = new Date(message.created_at).toLocaleString('zh-CN');
+
+    wrap.append(bubble, time);
+    return wrap;
+  }
+
+  function scheduleMqttReconnect() {
+    mqttInitInFlight = false;
+    mqttRetryCount = Math.min(mqttRetryCount + 1, 20);
+    const delay = Math.min(30000, 1500 + mqttRetryCount * 1500);
+    setTimeout(() => initUserChatMqtt(), delay);
+  }
+
+  function initUserChatMqtt() {
+    if (!userPhone) return;
+    if (mqttInitInFlight) return;
+    mqttInitInFlight = true;
+
+    if (typeof Paho === 'undefined') {
+      mqttInitInFlight = false;
+      setTimeout(initUserChatMqtt, 400);
+      return;
+    }
+
+    const b = parseBroker(mqttBroker);
+    const clientId = 'uc_' + String(shopId || 's') + '_' + Math.random().toString(16).slice(2, 8);
+    const topic = `shop/${String(shopId)}/chat/${String(userPhone)}`;
+
+    // debug logs removed
+
+    // If already connected, just ensure subscription is correct.
+    try {
+      if (mqttClient && (mqttClient.connected || (typeof mqttClient.isConnected === 'function' && mqttClient.isConnected()))) {
+        if (mqttSubscribedTopic && mqttSubscribedTopic !== topic) {
+          try { mqttClient.unsubscribe(mqttSubscribedTopic); } catch (e) {}
+        }
+        mqttSubscribedTopic = topic;
+        try { mqttClient.subscribe(topic); } catch (e) {}
+        mqttInitInFlight = false;
+        return;
+      }
+    } catch (e) {}
+
+    try {
+      if (mqttClient) {
+        try { mqttClient.disconnect(); } catch (e) {}
+      }
+    } catch (e) {}
+
+    mqttClient = new Paho.MQTT.Client(b.host, Number(b.port), b.path || '/mqtt', clientId);
+    mqttSubscribedTopic = topic;
+
+    mqttClient.onConnectionLost = function () {
+      scheduleMqttReconnect();
+    };
+
+    mqttClient.onMessageArrived = function (m) {
+      try {
+        const payload = JSON.parse(m && m.payloadString ? m.payloadString : '{}');
+        appendUserMessage(payload);
+      } catch (e) {}
+    };
+
+    const opts = {
+      useSSL: !!b.useSSL,
+      timeout: 5,
+      keepAliveInterval: 60,
+      onSuccess: function () {
+        mqttRetryCount = 0;
+        mqttInitInFlight = false;
+        try { mqttClient.subscribe(topic); } catch (e) {}
+      },
+      onFailure: function () {
+        mqttInitInFlight = false;
+        scheduleMqttReconnect();
+      },
+    };
+
+
+    try {
+      mqttClient.connect(opts);
+    } catch (e) {
+      mqttInitInFlight = false;
+      scheduleMqttReconnect();
+    }
+  }
+
+  // Start MQTT as soon as user is known.
+  function ensureChatRealtimeStarted() {
+    const p = getUserPhone();
+    if (!p) return;
+    if (p !== userPhone) userPhone = p;
+    initUserChatMqtt();
+  }
+  try { ensureChatRealtimeStarted(); } catch (e) {}
+  // Expose a hook so login code can trigger realtime without polling.
+  try { window.__userChatEnsureRealtime = ensureChatRealtimeStarted; } catch (e) {}
+
+  window.toggleUserChat = function() {
+    chatOpen = !chatOpen;
+    document.getElementById('chat-panel').style.display = chatOpen ? 'flex' : 'none';
+    if (chatOpen) {
+      hideBadge();
+      // Opening the panel is a user gesture; unlock audio here.
+      unlockAudio();
+      userPhone = getUserPhone();
+      loadUserChat();
+      initUserChatMqtt();
+    }
+  };
+
+  async function loadUserChat() {
+    if (!userPhone) {
+      setChatMessagesState('请先登录后再聊天');
+      return;
+    }
+    try {
+      console.log('Loading chat for phone:', userPhone);
+      const res = await fetch(`/api/user/chat?sender_phone=${encodeURIComponent(userPhone)}&shop_id=${encodeURIComponent(shopId)}`);
+      console.log('Response status:', res.status);
+      const data = await res.json();
+      console.log('Response data:', data);
+      if (data.success) {
+        renderUserMessages(data.messages || []);
+      } else {
+        setChatMessagesState(data.error || '加载失败', '#ef4444');
+      }
+    } catch(e) {
+      console.error('Load chat error:', e);
+      setChatMessagesState(`加载失败: ${e.message}`, '#ef4444');
+    }
+  }
+
+  function renderUserMessages(messages) {
+    const container = document.getElementById('chat-messages');
+    if (!messages || messages.length === 0) {
+      setChatMessagesState('暂无消息\n可以开始咨询商家', '#64748b', true);
+      return;
+    }
+
+    // Mark history as processed to avoid duplicates if broker delivers retained/replayed messages.
+    try {
+      messages.forEach((m) => {
+        const k = makeMessageKey(m);
+        if (k) processedMessageKeys.add(k);
+      });
+    } catch (e) {}
+
+    const nodes = messages.map((m) => createUserMessageNode(m));
+    container.replaceChildren(...nodes);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  window.sendUserChat = async function() {
+    if (!userPhone) {
+      alert('请先登录后再聊天');
+      return;
+    }
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (!message) return;
+    
+    try {
+      const res = await fetch('/api/user/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender_phone: userPhone, message: message, shop_id: Number(shopId) })
+      });
+      const data = await res.json();
+      if (data.success) {
+        input.value = '';
+        loadUserChat();
+      }
+    } catch(e) {
+      alert('发送失败');
+    }
+  };
+
+  document.getElementById('chat-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      sendUserChat();
+    }
+  });
+</script>

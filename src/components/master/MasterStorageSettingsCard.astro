@@ -1,0 +1,76 @@
+---
+import type { MasterSettingsView } from '../../lib/master-settings-view';
+
+const { settings } = Astro.props as { settings: MasterSettingsView['storage'] };
+---
+
+<section class="settings-card settings-card-storage">
+  <div class="settings-head">
+    <div>
+      <div class="settings-title">图片 / R2 设置</div>
+      <div class="settings-subtitle">控制图片公开域名与严格 R2 上传策略。</div>
+    </div>
+  </div>
+
+  <form class="settings-form" onsubmit="return window.submitMasterStorageSettings ? window.submitMasterStorageSettings(this) : false;">
+    <label class="settings-span-2">
+      <span>图片存储位置</span>
+      <div class="radio-row">
+        <label class="radio-item">
+          <input name="imageStorage" type="radio" value="local" checked={settings.imageStorage === 'local'} />
+          <span>本地服务器</span>
+        </label>
+        <label class="radio-item">
+          <input name="imageStorage" type="radio" value="r2" checked={settings.imageStorage === 'r2'} />
+          <span>Cloudflare R2</span>
+        </label>
+      </div>
+    </label>
+    <label class="settings-span-2">
+      <span>R2 公共域名</span>
+      <input name="r2PublicDomain" type="text" value={settings.r2PublicDomain} placeholder="https://img.example.com" />
+    </label>
+    <label class="checkbox-row settings-span-2">
+      <input name="uploadStrictR2" type="checkbox" checked={settings.uploadStrictR2} />
+      <span>启用严格 R2 上传策略</span>
+    </label>
+
+    <div class="settings-actions">
+      <button type="submit" class="settings-submit">保存图片 / R2 设置</button>
+      <div id="master-storage-settings-feedback" class="settings-feedback">仅更新配置项，不会立即触发文件迁移或上传动作。</div>
+    </div>
+  </form>
+</section>
+
+<style>
+  .settings-card {
+    background: #fff;
+    border: 1px solid #d7dee7;
+    border-left: 4px solid #7c2d12;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+  }
+
+  .settings-head { margin-bottom: 14px; }
+  .settings-title { font-size: 20px; font-weight: 900; color: #0f172a; }
+  .settings-subtitle { margin-top: 4px; font-size: 13px; color: #64748b; }
+  .settings-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .settings-form label { display: grid; gap: 6px; }
+  .settings-form span { font-size: 12px; font-weight: 700; color: #475569; }
+  .settings-form input { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fff; }
+  .settings-span-2 { grid-column: 1 / -1; }
+  .radio-row { display: flex; flex-wrap: wrap; gap: 12px; }
+  .radio-item { display: inline-flex !important; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; }
+  .radio-item input { width: 16px; height: 16px; padding: 0; }
+  .checkbox-row { display: flex !important; align-items: center; gap: 10px; }
+  .checkbox-row input { width: 18px; height: 18px; padding: 0; }
+  .settings-actions { grid-column: 1 / -1; display: grid; gap: 8px; }
+  .settings-submit { border: none; border-radius: 10px; padding: 12px 16px; background: #7c2d12; color: #fff; font-weight: 800; cursor: pointer; }
+  .settings-feedback { font-size: 12px; color: #64748b; }
+
+  @media (max-width: 860px) {
+    .settings-form { grid-template-columns: 1fr; }
+    .settings-span-2 { grid-column: auto; }
+  }
+</style>

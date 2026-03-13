@@ -9,8 +9,8 @@ test('允许的 master tab 值应原样保留', () => {
   assert.equal(normalizeMasterTab('settings'), 'settings');
 });
 
-test('未知 tab 值应回退到 management', () => {
-  assert.equal(normalizeMasterTab('abc'), 'management');
-  assert.equal(normalizeMasterTab(''), 'management');
-  assert.equal(normalizeMasterTab(null), 'management');
+test('未知 tab 值应回退到 overview', () => {
+  assert.equal(normalizeMasterTab('abc'), 'overview');
+  assert.equal(normalizeMasterTab(''), 'overview');
+  assert.equal(normalizeMasterTab(null), 'overview');
 });

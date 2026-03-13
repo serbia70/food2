@@ -105,6 +105,67 @@ const totals = shops.reduce(
 const shopViews = shops.map((shop) => buildMasterShopView(shop));
 const settingsView = buildMasterSettingsView(masterSettings);
 const shopViewsData = JSON.stringify(shopViews);
+
+type MasterCta =
+  | { key: 'login'; kind: 'link'; label: string; href: string; className: string }
+  | { key: 'logout' | 'refresh'; kind: 'button'; label: string; onClick: string; className: string };
+
+const MASTER_CTA = {
+  login: (label: string, className = 'primary-btn'): MasterCta => ({
+    key: 'login',
+    kind: 'link',
+    label,
+    href: '/master/login',
+    className,
+  }),
+  logout: (className = 'ghost-btn'): MasterCta => ({
+    key: 'logout',
+    kind: 'button',
+    label: '退出',
+    onClick: 'logoutMaster()',
+    className,
+  }),
+  refresh: (className = 'ghost-btn'): MasterCta => ({
+    key: 'refresh',
+    kind: 'button',
+    label: '刷新页面',
+    onClick: 'window.location.reload()',
+    className,
+  }),
+} as const;
+
+const heroCtas: MasterCta[] = [
+  MASTER_CTA.login(hasMasterCookie ? '重新登录' : '登录'),
+  ...(hasMasterCookie ? [MASTER_CTA.logout('danger-btn')] : []),
+  MASTER_CTA.refresh(),
+];
+
+const noticeCtas: MasterCta[] = [MASTER_CTA.login('去登录'), MASTER_CTA.logout(), MASTER_CTA.refresh()];
+
+const escapeHtml = (input: string) =>
+  input
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+
+const renderMasterCtasHtml = (ctas: MasterCta[]) =>
+  ctas
+    .map((cta) => {
+      const label = escapeHtml(cta.label);
+      const className = escapeHtml(cta.className);
+      if (cta.kind === 'link') {
+        const href = escapeHtml(cta.href);
+        return `<a class="${className}" href="${href}">${label}</a>`;
+      }
+      const onClick = escapeHtml(cta.onClick);
+      return `<button class="${className}" type="button" onclick="${onClick}">${label}</button>`;
+    })
+    .join('');
+
+const heroCtasHtml = renderMasterCtasHtml(heroCtas);
+const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
 ---
 
 <html lang="zh-CN">
@@ -1525,11 +1586,7 @@ const shopViewsData = JSON.stringify(shopViews);
           <h1 class="hero-title">Master Dashboard</h1>
           <div class="hero-subtitle">Astro 原生首页一期：店铺经营摘要与总览</div>
         </div>
-        <div class="hero-actions">
-          <a class="primary-btn" href="/master/login">{hasMasterCookie ? '重新登录' : '登录'}</a>
-          {hasMasterCookie && <button class="danger-btn" type="button" onclick="logoutMaster()">退出</button>}
-          <button class="ghost-btn" type="button" onclick="window.location.reload()">刷新页面</button>
-        </div>
+        <div class="hero-actions" set:html={heroCtasHtml} />
       </section>
 
       <section class="tabs" aria-label="Master sections">
@@ -1546,11 +1603,7 @@ const shopViewsData = JSON.stringify(shopViews);
           <div class="notice">
             {loadError || '暂无店铺经营数据'}
             {isUnauthorized ? (
-              <div class="notice-actions">
-                <a class="primary-btn" href="/master/login">去登录</a>
-                <button class="ghost-btn" type="button" onclick="logoutMaster()">退出</button>
-                <button class="ghost-btn" type="button" onclick="window.location.reload()">刷新页面</button>
-              </div>
+              <div class="notice-actions" set:html={noticeCtasHtml} />
             ) : null}
           </div>
         )}
@@ -1584,11 +1637,7 @@ const shopViewsData = JSON.stringify(shopViews);
       {!shouldShowMasterContent ? (
         <div class="notice">
           {loadError || '主控数据加载失败'}
-          <div class="notice-actions">
-            <a class="primary-btn" href="/master/login">去登录</a>
-            <button class="ghost-btn" type="button" onclick="logoutMaster()">退出</button>
-            <button class="ghost-btn" type="button" onclick="window.location.reload()">刷新页面</button>
-          </div>
+          <div class="notice-actions" set:html={noticeCtasHtml} />
         </div>
       ) : null}
     </main>\n    <MasterShopEditPanel />

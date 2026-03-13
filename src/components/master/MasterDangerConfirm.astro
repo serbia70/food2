@@ -292,6 +292,19 @@ const defaults = {
       if (typeof resolve === 'function') resolve(result);
     }
 
+    function warnBusy() {
+      // Lightweight hint: do not close while confirm action is running.
+      feedbackEl.textContent = '操作进行中，请稍候...';
+    }
+
+    function requestClose() {
+      if (inFlight) {
+        warnBusy();
+        return;
+      }
+      closeWith(false);
+    }
+
     async function handleConfirmClick() {
       if (confirmBtn.disabled) return;
       if (typeof resolveCurrent !== 'function') return;
@@ -393,19 +406,29 @@ const defaults = {
     inputEl.addEventListener('input', updateConfirmDisabled);
 
     for (const el of cancelEls) {
-      el.addEventListener('click', () => closeWith(false));
+      el.addEventListener('click', (event) => {
+        if (inFlight) {
+          if (event && typeof event.preventDefault === 'function') event.preventDefault();
+          warnBusy();
+          return;
+        }
+        closeWith(false);
+      });
     }
 
     window.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
       if (root.hidden) return;
-      if (inFlight) return;
+      if (inFlight) {
+        warnBusy();
+        return;
+      }
       closeWith(false);
     });
 
     const api = window.masterDangerConfirm && typeof window.masterDangerConfirm === 'object' ? window.masterDangerConfirm : {};
     api.open = open;
-    api.close = () => closeWith(false);
+    api.close = requestClose;
     window.masterDangerConfirm = api;
   })();
 </script>

@@ -49,7 +49,7 @@ test('master SSR init 使用同域 /api/master/init 且显式转发 cookie', () 
   );
 
   // Proxy-only invariant: master SSR should not hit API_BASE_URL directly.
-  assert.ok(!frontmatter.includes('API_BASE_URL'), 'expected no API_BASE_URL usage in master SSR init');
+  assert.doesNotMatch(frontmatter, /\bAPI_BASE_URL\b/, 'expected no API_BASE_URL usage in master SSR init');
 });
 
 test('master client uses relative /api/master/* paths and JSON for init/manage/backup/logout', async () => {

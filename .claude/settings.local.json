@@ -75,7 +75,10 @@
       "Bash(curl -s \"http://localhost:3003/02/menu\" | head -c 4000)",
       "Bash(node - <<'NODE'\nconst url='http://localhost:3003/02/menu';\nconst res=await fetch\\(url\\);\nconst data=await res.json\\(\\);\nconst p=data.flatMap\\(c=>c.products||[]\\)[0];\nconsole.log\\('sample product keys',Object.keys\\(p||{}\\)\\);\nconsole.log\\('sample product',JSON.stringify\\({id:p.id,name:p.name,sub_name:p.sub_name,price:p.price,img:p.img,category_id:p.category_id},null,2\\)\\);\nNODE)",
       "Bash(node --test src/lib/admin-localize-images.update-payload.test.ts)",
-      "Bash(node --test src/pages/api/admin/localize-images-batch.test.ts src/lib/admin-localize-images.test.ts src/lib/admin-localize-images.update-payload.test.ts)"
+      "Bash(node --test src/pages/api/admin/localize-images-batch.test.ts src/lib/admin-localize-images.test.ts src/lib/admin-localize-images.update-payload.test.ts)",
+      "Bash(node --test src/lib/api-proxy.html-5xx.test.ts)",
+      "Bash(node --test src/lib/api-proxy.html-5xx.test.ts src/lib/uploads-proxy.test.ts src/lib/vip-upstream-request.test.ts src/pages/api/admin/localize-images-batch.test.ts)",
+      "Bash(pnpm dev:*)"
     ]
   }
 }

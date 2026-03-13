@@ -1,8 +1,8 @@
-import { API_PROXY_TIMEOUT_MS } from "./clientConfig";
+import { API_PROXY_TIMEOUT_MS } from "./clientConfig.ts";
 
-function buildProxyErrorResponse(status: number, error: string, code: string) {
+function buildProxyErrorResponse(status: number, error: string, code: string, extra?: Record<string, any>) {
   return new Response(
-    JSON.stringify({ success: false, error, code }),
+    JSON.stringify({ success: false, error, code, ...(extra || {}) }),
     {
       status,
       headers: { "Content-Type": "application/json" },
@@ -64,10 +64,23 @@ export async function proxyFetch(
       );
     }
 
+    const contentType = res.headers.get("content-type") || "";
+
+    // If upstream returns an HTML error page (common with 502/504), wrap it into JSON
+    // so browser code that expects JSON doesn't crash on JSON.parse.
+    if (res.status >= 500 && !contentType.includes('application/json')) {
+      return buildProxyErrorResponse(
+        res.status,
+        `Upstream error (${res.status})`,
+        'upstream_non_json',
+        { upstreamStatus: res.status },
+      );
+    }
+
     return new Response(body, {
       status: res.status,
       headers: {
-        "Content-Type": res.headers.get("content-type") || "application/json",
+        "Content-Type": contentType || "application/json",
       },
     });
   } catch (e: unknown) {

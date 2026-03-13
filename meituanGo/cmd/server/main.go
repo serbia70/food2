@@ -116,9 +116,21 @@ func main() {
 	r.GET("/master.html", func(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 	})
-	// NOTE: Keep assets/favicon serving for now (Task 5).
-	r.Static("/assets", "./static/assets")
-	r.StaticFile("/favicon.ico", "./static/favicon.ico")
+	r.GET("/favicon.ico", func(c *gin.Context) {
+		target := frontendBase + "/favicon.ico"
+		if raw := c.Request.URL.RawQuery; raw != "" {
+			target += "?" + raw
+		}
+		c.Redirect(http.StatusPermanentRedirect, target)
+	})
+	r.GET("/assets/*path", func(c *gin.Context) {
+		path := c.Param("path")
+		target := frontendBase + "/assets" + path
+		if raw := c.Request.URL.RawQuery; raw != "" {
+			target += "?" + raw
+		}
+		c.Redirect(http.StatusPermanentRedirect, target)
+	})
 
 	r.GET("/api/debug-orders", func(c *gin.Context) {
 		type orderRow struct {

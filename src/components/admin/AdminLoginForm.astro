@@ -57,36 +57,45 @@ const safeSlug = String(slug || '');
   </div>
 
   <script define:vars={{ swScope }}>
-    const ios12 = /iP(?:hone|ad|od).*OS 12_/.test(navigator.userAgent) || /CPU OS 12_/.test(navigator.userAgent);
+    var ios12 = /iP(?:hone|ad|od).*OS 12_/.test(navigator.userAgent) || /CPU OS 12_/.test(navigator.userAgent);
     if (!ios12 && swScope && 'serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/admin-sw.js', { scope: swScope }).catch(() => {});
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/admin-sw.js', { scope: swScope }).catch(function () {});
       });
     }
 
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
+    document.getElementById('login-form').addEventListener('submit', function (e) {
       e.preventDefault();
-      const slug = document.getElementById('slug').value.trim();
-      const password = document.getElementById('password').value;
-      const btn = document.getElementById('submit-btn');
-      const errorMsg = document.getElementById('error-msg');
+      var slug = document.getElementById('slug').value.trim();
+      var password = document.getElementById('password').value;
+      var btn = document.getElementById('submit-btn');
+      var errorMsg = document.getElementById('error-msg');
       btn.disabled = true;
       btn.textContent = '登录中...';
       errorMsg.textContent = '';
-      try {
-        const res = await fetch('/api/admin/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ shopId: slug, password }),
+      fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopId: slug, password: password }),
+      })
+        .then(function (res) {
+          return res.json().then(function (data) {
+            return { res: res, data: data };
+          });
+        })
+        .then(function (result) {
+          var res = result.res;
+          var data = result.data;
+          if (!res.ok || !(data && data.success)) {
+            throw new Error((data && data.error) ? data.error : '登录失败');
+          }
+          window.location.href = '/admin/' + slug;
+        })
+        .catch(function (err) {
+          errorMsg.textContent = (err && err.message) ? err.message : '网络错误';
+          btn.disabled = false;
+          btn.textContent = '登录';
         });
-        const data = await res.json();
-        if (!res.ok || !data?.success) throw new Error(data?.error || '登录失败');
-        window.location.href = `/admin/${slug}`;
-      } catch (err) {
-        errorMsg.textContent = err?.message || '网络错误';
-        btn.disabled = false;
-        btn.textContent = '登录';
-      }
     });
   </script>
 </body>

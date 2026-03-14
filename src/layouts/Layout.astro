@@ -20,6 +20,7 @@ const {
 <!doctype html>
 <html lang="zh-CN">
 <head>
+  <script src="/src/scripts/compat.js" is:inline></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="description" content="MeituanGo - 在线点餐系统" />
@@ -59,7 +60,8 @@ const {
   {
     serviceWorker ? (
       <script define:vars={{ serviceWorker, serviceWorkerScope }} is:inline>
-        if ('serviceWorker' in navigator) {
+        const ios12 = /iP(?:hone|ad|od).*OS 12_/.test(navigator.userAgent) || /CPU OS 12_/.test(navigator.userAgent);
+        if (!ios12 && 'serviceWorker' in navigator) {
           window.addEventListener('load', () => {
             navigator.serviceWorker.register(serviceWorker, { scope: serviceWorkerScope }).catch(() => {});
           });

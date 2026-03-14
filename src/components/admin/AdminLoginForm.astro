@@ -57,7 +57,8 @@ const safeSlug = String(slug || '');
   </div>
 
   <script define:vars={{ swScope }}>
-    if (swScope && 'serviceWorker' in navigator) {
+    const ios12 = /iP(?:hone|ad|od).*OS 12_/.test(navigator.userAgent) || /CPU OS 12_/.test(navigator.userAgent);
+    if (!ios12 && swScope && 'serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/admin-sw.js', { scope: swScope }).catch(() => {});
       });

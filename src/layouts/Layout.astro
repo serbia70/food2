@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import compat from '../scripts/compat.js?raw';
 interface Props {
   title: string;
   manifest?: string;
@@ -20,7 +21,7 @@ const {
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <script src="/src/scripts/compat.js" is:inline></script>
+  <script is:inline>{compat}</script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="description" content="MeituanGo - 在线点餐系统" />

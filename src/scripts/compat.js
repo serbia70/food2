@@ -30,15 +30,18 @@
 
   if (typeof Promise !== 'undefined' && !Promise.prototype.finally) {
     Promise.prototype.finally = function (onFinally) {
+      if (typeof onFinally !== 'function') {
+        return this.then(onFinally, onFinally);
+      }
       var P = this.constructor;
       return this.then(
         function (value) {
-          return P.resolve(onFinally && onFinally()).then(function () {
+          return P.resolve(onFinally()).then(function () {
             return value;
           });
         },
         function (reason) {
-          return P.resolve(onFinally && onFinally()).then(function () {
+          return P.resolve(onFinally()).then(function () {
             throw reason;
           });
         }
@@ -57,11 +60,18 @@
       }
       for (var i = 0; i < arguments.length; i += 1) {
         var node = arguments[i];
+        if (node == null) {
+          continue;
+        }
         if (typeof node === 'string') {
           this.appendChild(document.createTextNode(node));
-        } else if (node) {
-          this.appendChild(node);
+          continue;
         }
+        if (node && node.nodeType) {
+          this.appendChild(node);
+          continue;
+        }
+        this.appendChild(document.createTextNode(String(node)));
       }
     };
   }
@@ -96,11 +106,51 @@
     g.AbortSignal = g.AbortSignal || function () {};
   }
 
+  var supportsScrollToOptions = false;
+  if (typeof document !== 'undefined') {
+    try {
+      var testEl = document.createElement('div');
+      if (testEl && typeof testEl.scrollTo === 'function') {
+        testEl.scrollTo({ top: 0, left: 0 });
+        supportsScrollToOptions = true;
+      }
+    } catch (err) {
+      supportsScrollToOptions = false;
+    }
+  }
+
   var installScrollTo = function (proto) {
     if (!proto) {
       return;
     }
     var nativeScrollTo = proto.scrollTo;
+    if (typeof nativeScrollTo !== 'function') {
+      proto.scrollTo = function (x, y) {
+        if (x && typeof x === 'object') {
+          var left = x.left;
+          var top = x.top;
+          if (left == null) {
+            left = this.scrollLeft;
+          }
+          if (top == null) {
+            top = this.scrollTop;
+          }
+          this.scrollLeft = left;
+          this.scrollTop = top;
+          return;
+        }
+        if (x != null) {
+          this.scrollLeft = x;
+        }
+        if (y != null) {
+          this.scrollTop = y;
+        }
+      };
+      return;
+    }
+    if (supportsScrollToOptions) {
+      return;
+    }
     proto.scrollTo = function (x, y) {
       if (x && typeof x === 'object') {
         var left = x.left;
@@ -115,15 +165,7 @@
         this.scrollTop = top;
         return;
       }
-      if (typeof nativeScrollTo === 'function') {
-        return nativeScrollTo.call(this, x, y);
-      }
-      if (x != null) {
-        this.scrollLeft = x;
-      }
-      if (y != null) {
-        this.scrollTop = y;
-      }
+      return nativeScrollTo.call(this, x, y);
     };
   };
 

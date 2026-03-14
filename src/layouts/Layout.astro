@@ -61,10 +61,10 @@ const {
   {
     serviceWorker ? (
       <script define:vars={{ serviceWorker, serviceWorkerScope }} is:inline>
-        const ios12 = /iP(?:hone|ad|od).*OS 12_/.test(navigator.userAgent) || /CPU OS 12_/.test(navigator.userAgent);
+        var ios12 = /iP(?:hone|ad|od).*OS 12_/.test(navigator.userAgent) || /CPU OS 12_/.test(navigator.userAgent);
         if (!ios12 && 'serviceWorker' in navigator) {
-          window.addEventListener('load', () => {
-            navigator.serviceWorker.register(serviceWorker, { scope: serviceWorkerScope }).catch(() => {});
+          window.addEventListener('load', function () {
+            navigator.serviceWorker.register(serviceWorker, { scope: serviceWorkerScope }).catch(function () {});
           });
         }
       </script>

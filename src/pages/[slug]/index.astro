@@ -629,10 +629,12 @@ const enableReservation = (billingPlanType === 'subscription' || billingPlanType
         </div>
 
         <script is:inline>
-          const user = localStorage.getItem('user_info');
+          var user = localStorage.getItem('user_info');
           if (!user) {
-            const banner = document.getElementById('shop-auth-banner');
-            if (banner) banner.style.display = 'flex';
+            var banner = document.getElementById('shop-auth-banner');
+            if (banner) {
+              banner.style.display = 'flex';
+            }
           }
         </script>
 
@@ -688,39 +690,51 @@ const enableReservation = (billingPlanType === 'subscription' || billingPlanType
         if (window.__shopMqttSyncInited) return;
         window.__shopMqttSyncInited = true;
 
-        let reloading = false;
-        let stream = null;
-        let streamRetryTimer = null;
-        let streamRetryStopped = false;
+        var reloading = false;
+        var stream = null;
+        var streamRetryTimer = null;
+        var streamRetryStopped = false;
 
-        async function probeStreamAvailability() {
-          try {
-            const res = await fetch('/api/stream/' + encodeURIComponent(String(slug || '')), {
-              method: 'GET',
-              headers: { Accept: 'application/json' },
-            });
-            const contentType = String(res.headers.get('content-type') || '').toLowerCase();
-            if (!shouldRetryStream(Number(res.status || 0), contentType)) {
-              return false;
+        function probeStreamAvailability() {
+          return new Promise(function (resolve) {
+            try {
+              fetch('/api/stream/' + encodeURIComponent(String(slug || '')), {
+                method: 'GET',
+                headers: { Accept: 'application/json' },
+              })
+                .then(function (res) {
+                  var contentType = String(res.headers.get('content-type') || '').toLowerCase();
+                  if (!shouldRetryStream(Number(res.status || 0), contentType)) {
+                    resolve(false);
+                    return;
+                  }
+                  resolve(true);
+                })
+                .catch(function () {
+                  resolve(true);
+                });
+            } catch (err) {
+              resolve(true);
             }
-          } catch {}
-          return true;
+          });
         }
 
         function parseBroker(raw) {
-          const v = String(raw || '').trim();
+          var v = String(raw || '').trim();
           if (!v) return { host: 'mqtt.serbia70.com', port: 443, path: '/mqtt', useSSL: true };
 
-          if (v.startsWith('ws://') || v.startsWith('wss://')) {
+          if (v.indexOf('ws://') === 0 || v.indexOf('wss://') === 0) {
             try {
-              const u = new URL(v);
+              var u = new URL(v);
+              var protocol = u.protocol;
+              var port = u.port ? Number(u.port) : protocol === 'wss:' ? 443 : 80;
               return {
                 host: u.hostname,
-                port: Number(u.port || (u.protocol === 'wss:' ? 443 : 80)),
+                port: port,
                 path: u.pathname || '/mqtt',
-                useSSL: u.protocol === 'wss:',
+                useSSL: protocol === 'wss:',
               };
-            } catch {}
+            } catch (err) {}
           }
 
           if (v.indexOf('serbia70.com') !== -1) {
@@ -731,20 +745,20 @@ const enableReservation = (billingPlanType === 'subscription' || billingPlanType
         }
 
         function shouldReloadByPayload(payload) {
-          const evt = String((payload && (payload.event || payload.type)) || '').toLowerCase();
-          const hotEvents = new Set([
-            'new_order',
-            'order',
-            'status_update',
-            'table_checkout',
-            'table_status_sync',
-            'remarks_update',
-          ]);
-          return hotEvents.has(evt);
+          var evt = String((payload && (payload.event || payload.type)) || '').toLowerCase();
+          var hotEvents = {
+            new_order: true,
+            order: true,
+            status_update: true,
+            table_checkout: true,
+            table_status_sync: true,
+            remarks_update: true,
+          };
+          return !!hotEvents[evt];
         }
 
         function safeReload() {
-          const suppressUntil = Number(window.__suppressMqttReloadUntil || 0);
+          var suppressUntil = Number(window.__suppressMqttReloadUntil || 0);
           if (suppressUntil > Date.now()) {
             return;
           }
@@ -775,33 +789,36 @@ const enableReservation = (billingPlanType === 'subscription' || billingPlanType
             stream = new EventSource('/api/stream/' + encodeURIComponent(String(slug || '')));
             stream.addEventListener('update', function (ev) {
               try {
-                const payload = JSON.parse((ev && ev.data) || '{}');
+                var payload = JSON.parse((ev && ev.data) || '{}');
                 handleRealtimePayload(payload);
-              } catch {}
+              } catch (err) {}
             });
 
-            stream.onerror = async function () {
+            stream.onerror = function () {
               try {
-                if (stream) stream.close();
-              } catch {}
+                if (stream) {
+                  stream.close();
+                }
+              } catch (err) {}
               stream = null;
 
               if (streamRetryStopped) {
                 return;
               }
 
-              const retryable = await probeStreamAvailability();
-              if (!retryable) {
-                streamRetryStopped = true;
-                return;
-              }
+              probeStreamAvailability().then(function (retryable) {
+                if (!retryable) {
+                  streamRetryStopped = true;
+                  return;
+                }
 
-              if (streamRetryTimer) {
-                clearTimeout(streamRetryTimer);
-              }
-              streamRetryTimer = setTimeout(initStream, 2000);
+                if (streamRetryTimer) {
+                  clearTimeout(streamRetryTimer);
+                }
+                streamRetryTimer = setTimeout(initStream, 2000);
+              });
             };
-          } catch {
+          } catch (err) {
             if (streamRetryTimer) {
               clearTimeout(streamRetryTimer);
             }
@@ -815,9 +832,9 @@ const enableReservation = (billingPlanType === 'subscription' || billingPlanType
             return;
           }
 
-          const broker = parseBroker(mqttBroker);
-          const clientId = 'shop_' + String(slug || 'shop') + '_' + Math.random().toString(16).slice(2, 8);
-          const client = new Paho.MQTT.Client(
+          var broker = parseBroker(mqttBroker);
+          var clientId = 'shop_' + String(slug || 'shop') + '_' + Math.random().toString(16).slice(2, 8);
+          var client = new Paho.MQTT.Client(
             broker.host,
             Number(broker.port),
             broker.path || '/mqtt',
@@ -830,12 +847,12 @@ const enableReservation = (billingPlanType === 'subscription' || billingPlanType
 
           client.onMessageArrived = function (message) {
             try {
-              const payload = JSON.parse(message.payloadString || '{}');
+              var payload = JSON.parse(message.payloadString || '{}');
               handleRealtimePayload(payload);
-            } catch {}
+            } catch (err) {}
           };
 
-          const options = {
+          var options = {
             useSSL: !!broker.useSSL,
             timeout: 5,
             keepAliveInterval: 60,

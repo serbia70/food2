@@ -81,6 +81,8 @@ const safeSlug = String(slug || '');
         .then(function (res) {
           return res.json().then(function (data) {
             return { res: res, data: data };
+          }).catch(function () {
+            return { res: res, data: {} };
           });
         })
         .then(function (result) {

@@ -49,7 +49,8 @@
     const API_BASE = API_BASE_URL;
 
     function setNodeText(node, value) {
-      if (node) node.textContent = String(value ?? '');
+      const safeValue = value === undefined || value === null ? '' : value;
+      if (node) node.textContent = String(safeValue);
     }
 
     function clearNode(node) {
@@ -278,8 +279,11 @@
 
       const title = app.querySelector('.header h1');
       const meta = app.querySelector('.header p');
-      setNodeText(title, shopInfo?.name || '');
-      setNodeText(meta, `${shopInfo?.address || ''} ${shopInfo?.phone || ''}`.trim());
+      const shopName = shopInfo && shopInfo.name ? shopInfo.name : '';
+      const shopAddress = shopInfo && shopInfo.address ? shopInfo.address : '';
+      const shopPhone = shopInfo && shopInfo.phone ? shopInfo.phone : '';
+      setNodeText(title, shopName);
+      setNodeText(meta, `${shopAddress} ${shopPhone}`.trim());
       
       renderCategories();
       renderProducts();
@@ -379,8 +383,9 @@
     function getTotal() {
       let total = 0;
       categories.forEach(cat => {
-        cat.products?.forEach(p => {
-          if (cart[p.id]) total += p.price * cart[p.id];
+        if (!cat || !Array.isArray(cat.products)) return;
+        cat.products.forEach(p => {
+          if (p && cart[p.id]) total += p.price * cart[p.id];
         });
       });
       return total;
@@ -398,8 +403,9 @@
       
       const items = [];
       categories.forEach(cat => {
-        cat.products?.forEach(p => {
-          if (cart[p.id]) {
+        if (!cat || !Array.isArray(cat.products)) return;
+        cat.products.forEach(p => {
+          if (p && cart[p.id]) {
             items.push(`${p.name} x${cart[p.id]}`);
           }
         });
@@ -421,8 +427,9 @@
       
       const items = [];
       categories.forEach(cat => {
-        cat.products?.forEach(p => {
-          if (cart[p.id]) {
+        if (!cat || !Array.isArray(cat.products)) return;
+        cat.products.forEach(p => {
+          if (p && cart[p.id]) {
             items.push({
               product_id: p.id,
               name: p.name,

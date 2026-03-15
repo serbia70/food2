@@ -271,10 +271,12 @@ const defaults = {
       summaryWrap.hidden = false;
       for (const row of params) {
         const dt = document.createElement('dt');
-        dt.textContent = String(row?.label ?? '');
+        const labelValue = row && row.label !== undefined && row.label !== null ? row.label : '';
+        dt.textContent = String(labelValue);
 
         const dd = document.createElement('dd');
-        dd.textContent = String(row?.value ?? '');
+        const valueValue = row && row.value !== undefined && row.value !== null ? row.value : '';
+        dd.textContent = String(valueValue);
 
         paramsDl.appendChild(dt);
         paramsDl.appendChild(dd);

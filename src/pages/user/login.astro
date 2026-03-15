@@ -79,7 +79,8 @@ import Layout from '../../layouts/Layout.astro';
 
 <script is:inline>
   function mapUserAuthErrorMessage(data) {
-    const raw = String(data?.error || '').trim().toLowerCase();
+    const rawError = data && data.error ? data.error : '';
+    const raw = String(rawError || '').trim().toLowerCase();
     if (raw === 'invalid credentials') return '账号或密码错误';
     if (raw) return String(data.error);
     return '操作失败，请稍后重试';
@@ -109,7 +110,7 @@ import Layout from '../../layouts/Layout.astro';
   }
 
   function persistUserAuth(result, fallback) {
-    const user = result?.user || {};
+    const user = result && result.user ? result.user : {};
     const current = readStoredUser();
     const resolvedLoginAccount = String(user.login_account || fallback.loginAccount || fallback.account || '').trim();
     const resolvedPhone = String(user.phone || (fallback.accountType === 'phone' ? fallback.account : '') || fallback.loginAccount || '').trim();
@@ -128,7 +129,8 @@ import Layout from '../../layouts/Layout.astro';
     };
 
     saveStoredUser(nextUser);
-    const sessionToken = String(result?.sessionToken || resolvedLoginAccount || resolvedPhone).trim();
+    const sessionTokenValue = result && result.sessionToken ? result.sessionToken : '';
+    const sessionToken = String(sessionTokenValue || resolvedLoginAccount || resolvedPhone).trim();
     if (sessionToken) localStorage.setItem('user_session', sessionToken);
     return { user: nextUser, sessionToken };
   }
@@ -306,16 +308,17 @@ import Layout from '../../layouts/Layout.astro';
       });
 
       const data = await res.json();
-      if (!data?.success) {
-        throw new Error(data?.error || 'Google 登录失败');
+      if (!(data && data.success)) {
+        throw new Error((data && data.error) || 'Google 登录失败');
       }
 
+      const authUser = data && data.user ? data.user : {};
       window.__userAuthBrowser.persistGoogleUserAuth({
-        id: data.user?.google_id || data.user?.id || response.credential,
-        name: data.user?.name || '',
-        email: data.user?.email || '',
-        avatar: data.user?.avatar || '',
-        phone: data.user?.phone || '',
+        id: authUser.google_id || authUser.id || response.credential,
+        name: authUser.name || '',
+        email: authUser.email || '',
+        avatar: authUser.avatar || '',
+        phone: authUser.phone || '',
       });
 
       window.location.href = '/user';

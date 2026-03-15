@@ -1,7 +1,8 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 
-if (Astro.cookies.get('master_token')?.value) {
+const masterTokenCookie = Astro.cookies.get('master_token');
+if (masterTokenCookie && masterTokenCookie.value) {
   return Astro.redirect('/master', 302);
 }
 ---
@@ -55,7 +56,7 @@ if (Astro.cookies.get('master_token')?.value) {
         });
         const data = await res.json();
 
-        if (!res.ok || !data?.success || !data?.token) {
+        if (!res.ok || !(data && data.success) || !(data && data.token)) {
           errorMsg.textContent = '密码错误';
           btn.disabled = false;
           btn.textContent = '进入系统';

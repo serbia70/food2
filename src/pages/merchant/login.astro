@@ -37,7 +37,7 @@ const apiBase = API_BASE_URL;
         body: JSON.stringify({ slug, password }),
       });
       const data = await res.json();
-      if (!res.ok || !data?.token) return alert(data?.error || '登录失败');
+      if (!res.ok || !(data && data.token)) return alert((data && data.error) || '登录失败');
 
       localStorage.setItem('token', data.token);
       localStorage.setItem('slug', slug);

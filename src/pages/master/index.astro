@@ -27,7 +27,8 @@ import { buildMasterShopView } from '../../lib/master-shop-view';
 
 export const prerender = false;
 
-if (!Astro.cookies.get('master_token')?.value) {
+const masterTokenCookie = Astro.cookies.get('master_token');
+if (!(masterTokenCookie && masterTokenCookie.value)) {
   return Astro.redirect('/master/login', 302);
 }
 
@@ -70,8 +71,10 @@ try {
   });
   if (res.ok) {
     const data = await res.json().catch(() => ({}));
-    shops = Array.isArray(data?.shops) ? data.shops : [];
-    masterSettings = data?.settings && typeof data.settings === 'object' ? data.settings : {};
+    const dataShops = data && data.shops;
+    shops = Array.isArray(dataShops) ? dataShops : [];
+    const dataSettings = data && data.settings;
+    masterSettings = dataSettings && typeof dataSettings === 'object' ? dataSettings : {};
   } else {
     loadError = `加载失败 (${res.status})`;
   }
@@ -79,7 +82,8 @@ try {
   loadError = error instanceof Error ? error.message : '加载失败';
 }
 
-const hasMasterCookie = Boolean(Astro.cookies.get('master_token')?.value);
+const masterCookie = Astro.cookies.get('master_token');
+const hasMasterCookie = Boolean(masterCookie && masterCookie.value);
 const isUnauthorized = loadError === '加载失败 (401)';
 const activeTab = normalizeMasterTab(Astro.url.searchParams.get('tab'));
 const canLoadProtectedMasterActions = hasMasterCookie && !isUnauthorized;
@@ -312,7 +316,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
     </style>
     <script define:vars={{ shopViewsData, canLoadProtectedMasterActions }} is:inline>
       function isUnauthorizedResponse(res, data) {
-        return res?.status === 401 || data?.error === 'unauthorized';
+        return (res && res.status === 401) || (data && data.error === 'unauthorized');
       }
 
       async function handleMasterUnauthorized() {
@@ -324,7 +328,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
 
       async function handleCreateShop(form) {
         const feedback = document.getElementById('master-create-shop-feedback');
-        const submitBtn = form?.querySelector('button[type="submit"]');
+        const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
         if (!(feedback instanceof HTMLElement) || !(submitBtn instanceof HTMLButtonElement)) return;
 
         const formData = new FormData(form);
@@ -348,8 +352,8 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             await handleMasterUnauthorized();
             return;
           }
-          if (!res.ok || data?.success === false) {
-            feedback.textContent = data?.error || '创建失败，请检查字段或后端能力';
+          if (!res.ok || (data && data.success === false)) {
+            feedback.textContent = (data && data.error) || '创建失败，请检查字段或后端能力';
             submitBtn.disabled = false;
             return;
           }
@@ -369,7 +373,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
 
       async function handlePricingSettings(form) {
         const feedback = document.getElementById('master-pricing-settings-feedback');
-        const submitBtn = form?.querySelector('button[type="submit"]');
+        const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
         if (!(feedback instanceof HTMLElement) || !(submitBtn instanceof HTMLButtonElement)) return;
 
         const formData = new FormData(form);
@@ -396,7 +400,12 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             await handleMasterUnauthorized();
             return;
           }
-          feedback.textContent = !res.ok || data?.success === false ? data?.error || '保存失败，请检查后端支持范围' : '套餐与提成设置已保存';
+          const pricingError = data && data.error ? data.error : null;
+          if (!res.ok || (data && data.success === false)) {
+            feedback.textContent = pricingError || '保存失败，请检查后端支持范围';
+          } else {
+            feedback.textContent = '套餐与提成设置已保存';
+          }
         } catch {
           feedback.textContent = '保存失败，请稍后重试';
         }
@@ -411,7 +420,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
 
       async function submitSettingsAction(form, config) {
         const feedback = document.getElementById(config.feedbackId);
-        const submitBtn = form?.querySelector('button[type="submit"]');
+        const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
         if (!(feedback instanceof HTMLElement) || !(submitBtn instanceof HTMLButtonElement)) return;
 
         feedback.textContent = config.loadingText || '保存中...';
@@ -429,8 +438,9 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             await handleMasterUnauthorized();
             return;
           }
-          if (!res.ok || data?.success === false) {
-            feedback.textContent = data?.error || config.errorText || '保存失败，请检查后端支持范围';
+          if (!res.ok || (data && data.success === false)) {
+            const configError = data && data.error ? data.error : null;
+            feedback.textContent = configError || config.errorText || '保存失败，请检查后端支持范围';
             submitBtn.disabled = false;
             return;
           }
@@ -477,7 +487,12 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             body: JSON.stringify(categories),
           });
           const data = await res.json().catch(() => ({}));
-          setFeedback(feedbackId, !res.ok || data?.success === false ? data?.error || '分类配置保存失败' : '分类配置已保存');
+          if (!res.ok || (data && data.success === false)) {
+            const categoryError = data && data.error ? data.error : null;
+            setFeedback(feedbackId, categoryError || '分类配置保存失败');
+          } else {
+            setFeedback(feedbackId, '分类配置已保存');
+          }
         } catch (error) {
           setFeedback(feedbackId, error instanceof Error ? `分类 JSON 无效：${error.message}` : '分类 JSON 无效');
         }
@@ -603,7 +618,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
         input.type = 'file';
         input.accept = 'image/*';
         input.onchange = async () => {
-          const file = input.files?.[0];
+          const file = input.files && input.files[0] ? input.files[0] : null;
           if (!file) return;
 
           const formData = new FormData();
@@ -626,8 +641,11 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
               await handleMasterUnauthorized();
               return;
             }
-            if (!res.ok || !data?.success || !data?.url) {
-              alert(data?.error || '上传失败');
+            const uploadSuccess = data && data.success;
+            const uploadUrl = data && data.url ? data.url : '';
+            if (!res.ok || !uploadSuccess || !uploadUrl) {
+              const uploadError = data && data.error ? data.error : null;
+              alert(uploadError || '上传失败');
               return;
             }
             if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
@@ -647,9 +665,10 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
       };
 
       function syncBackupMode(source) {
-        const root = source?.closest('form') || document;
+        const root = source && typeof source.closest === 'function' ? source.closest('form') : null;
+        const scope = root || document;
         const target = source instanceof HTMLSelectElement ? source.value : '';
-        root.querySelectorAll('[data-backup-mode]').forEach((section) => {
+        scope.querySelectorAll('[data-backup-mode]').forEach((section) => {
           if (!(section instanceof HTMLElement)) return;
           const mode = section.getAttribute('data-backup-mode');
           if (mode === 's3') {
@@ -774,8 +793,9 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             await handleMasterUnauthorized();
             return;
           }
-          if (!res.ok || data?.success === false) {
-            setStatusFeedback('master-code-backup-feedback', data?.error || '代码备份列表加载失败', 'error');
+          if (!res.ok || (data && data.success === false)) {
+            const listError = data && data.error ? data.error : null;
+            setStatusFeedback('master-code-backup-feedback', listError || '代码备份列表加载失败', 'error');
             if (list instanceof HTMLElement) {
               const fail = document.createElement('div');
               fail.className = 'backup-empty';
@@ -785,7 +805,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             return;
           }
 
-          const backups = normalizeCodeBackups(data?.backups);
+          const backups = normalizeCodeBackups(data && data.backups ? data.backups : null);
           renderMasterCodeBackupList(backups);
           setStatusFeedback(
             'master-code-backup-feedback',
@@ -804,7 +824,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
       }
 
       window.createMasterCodeBackup = async function (form) {
-        const submitBtn = form?.querySelector('button[type="submit"]');
+        const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
         if (!(submitBtn instanceof HTMLButtonElement)) return false;
         const formData = new FormData(form);
         const backupName = String(formData.get('backupName') || '').trim();
@@ -829,12 +849,14 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             await handleMasterUnauthorized();
             return false;
           }
-          if (!res.ok || data?.success === false) {
-            setStatusFeedback('master-code-backup-feedback', data?.error || '代码备份创建失败', 'error');
+          if (!res.ok || (data && data.success === false)) {
+            const createError = data && data.error ? data.error : null;
+            setStatusFeedback('master-code-backup-feedback', createError || '代码备份创建失败', 'error');
             return false;
           }
           form.reset();
-          setStatusFeedback('master-code-backup-feedback', data?.message || '代码备份创建成功', 'success');
+          const createMessage = data && data.message ? data.message : null;
+          setStatusFeedback('master-code-backup-feedback', createMessage || '代码备份创建成功', 'success');
           await loadMasterCodeBackups();
         } catch {
           setStatusFeedback('master-code-backup-feedback', '网络错误，未能创建代码备份', 'error');
@@ -863,11 +885,13 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             await handleMasterUnauthorized();
             return;
           }
-          if (!res.ok || data?.success === false) {
-            setStatusFeedback('master-code-backup-feedback', data?.error || '代码备份删除失败', 'error');
+          if (!res.ok || (data && data.success === false)) {
+            const deleteError = data && data.error ? data.error : null;
+            setStatusFeedback('master-code-backup-feedback', deleteError || '代码备份删除失败', 'error');
             return;
           }
-          setStatusFeedback('master-code-backup-feedback', data?.message || '代码备份已删除', 'success');
+          const deleteMessage = data && data.message ? data.message : null;
+          setStatusFeedback('master-code-backup-feedback', deleteMessage || '代码备份已删除', 'success');
           await loadMasterCodeBackups();
         } catch {
           setStatusFeedback('master-code-backup-feedback', '网络错误，未能删除代码备份', 'error');
@@ -892,11 +916,13 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             await handleMasterUnauthorized();
             return;
           }
-          if (!res.ok || data?.success === false) {
-            setStatusFeedback('master-data-backup-feedback', data?.error || '数据备份触发失败', 'error');
+          if (!res.ok || (data && data.success === false)) {
+            const backupError = data && data.error ? data.error : null;
+            setStatusFeedback('master-data-backup-feedback', backupError || '数据备份触发失败', 'error');
             return;
           }
-          setStatusFeedback('master-data-backup-feedback', data?.message || '数据备份任务已提交', 'success');
+          const backupMessage = data && data.message ? data.message : null;
+          setStatusFeedback('master-data-backup-feedback', backupMessage || '数据备份任务已提交', 'success');
         } catch {
           setStatusFeedback('master-data-backup-feedback', '网络错误，未能触发数据备份', 'error');
         } finally {
@@ -908,7 +934,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
       window.triggerMasterRestore = async function (button) {
         const fileInput = document.getElementById('master-restore-file');
         if (!(button instanceof HTMLButtonElement) || !(fileInput instanceof HTMLInputElement)) return;
-        const file = fileInput.files?.[0];
+        const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
         if (!file || !validateRestoreFilename(file.name)) {
           setStatusFeedback('master-restore-feedback', '请选择有效的 zip 还原文件', 'error');
           return;
@@ -934,11 +960,13 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             await handleMasterUnauthorized();
             return;
           }
-          if (!res.ok || data?.success === false) {
-            setStatusFeedback('master-restore-feedback', data?.error || '系统还原失败', 'error');
+          if (!res.ok || (data && data.success === false)) {
+            const restoreError = data && data.error ? data.error : null;
+            setStatusFeedback('master-restore-feedback', restoreError || '系统还原失败', 'error');
             return;
           }
-          setStatusFeedback('master-restore-feedback', data?.message || '系统还原成功，页面即将刷新', 'success');
+          const restoreMessage = data && data.message ? data.message : null;
+          setStatusFeedback('master-restore-feedback', restoreMessage || '系统还原成功，页面即将刷新', 'success');
           window.location.reload();
         } catch {
           setStatusFeedback('master-restore-feedback', '网络错误，未能执行系统还原', 'error');
@@ -950,7 +978,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
 
       async function handleSecuritySettings(form) {
         const feedback = document.getElementById('master-security-feedback');
-        const submitBtn = form?.querySelector('button[type="submit"]');
+        const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
         if (!(feedback instanceof HTMLElement) || !(submitBtn instanceof HTMLButtonElement)) return;
 
         const formData = new FormData(form);
@@ -980,8 +1008,9 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             await handleMasterUnauthorized();
             return;
           }
-          if (!res.ok || data?.success === false) {
-            feedback.textContent = data?.error || '保存失败，请检查后端支持范围';
+          if (!res.ok || (data && data.success === false)) {
+            const securityError = data && data.error ? data.error : null;
+            feedback.textContent = securityError || '保存失败，请检查后端支持范围';
             submitBtn.disabled = false;
             return;
           }
@@ -1099,14 +1128,17 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
               await handleMasterUnauthorized();
               return;
             }
-            if (!res.ok || !data?.success || !data?.slug) {
-              alert(data?.error || '进入店铺后台失败');
+            const impersonateSuccess = data && data.success;
+            const impersonateSlug = data && data.slug ? data.slug : '';
+            if (!res.ok || !impersonateSuccess || !impersonateSlug) {
+              const impersonateError = data && data.error ? data.error : null;
+              alert(impersonateError || '进入店铺后台失败');
               return;
             }
             try {
               localStorage.setItem('master_impersonated', '1');
             } catch {}
-            window.location.href = `/admin/${data.slug}`;
+            window.location.href = `/admin/${impersonateSlug}`;
           } catch (error) {
             alert('进入店铺后台失败');
           }
@@ -1146,8 +1178,9 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
               await handleMasterUnauthorized();
               throw new Error('需要重新登录');
             }
-            if (!res.ok || data?.success === false) {
-              throw new Error(data?.error || '删除店铺失败');
+            if (!res.ok || (data && data.success === false)) {
+              const deleteError = data && data.error ? data.error : null;
+              throw new Error(deleteError || '删除店铺失败');
             }
 
             alert('店铺已删除，页面将刷新');
@@ -1203,7 +1236,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
 
       async function handleShopEdit(form) {
         const feedback = document.getElementById('master-shop-edit-feedback');
-        const submitBtn = form?.querySelector('button[type="submit"]');
+        const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
         if (!(feedback instanceof HTMLElement) || !(submitBtn instanceof HTMLButtonElement)) return;
 
         const formData = new FormData(form);
@@ -1235,8 +1268,9 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             await handleMasterUnauthorized();
             return;
           }
-          if (!res.ok || data?.success === false) {
-            feedback.textContent = data?.error || '保存失败，请检查后端支持范围';
+          if (!res.ok || (data && data.success === false)) {
+            const editError = data && data.error ? data.error : null;
+            feedback.textContent = editError || '保存失败，请检查后端支持范围';
             submitBtn.disabled = false;
             return;
           }
@@ -1259,7 +1293,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
 
       async function handleShopTopup(form) {
         const feedback = document.getElementById('master-shop-topup-feedback');
-        const submitBtn = form?.querySelector('button[type="submit"]');
+        const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
         if (!(feedback instanceof HTMLElement) || !(submitBtn instanceof HTMLButtonElement)) return;
 
         const formData = new FormData(form);
@@ -1283,8 +1317,9 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             await handleMasterUnauthorized();
             return;
           }
-          if (!res.ok || data?.success === false) {
-            feedback.textContent = data?.error || '充值失败，请检查后端支持范围';
+          if (!res.ok || (data && data.success === false)) {
+            const topupError = data && data.error ? data.error : null;
+            feedback.textContent = topupError || '充值失败，请检查后端支持范围';
             submitBtn.disabled = false;
             return;
           }
@@ -1373,14 +1408,19 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
           const res = await fetch(`/api/master/shop-detail?id=${encodeURIComponent(String(shopId))}`);
           const data = await res.json();
           if (!res.ok) {
-            setDetailMessage(data?.error || '加载失败');
+            const detailError = data && data.error ? data.error : null;
+            setDetailMessage(detailError || '加载失败');
             return;
           }
 
-          const shop = data?.shop || {};
-          const summary = data?.summary || {};
-          const billingLedger = Array.isArray(data?.billingLedger) ? data.billingLedger : [];
-		const commissionRecords = Array.isArray(data?.commissionRecords) ? data.commissionRecords : [];
+          const shop = data && data.shop ? data.shop : {};
+          const summary = data && data.summary ? data.summary : {};
+          const billingLedger = Array.isArray(data && data.billingLedger ? data.billingLedger : null)
+            ? data.billingLedger
+            : [];
+          const commissionRecords = Array.isArray(data && data.commissionRecords ? data.commissionRecords : null)
+            ? data.commissionRecords
+            : [];
 		const fmt = (v) => Number(v || 0).toLocaleString('zh-CN');
 		const commissionRule = formatCommissionRule(shop.commission_type, shop.commission_value);
 		if (impersonateBtn) {

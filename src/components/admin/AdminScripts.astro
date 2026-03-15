@@ -10,7 +10,7 @@ const { shopId, shopSlug, tableConfig, settings, brokerIp, shop } = Astro.props;
     tableConfig,
     currentSettings: settings,
     brokerIp,
-    mqttSecret: shop ? shop.mqtt_secret : 'default',
+    mqttSecret: shop && shop.mqtt_secret ? shop.mqtt_secret : 'default',
     shop,
   };
 
@@ -35,7 +35,8 @@ const { shopId, shopSlug, tableConfig, settings, brokerIp, shop } = Astro.props;
         body: JSON.stringify({ menu_layout: layout })
       });
       if (res.ok) {
-        const toast = (window as any).__adminHandlers?.showToast;
+        const adminHandlers = (window as any).__adminHandlers;
+        const toast = adminHandlers && adminHandlers.showToast;
         if (typeof toast === 'function') toast('菜单布局已保存');
       } else {
         alert('保存布局失败');

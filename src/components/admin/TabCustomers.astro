@@ -114,7 +114,8 @@ const { shopSlug } = Astro.props;
 
   function textCell(text, styles = {}) {
     const td = document.createElement('td');
-    td.textContent = String(text ?? '');
+    const safeText = text === undefined || text === null ? '' : text;
+    td.textContent = String(safeText);
     setStyles(td, styles);
     return td;
   }

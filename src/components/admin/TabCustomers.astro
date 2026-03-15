@@ -12,13 +12,13 @@ const { shopSlug } = Astro.props;
       <h3 style="margin: 0; color: #1d4ed8;">👥 客户管理</h3>
       <div style="display: flex; gap: 10px;">
         <button
-          onclick="openAddCustomerModal()"
+          data-admin-action="open-add-customer"
           style="background: #7c3aed; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-weight: 600;"
         >
           + 添加客户
         </button>
         <button
-          onclick="exportCustomers()"
+          data-admin-action="export-customers"
           style="background: #059669; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-weight: 600;"
         >
           📥 导出CSV
@@ -27,11 +27,11 @@ const { shopSlug } = Astro.props;
     </div>
 
     <div style="margin-bottom: 20px;">
-      <input 
-        type="text" 
-        id="customer-search" 
-        placeholder="搜索手机号..." 
-        oninput="filterCustomers(this.value)"
+      <input
+        type="text"
+        id="customer-search"
+        placeholder="搜索手机号..."
+        data-admin-action="filter-customers"
         style="padding: 10px 15px; border: 1px solid #d1d5db; border-radius: 8px; width: 300px;"
       />
     </div>
@@ -49,7 +49,7 @@ const { shopSlug } = Astro.props;
         <h4 style="margin: 0 0 10px; color: #166534;">赠送积分</h4>
         <input type="text" id="gift-points-phone" placeholder="手机号" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box;" />
         <input type="number" id="gift-points-amount" placeholder="积分数量" min="1" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box;" />
-        <button onclick="giftPoints()" style="width: 100%; padding: 8px; background: #16a34a; color: #fff; border: none; border-radius: 6px; cursor: pointer;">确认赠送</button>
+        <button data-admin-action="gift-points" style="width: 100%; padding: 8px; background: #16a34a; color: #fff; border: none; border-radius: 6px; cursor: pointer;">确认赠送</button>
       </div>
 
       <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px;">
@@ -61,7 +61,7 @@ const { shopSlug } = Astro.props;
           <option value="85">85折</option>
           <option value="80">8折</option>
         </select>
-        <button onclick="setCustomerVIP()" style="width: 100%; padding: 8px; background: #7c3aed; color: #fff; border: none; border-radius: 6px; cursor: pointer;">确认为VIP</button>
+        <button data-admin-action="set-customer-vip" style="width: 100%; padding: 8px; background: #7c3aed; color: #fff; border: none; border-radius: 6px; cursor: pointer;">确认为VIP</button>
       </div>
     </div>
   </div>
@@ -96,7 +96,7 @@ const { shopSlug } = Astro.props;
         </label>
       </div>
       <div style="display: flex; gap: 10px; justify-content: flex-end;">
-        <button type="button" onclick="closeAddCustomerModal()" style="padding: 10px 20px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer;">取消</button>
+        <button type="button" data-admin-action="close-add-customer" style="padding: 10px 20px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer;">取消</button>
         <button type="submit" style="padding: 10px 20px; border: none; border-radius: 6px; background: #7c3aed; color: #fff; cursor: pointer; font-weight: 600;">添加</button>
       </div>
     </form>
@@ -120,11 +120,16 @@ const { shopSlug } = Astro.props;
     return td;
   }
 
+  function clearChildren(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
+  }
+
   function renderEmptyState(container, text, styles = {}) {
     const div = document.createElement('div');
     div.textContent = text;
     setStyles(div, styles);
-    container.replaceChildren(div);
+    clearChildren(container);
+    container.appendChild(div);
   }
 
   async function loadCustomers() {
@@ -229,7 +234,8 @@ const { shopSlug } = Astro.props;
     });
 
     table.append(thead, tbody);
-    container.replaceChildren(table);
+    clearChildren(container);
+    container.appendChild(table);
   }
 
   window.filterCustomers = function(query) {
@@ -389,7 +395,8 @@ const { shopSlug } = Astro.props;
       item.append(title, phone);
       return item;
     });
-    container.replaceChildren(...nodes);
+    clearChildren(container);
+    nodes.forEach((n) => container.appendChild(n));
   }
 
   loadCustomers();

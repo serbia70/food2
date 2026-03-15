@@ -27,7 +27,7 @@
   - `POST /api/master/backup`
   - `POST /api/master/upload`
 - Astro 已具备 proxy/基础设施：
-  - `meituanAstro/src/pages/api/master/*` 已覆盖：`init/login/logout/manage/backup/restore/upload/...`
+  - `foos2Go/src/pages/api/master/*` 已覆盖：`init/login/logout/manage/backup/restore/upload/...`
   - `/master/login` 页面存在并可通过 `/api/master/login` 设置 `master_token` HttpOnly cookie
   - `/master` 页面存在，且已有多种 `components/master/*` 组件与 `lib/master-*` view helpers
 
@@ -45,10 +45,10 @@
 - `/api/master/*`：同域代理层（Cloudflare 环境下转发至 Go 后端；后端 base URL 通过环境变量配置，禁止硬编码）
 
 ### 前端边界划分（建议）
-1. `meituanAstro/src/pages/api/master/*`：只做鉴权解析（cookie → Authorization）+ 转发，不做业务逻辑。
-2. `meituanAstro/src/lib/master-*`：纯函数与 view model（格式化、校验、映射），可单测。
-3. `meituanAstro/src/components/master/*`：tab 组件、card/panel、弹窗/表单组件。
-4. （新增）`meituanAstro/src/lib/master-client.ts`：对 `/api/master/*` 的调用封装（typed manage action），作为页面唯一数据访问层。
+1. `foos2Go/src/pages/api/master/*`：只做鉴权解析（cookie → Authorization）+ 转发，不做业务逻辑。
+2. `foos2Go/src/lib/master-*`：纯函数与 view model（格式化、校验、映射），可单测。
+3. `foos2Go/src/components/master/*`：tab 组件、card/panel、弹窗/表单组件。
+4. （新增）`foos2Go/src/lib/master-client.ts`：对 `/api/master/*` 的调用封装（typed manage action），作为页面唯一数据访问层。
 
 ### 关键兼容点
 - `manage` 仍为多 action 入口：保持 action 名称、payload 与返回结构兼容。
@@ -121,7 +121,7 @@
 | action / endpoint | 类型 | 高危 | 旧页入口（按钮/区域） | 旧页证据（行号/片段） | 最小 payload 字段 | 预期结果/回显 | 已迁移 | 已手工验收 |
 |---|---|---|---|---|---|---|---|---|
 | POST /api/master/login | endpoint | 否 | 登录弹窗（“进入系统”） | `meituanGo/static/master.html:573-574,1750-1760` | `username`,`password` | 返回 token（旧页写入 `localStorage.master_token`；新实现改为 HttpOnly cookie） | ☐ | ☐ |
-| POST /api/master/logout | endpoint | 否 | 顶部“退出”按钮 | 旧页**未调用**该接口：仅 `localStorage.removeItem("master_token")`（`meituanGo/static/master.html:598,1778-1782`）；Astro 已有 `/api/master/logout`：`meituanAstro/src/pages/api/master/logout.ts:5-11` | - | 清理 `master_token` cookie，返回 `{ success: true }` | ☐ | ☐ |
+| POST /api/master/logout | endpoint | 否 | 顶部“退出”按钮 | 旧页**未调用**该接口：仅 `localStorage.removeItem("master_token")`（`meituanGo/static/master.html:598,1778-1782`）；Astro 已有 `/api/master/logout`：`foos2Go/src/pages/api/master/logout.ts:5-11` | - | 清理 `master_token` cookie，返回 `{ success: true }` | ☐ | ☐ |
 | GET /api/master/init | endpoint | 否 | 首屏加载（本地有 token 即 init） | `meituanGo/static/master.html:1742-1748,1784-1807` | - | 返回 `shops/settings` 等（旧页用于渲染店铺与设置） | ☐ | ☐ |
 | POST /api/master/manage (action=update_settings) | action | 否 | “系统设置”Tab → “💾 保存所有设置” | UI：`meituanGo/static/master.html:789-790,1461-1463`；请求：`meituanGo/static/master.html:2317-2376` | `mqttBroker`,`footerText`,`footerPhone`,`footerCopyright`,`subscriptionDeliveryCommissionType`,`subscriptionDeliveryCommissionValue`,`businessDeliveryCommissionType`,`businessDeliveryCommissionValue`,`subscriptionFeeRsd`,`businessFeeRsd`,`billingCurrency`,`graceDays`,`retentionDineInDays`,`retentionDeliveryDays`,`statsRetentionMode`,`wechatId`,`wechat_contact_qr`,`alipay_payment_qr`,`wechat_payment_qr`,`exchange_rate`,`imageStorage`,`r2PublicDomain`,`uploadStrictR2`,`backupTime`,`backupRetention`,`backupTarget`,`backupHost`,`backupUser`,`backupPass`,`backupPath`,`backupEndpoint`,`backupBucket` | 保存成功并提示（旧页 `alert("✅ 设置已保存")`） | ☐ | ☐ |
 | POST /api/master/manage (action=update_categories) | action | 否 | “系统设置”Tab → “保存分类配置” | UI：`meituanGo/static/master.html:791-823`；请求：`meituanGo/static/master.html:2379-2387` | `payload`（JSON 数组；旧页 `JSON.parse(textarea)` 后直接透传） | 保存成功并提示（旧页 `alert("✅ 分类已更新")`） | ☐ | ☐ |

@@ -27,6 +27,24 @@ export function bindAdminClickDelegation(options: {
 }) {
   const { handleEditOrder, getCurrentOrderId } = options;
 
+  document.addEventListener('input', (e: any) => {
+    const el = e.target.closest('[data-admin-action]');
+    if (!el) return;
+    const action = el.dataset.adminAction;
+    if (action === 'filter-customers') {
+      const value = (el as HTMLInputElement).value;
+      (window as any).filterCustomers?.(value);
+    }
+  });
+
+  document.addEventListener('change', (e: any) => {
+    const el = e.target.closest('[data-admin-action]');
+    if (!el) return;
+    if (el.dataset.adminAction === 'load-reservations') {
+      loadReservations();
+    }
+  });
+
   document.addEventListener('click', async (e: any) => {
     const el = e.target.closest('[data-admin-action]');
     if (!el) return;
@@ -137,6 +155,18 @@ export function bindAdminClickDelegation(options: {
       if (form) form.requestSubmit();
     } else if (action === 'save-order-edit') (window as any).saveOrderEdit?.();
     else if (action === 'close-order-edit-modal') (window as any).closeOrderEditModal?.();
+    else if (action === 'open-add-customer') (window as any).openAddCustomerModal?.();
+    else if (action === 'close-add-customer') (window as any).closeAddCustomerModal?.();
+    else if (action === 'export-customers') (window as any).exportCustomers?.();
+    else if (action === 'gift-points') (window as any).giftPoints?.();
+    else if (action === 'set-customer-vip') (window as any).setCustomerVIP?.();
+    else if (action === 'open-promotion') (window as any).openPromotionModal?.();
+    else if (action === 'close-promotion') (window as any).closePromotionModal?.();
+    else if (action === 'save-points-settings') (window as any).savePointsSettings?.();
+    else if (action === 'confirm-checkin') (window as any).confirmCheckin?.();
+    else if (action === 'close-checkin') (window as any).closeCheckinModal?.();
+    else if (action === 'reservation-filter') (window as any).setReservationDateFilter?.(val || '');
+    else if (action === 'open-chat') (window as any).openChatForPhone?.(el.dataset.phone || '');
     else {
       // Fallback: allow feature modules to register handlers without editing this chain.
       // E.g. data.ts registers "import-data" / "export-data".

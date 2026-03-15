@@ -2,10 +2,10 @@
 
 ## 背景
 该项目为两部分系统：
-- 前端：`meituanAstro/`（Astro + Preact），本地使用 `pnpm run dev`，推送 GitHub 后部署到 Cloudflare。
+- 前端：`foos2Go/`（Astro + Preact），本地使用 `pnpm run dev`，推送 GitHub 后部署到 Cloudflare。
 - 后端：`meituanGo/`（Go + Gin），通过 SFTP 部署到 VPS，对外 API base 为 `https://api.serbia70.com/`。
 
-本设计的范围 **仅覆盖前端止血（meituanAstro）**，并明确边界以避免误删/误改仓库结构。
+本设计的范围 **仅覆盖前端止血（foos2Go）**，并明确边界以避免误删/误改仓库结构。
 
 ## 目标（P0）
 1. **敏感信息止血**：前端仓库与前端部署（Cloudflare）中不再包含任何可用的高权限凭据（master token / MQTT 账号密码）。
@@ -39,7 +39,7 @@
 
 ## 执行范围与边界（避免误删/误提交）
 由于当前 worktree 显示仓库根目录存在大量 tracked 文件的删除/迁移迹象，本轮清理严格限定：
-- **仅在 `meituanAstro/` 内做修改**（以及必要的忽略规则/日志治理）。
+- **仅在 `foos2Go/` 内做修改**（以及必要的忽略规则/日志治理）。
 - “删除无效代码”只删除：
   1) 明确日志/临时产物；
   2) 由构建可再生成且对运行不必要的文件；
@@ -47,7 +47,7 @@
 - 仓库结构层面的“根目录大规模删改”不在本轮自动执行；如需要迁移/收敛仓库结构，另起设计与验证。
 
 ## 现状与差距（实现前）
-- `meituanAstro/wrangler.toml` 目前包含 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 三个键，且应保持空字符串（由 `scripts/security-secrets.test.mjs` 约束）。
+- `foos2Go/wrangler.toml` 目前包含 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 三个键，且应保持空字符串（由 `scripts/security-secrets.test.mjs` 约束）。
 - `scripts/check-no-unsafe-dom-apis.test.mjs` 目前仅检查 `src/scripts/admin/user-chat.ts` 是否包含 `.innerHTML` 与 `insertAdjacentHTML`，覆盖面不足以证明“全 src 归零”。
 - `src/components/UserModal.tsx` 目前存在 `dangerouslySetInnerHTML` 用法，需要在实现中移除。
 - `src/config.ts` 仍读取 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_*`，与“敏感项移出前端”目标存在冲突，需要在实现中改造/降级。
@@ -62,12 +62,12 @@
 - **Cloudflare Pages/Workers 侧**：确保不存在任何可用的 master/MQTT 凭据（不以 `PUBLIC_` 形式提供；如曾配置过视为已泄露，需轮换）。
 
 2) **危险 DOM sink API 归零**：
-- 在 **`meituanAstro/` 范围内** 扫描并替换为安全 DOM 渲染（`createElement`/`textContent`/`replaceChildren`）。
+- 在 **`foos2Go/` 范围内** 扫描并替换为安全 DOM 渲染（`createElement`/`textContent`/`replaceChildren`）。
 
 3) **防回归（明确可执行）**：
 - 将现有检查脚本纳入常规验证，并在本轮实现中补齐覆盖面：
-  - `meituanAstro/scripts/security-secrets.test.mjs`：继续作为“wrangler.toml 空值哨兵”检测。
-  - `meituanAstro/scripts/check-no-unsafe-dom-apis.test.mjs`：本轮将其从“单文件检查”扩展为**递归扫描 `meituanAstro/src/**`**，并对以下 sink 字符串做阻断：
+  - `foos2Go/scripts/security-secrets.test.mjs`：继续作为“wrangler.toml 空值哨兵”检测。
+  - `foos2Go/scripts/check-no-unsafe-dom-apis.test.mjs`：本轮将其从“单文件检查”扩展为**递归扫描 `foos2Go/src/**`**，并对以下 sink 字符串做阻断：
     - `innerHTML`
     - `insertAdjacentHTML`
     - `outerHTML`
@@ -85,20 +85,20 @@
 ## 验收标准（可复现）
 ### A. 秘密/凭据不在前端
 - **仓库侧**：
-  - `meituanAstro/wrangler.toml` 中 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 三个键**必须存在且值必须为 `""`**（作为“空值哨兵”，用于检测仓库未提交真实凭据）。
-  - 业务代码（`meituanAstro/src/**`）不得读取/依赖 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD`（即便它们为空也不应成为运行时依赖）。
+  - `foos2Go/wrangler.toml` 中 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD` 三个键**必须存在且值必须为 `""`**（作为“空值哨兵”，用于检测仓库未提交真实凭据）。
+  - 业务代码（`foos2Go/src/**`）不得读取/依赖 `PUBLIC_MASTER_TOKEN` / `PUBLIC_MQTT_USERNAME` / `PUBLIC_MQTT_PASSWORD`（即便它们为空也不应成为运行时依赖）。
 - Cloudflare Pages 项目环境变量中：不得为上述 `PUBLIC_*` 配置任何真实值（最好直接不配置这三项；如必须存在也只能为空）。
 - 仓库中不存在 `wrangler-dev.log`、`dev-server*.log` 等可能记录环境变量的日志文件。
-- **构建产物侧**：对 `meituanAstro/dist/` 做文件系统级关键字扫描，确保不出现上述敏感 key（以及常见的 MQTT 凭据 key）。本轮以“关键字扫描”作为止血验收。
+- **构建产物侧**：对 `foos2Go/dist/` 做文件系统级关键字扫描，确保不出现上述敏感 key（以及常见的 MQTT 凭据 key）。本轮以“关键字扫描”作为止血验收。
 
 ### B. 危险 DOM sink API 为 0（业务代码）
-- 以“业务代码 = `meituanAstro/src/**`”作为硬边界（避免把检查脚本自身的断言字符串算作违规）：
-  - 扫描目标：`meituanAstro/src/**`（递归）
+- 以“业务代码 = `foos2Go/src/**`”作为硬边界（避免把检查脚本自身的断言字符串算作违规）：
+  - 扫描目标：`foos2Go/src/**`（递归）
   - 禁止 sink 字符串：`innerHTML`、`insertAdjacentHTML`、`outerHTML`、`document.write`、`dangerouslySetInnerHTML`
-- `meituanAstro/scripts/**` 允许包含上述字符串（用于检测），但实现中应避免在业务脚本目录下混入检测脚本。
+- `foos2Go/scripts/**` 允许包含上述字符串（用于检测），但实现中应避免在业务脚本目录下混入检测脚本。
 
 ### C. 可执行验收命令
-- 在 `meituanAstro/` 下：
+- 在 `foos2Go/` 下：
   - `pnpm run dev`（核心路径可用：至少覆盖 `/admin/02`）
   - `pnpm run build`
   - `node scripts/security-secrets.test.mjs`
@@ -108,7 +108,7 @@
   - `node -e "const fs=require('node:fs');const path=require('node:path');const root=path.join(process.cwd(),'dist');const needles=['PUBLIC_MASTER_TOKEN','PUBLIC_MQTT_USERNAME','PUBLIC_MQTT_PASSWORD','MQTT_USERNAME','MQTT_PASSWORD'];function walk(dir){for(const ent of fs.readdirSync(dir,{withFileTypes:true})){const fp=path.join(dir,ent.name);if(ent.isDirectory())walk(fp);else{const buf=fs.readFileSync(fp);for(const n of needles){if(buf.includes(Buffer.from(n))){console.error('FOUND',n,'in',fp);process.exitCode=1;}}}}}if(fs.existsSync(root))walk(root);if(process.exitCode)process.exit(1);"`（对 dist 做文件系统级关键字扫描，覆盖未跟踪产物）
 
 ### D. 变更集边界
-- 本轮提交的变更应限制在：`meituanAstro/**` 与必要的忽略/日志治理文件；不得包含仓库根目录的大规模删除（避免误操作导致结构损坏）。
+- 本轮提交的变更应限制在：`foos2Go/**` 与必要的忽略/日志治理文件；不得包含仓库根目录的大规模删除（避免误操作导致结构损坏）。
 
 ## 回滚策略
 - **代码回滚**：以页面/模块为单位提交；若出现行为偏差，可回滚到替换前的单个 commit。

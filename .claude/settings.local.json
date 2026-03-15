@@ -88,7 +88,12 @@
       "Bash(git add:*)",
       "Bash(git:*)",
       "Bash(python:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(pnpm:*)",
+      "Bash(node:*)",
+      "Bash(cd:*)",
+      "Bash(find:*)"
     ]
   }
 }

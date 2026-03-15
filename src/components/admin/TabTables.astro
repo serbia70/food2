@@ -245,7 +245,7 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
                 )}
 
                 {o.user_phone && (
-                  <button onclick={`window.openChatForPhone('${o.user_phone}')`} title="发消息" style="height:24px; width:24px; font-size:12px; background:#0891b2; color:#fff; border:none; border-radius:4px; cursor:pointer;">💬</button>
+                  <button data-admin-action="open-chat" data-phone={o.user_phone} title="发消息" style="height:24px; width:24px; font-size:12px; background:#0891b2; color:#fff; border:none; border-radius:4px; cursor:pointer;">💬</button>
                 )}
 
                 <button class="btn-action" data-admin-action="order-remarks" data-order-id={o.id} title="备注" style="height:24px; width:24px; font-size:12px;">🏷️</button>

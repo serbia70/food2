@@ -7,7 +7,7 @@
 本仓库为双系统：
 
 - `meituanGo/`：Go + Gin 后端（SQLite DB、MQTT、cron 等），当前仍暴露静态页入口。
-- `meituanAstro/`：Astro + Preact 前端，Cloudflare Pages/Workers（`@astrojs/cloudflare`, `output: "server"`），提供同域 `/api/**` 路由作为 BFF/代理。
+- `foos2Go/`：Astro + Preact 前端，Cloudflare Pages/Workers（`@astrojs/cloudflare`, `output: "server"`），提供同域 `/api/**` 路由作为 BFF/代理。
 
 已落地的迁移先例：master 控制台已按 **proxy-only + HttpOnly cookie** 模式迁移到 Astro（通过同域 `/api/master/*`），并计划彻底下线旧的 `/master.html` 静态页。
 
@@ -69,7 +69,7 @@
 
 ### 职责划分
 
-#### `meituanAstro/`（Cloudflare）
+#### `foos2Go/`（Cloudflare）
 - **UI**：shop/admin/master/rider 的所有页面与交互。
 - **BFF（/api/**）**：
   - 鉴权：读取 cookie / header，按角色（master/admin/user/rider）执行一致的鉴权策略。

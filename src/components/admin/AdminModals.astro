@@ -218,8 +218,8 @@ const { categories } = Astro.props;
       <!-- JS injected -->
     </div>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="window.closeCheckinModal()">取消</button>
-      <button class="btn-save" onclick="window.confirmCheckin()">✅ 确认入座</button>
+      <button class="btn-cancel" data-admin-action="close-checkin">取消</button>
+      <button class="btn-save" data-admin-action="confirm-checkin">✅ 确认入座</button>
     </div>
   </div>
 </div>

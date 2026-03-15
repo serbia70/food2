@@ -32,6 +32,7 @@ body {
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
     "Microsoft YaHei", sans-serif;
   height: 100%;
+  min-height: -webkit-fill-available;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -68,10 +69,17 @@ body {
   gap: 10px;
 }
 
+@supports not (gap: 1rem) {
+  .shop-info > * + * {
+    margin-left: 10px;
+  }
+}
+
 /* ==================== 涓诲竷灞€ ==================== */
 .app-container {
   display: flex;
   height: calc(100vh - 60px);
+  min-height: calc(-webkit-fill-available - 60px);
   width: 100%;
   overflow: hidden;
   position: relative;
@@ -169,6 +177,12 @@ body {
   gap: 12px;
 }
 
+@supports not (gap: 1rem) {
+  .product-item > * + * {
+    margin-left: 12px;
+  }
+}
+
 .prod-img-box {
   flex-shrink: 0;
 }
@@ -246,6 +260,12 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+@supports not (gap: 1rem) {
+  .qty-ctrl > * + * {
+    margin-left: 6px;
+  }
 }
 
 .qty-btn {
@@ -476,6 +496,12 @@ body {
   gap: 8px;
 }
 
+@supports not (gap: 1rem) {
+  .modal-header h2 > * + * {
+    margin-left: 8px;
+  }
+}
+
 .modal-count-badge {
   background: #007bff;
   color: #fff;
@@ -515,6 +541,12 @@ body {
   gap: 12px;
 }
 
+@supports not (gap: 1rem) {
+  .cart-item-card > * + * {
+    margin-left: 12px;
+  }
+}
+
 .cart-item-img {
   width: 65px;
   height: 65px;
@@ -530,6 +562,12 @@ body {
   flex-direction: column;
   gap: 3px;
   padding-right: 30px;
+}
+
+@supports not (gap: 1rem) {
+  .cart-item-details > * + * {
+    margin-top: 3px;
+  }
 }
 
 .cart-item-name {
@@ -647,6 +685,12 @@ body {
 .cart-action-btns {
   display: flex;
   gap: 12px;
+}
+
+@supports not (gap: 1rem) {
+  .cart-action-btns > * + * {
+    margin-left: 12px;
+  }
 }
 
 .cart-btn-dine {
@@ -1433,6 +1477,16 @@ body {
   min-width: 0;
 }
 
+@supports not (gap: 1rem) {
+  .nav-right-group > * + * {
+    margin-left: 8px;
+  }
+
+  .nav-left-group > * + * {
+    margin-left: 6px;
+  }
+}
+
 .nav-reserve-entry {
   border: none;
   border-radius: 12px;
@@ -1477,6 +1531,12 @@ body {
   align-items: baseline;
   cursor: pointer;
   padding: 0 6px;
+}
+
+@supports not (gap: 1rem) {
+  .nav-price-display > * + * {
+    margin-left: 3px;
+  }
 }
 
 .price-num {

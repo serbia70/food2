@@ -93,7 +93,8 @@
       "Bash(pnpm:*)",
       "Bash(node:*)",
       "Bash(cd:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(ls:*)"
     ]
   }
 }

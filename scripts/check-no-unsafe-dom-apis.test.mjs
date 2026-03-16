@@ -25,7 +25,8 @@ const SCRIPT_SRC_REGEX = /\bsrc\s*=\s*(['"]).*?\1/i;
 const SCRIPT_TYPE_REGEX = /\btype\s*=\s*(['"])(.*?)\1/i;
 
 function toPosixPath(p) {
-  return p.replaceAll('\\', '/');
+  // String.prototype.replaceAll is not available in iOS 12; keep test helpers ES5-ish.
+  return String(p).split('\\').join('/');
 }
 
 async function walkFiles(dirAbsPath) {

@@ -3,18 +3,20 @@ import { showAdminToast } from './globals';
 import { parsePossiblyEscapedJson } from './embedded-json';
 
 export function openEditModal(event: any, id: number, categoryId: number) {
-  const row = event.target.closest(".prod-row");
+  const target = event && event.target;
+  const base = target && target.nodeType === 1 ? target : target && target.parentElement;
+  const row = base && typeof base.closest === 'function' ? base.closest('.prod-row') : null;
   if (!row) return;
-  
+
   (document.getElementById("edit-id") as HTMLInputElement).value = String(id);
   (document.getElementById("edit-name") as HTMLInputElement).value = row.querySelector(".p-name").innerText;
   (document.getElementById("edit-sub") as HTMLInputElement).value = row.querySelector(".p-sub").innerText;
   (document.getElementById("edit-price") as HTMLInputElement).value = row.querySelector("input").value;
   (document.getElementById("edit-img") as HTMLInputElement).value = row.querySelector("img").src;
-  
+
   const catSelect = document.getElementById("edit-cat") as HTMLSelectElement;
   if (catSelect && categoryId) catSelect.value = String(categoryId);
-  
+
   const modal = document.getElementById("edit-modal");
   if (modal) modal.style.display = "flex";
 }

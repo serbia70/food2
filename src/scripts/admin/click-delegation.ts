@@ -27,8 +27,17 @@ export function bindAdminClickDelegation(options: {
 }) {
   const { handleEditOrder, getCurrentOrderId } = options;
 
+  // iOS Safari can report EventTarget as a Text node when tapping on button text.
+  // Normalize to an Element before calling .closest().
+  const getActionEl = (target: any): HTMLElement | null => {
+    if (!target) return null;
+    const base = target.nodeType === 1 ? target : target.parentElement;
+    if (!base || typeof base.closest !== 'function') return null;
+    return base.closest('[data-admin-action]') as HTMLElement | null;
+  };
+
   document.addEventListener('input', (e: any) => {
-    const el = e.target.closest('[data-admin-action]');
+    const el = getActionEl(e.target);
     if (!el) return;
     const action = el.dataset.adminAction;
     if (action === 'filter-customers') {
@@ -38,7 +47,7 @@ export function bindAdminClickDelegation(options: {
   });
 
   document.addEventListener('change', (e: any) => {
-    const el = e.target.closest('[data-admin-action]');
+    const el = getActionEl(e.target);
     if (!el) return;
     if (el.dataset.adminAction === 'load-reservations') {
       loadReservations();
@@ -46,7 +55,7 @@ export function bindAdminClickDelegation(options: {
   });
 
   document.addEventListener('click', async (e: any) => {
-    const el = e.target.closest('[data-admin-action]');
+    const el = getActionEl(e.target);
     if (!el) return;
 
     const action = el.dataset.adminAction;

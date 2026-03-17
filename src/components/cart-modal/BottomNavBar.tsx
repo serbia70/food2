@@ -33,7 +33,11 @@ export default function BottomNavBar({
             className="nav-reserve-entry"
             onClick={() => window.dispatchEvent(new Event(SHOP_EVENTS.OPEN_RESERVATION))}
           >
-            <span className="nav-reserve-main">📅 预订 / Rezervacija</span>
+            <span className="nav-reserve-main">
+              <span className="nav-reserve-label">📅 预订</span>
+              <span className="nav-reserve-sep"> / </span>
+              <span className="nav-reserve-sr">Rezervacija</span>
+            </span>
           </button>
         )}
       </div>
@@ -68,7 +72,7 @@ export default function BottomNavBar({
           aria-label="联系商家"
           title="联系商家"
         >
-          <span style={{ fontSize: '20px', lineHeight: 1 }}>💬</span>
+          <span style={{ fontSize: '18px', lineHeight: 1 }}>💬</span>
         </button>
 
         <button className="nav-btn nav-cart" onClick={onOpenCart}>

@@ -394,12 +394,26 @@ body {
   }
 
   .nav-reserve-entry {
-    min-width: 104px;
-    padding: 7px 8px;
+    min-width: 88px;
+    padding: 6px 8px;
   }
 
   .nav-reserve-main {
     font-size: 11px;
+  }
+
+  .price-num {
+    font-size: 17px;
+  }
+
+  .nav-cart {
+    width: 40px;
+    height: 40px;
+  }
+
+  .nav-btn.nav-user {
+    width: 34px;
+    height: 34px;
   }
 
   .nav-right-group {
@@ -1490,7 +1504,7 @@ body {
 .nav-reserve-entry {
   border: none;
   border-radius: 12px;
-  padding: 8px 10px;
+  padding: 6px 8px;
   background: linear-gradient(135deg, #26a69a 0%, #00897b 100%);
   color: #fff;
   box-shadow: 0 4px 12px rgba(38, 166, 154, 0.35);
@@ -1498,20 +1512,26 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 120px;
-  max-width: 160px;
+  min-width: 96px;
+  max-width: 132px;
 }
 
 .nav-reserve-main {
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.1;
   font-weight: 800;
+  white-space: nowrap;
+}
+
+.nav-reserve-sep,
+.nav-reserve-sr {
+  display: none;
 }
 
 .nav-btn {
   background: none;
   border: none;
-  padding: 8px;
+  padding: 6px;
   cursor: pointer;
   color: #888;
   display: flex;
@@ -1520,17 +1540,22 @@ body {
 }
 
 .nav-btn.nav-user {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   background: #f5f5f5;
   border-radius: 50%;
+}
+
+.nav-btn.nav-user svg {
+  width: 20px;
+  height: 20px;
 }
 
 .nav-price-display {
   display: flex;
   align-items: baseline;
   cursor: pointer;
-  padding: 0 6px;
+  padding: 0 4px;
 }
 
 @supports not (gap: 1rem) {
@@ -1540,13 +1565,13 @@ body {
 }
 
 .price-num {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
   color: #333;
 }
 
 .price-unit {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: #888;
   margin-left: 3px;
@@ -1554,8 +1579,8 @@ body {
 
 .nav-cart {
   position: relative;
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   background: linear-gradient(135deg, #4facfe, #007bff);
   border-radius: 50%;
   display: flex;
@@ -1566,20 +1591,22 @@ body {
 
 .nav-cart svg {
   stroke: #fff;
+  width: 20px;
+  height: 20px;
 }
 
 .nav-cart-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -4px;
+  right: -4px;
   background: #ff4b33;
   color: #fff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  border-radius: 10px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
   border: 2px solid #fff;
   display: flex;
   align-items: center;

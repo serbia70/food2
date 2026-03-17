@@ -34,8 +34,8 @@ export default function BottomNavBar({
             onClick={() => window.dispatchEvent(new Event(SHOP_EVENTS.OPEN_RESERVATION))}
           >
             <span className="nav-reserve-main">
-              <span className="nav-reserve-label">📅 预订</span>
-              <span className="nav-reserve-sep"> / </span>
+              <span className="nav-reserve-label">预订</span>
+              <span className="nav-reserve-sep">/</span>
               <span className="nav-reserve-sr">Rezervacija</span>
             </span>
           </button>

@@ -393,13 +393,35 @@ body {
     gap: 4px;
   }
 
+  /* Small screens: stack reservation bilingual text to save horizontal space */
   .nav-reserve-entry {
-    min-width: 88px;
-    padding: 6px 8px;
+    min-width: 68px;
+    max-width: 78px;
+    padding: 6px 6px;
   }
 
   .nav-reserve-main {
-    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.05;
+    white-space: normal;
+  }
+
+  .nav-reserve-label {
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .nav-reserve-sep {
+    display: none;
+  }
+
+  .nav-reserve-sr {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    opacity: 0.95;
   }
 
   .price-num {
@@ -1521,11 +1543,21 @@ body {
   line-height: 1.1;
   font-weight: 800;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: baseline;
 }
 
-.nav-reserve-sep,
+.nav-reserve-sep {
+  display: inline;
+  margin: 0 2px;
+  opacity: 0.9;
+}
+
 .nav-reserve-sr {
-  display: none;
+  display: inline;
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.95;
 }
 
 .nav-btn {

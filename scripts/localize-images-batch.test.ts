@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { handleLocalizeImagesBatchRequest } from './localize-images-batch.ts';
+import { handleLocalizeImagesBatchRequest } from '../src/pages/api/admin/localize-images-batch.ts';
 
 test('handleLocalizeImagesBatchRequest: processes a batch and returns cursor + stats', async () => {
   const request = new Request('http://local/api/admin/localize-images', {

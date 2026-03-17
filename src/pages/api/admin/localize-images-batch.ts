@@ -128,13 +128,3 @@ export async function handleLocalizeImagesBatchRequest(options: {
   return json(result, 200);
 }
 
-// NOTE: This file is imported by the real Astro route below.
-export function buildLocalizeImagesAstroRoute() {
-  return {
-    prerender: false,
-    POST: async ({ request, cookies }: any) => {
-      const authHeader = readAuthHeader(request, cookies);
-      return handleLocalizeImagesBatchRequest({ request, authHeader, fetchImpl: fetch });
-    },
-  };
-}

@@ -12,6 +12,7 @@ const REPO_ROOT = join(__dirname, '..');
 
 const TARGET_DIRS = [
   join(REPO_ROOT, 'src'),
+  join(REPO_ROOT, 'foos2Go', 'static'),
   join(REPO_ROOT, 'meituanGo', 'static'),
 ];
 
@@ -36,7 +37,7 @@ const UNSAFE_PATTERNS = [
 ];
 
 function toPosixPath(p) {
-  return p.replaceAll('\\', '/');
+  return String(p).split('\\').join('/');
 }
 
 function shouldSkip(absPath) {

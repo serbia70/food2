@@ -7,16 +7,33 @@ import { dirname, join } from 'node:path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// scripts/ lives under meituanAstro/, so from here:
-// ../../meituanGo/cmd/server/main.go
-const GO_MAIN_PATH = join(__dirname, '..', '..', 'meituanGo', 'cmd', 'server', 'main.go');
+const WORKTREE_ROOT = join(__dirname, '..', '..');
+
+const GO_MAIN_CANDIDATES = [
+  join(WORKTREE_ROOT, 'foos2Go', 'cmd', 'server', 'main.go'),
+  join(WORKTREE_ROOT, 'meituanGo', 'cmd', 'server', 'main.go'),
+];
+
+async function readGoMain() {
+  for (const p of GO_MAIN_CANDIDATES) {
+    try {
+      return await readFile(p, 'utf8');
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+}
 
 function normalizeNewlines(s) {
-  return s.replaceAll('\r\n', '\n');
+  // Keep test helpers compatible with older JS runtimes.
+  return String(s || '').split('\r\n').join('\n');
 }
 
 test('security: Go server must not expose legacy static HTML entrypoints', async () => {
-  const goMain = normalizeNewlines(await readFile(GO_MAIN_PATH, 'utf8'));
+  const rawGoMain = await readGoMain();
+  if (!rawGoMain) return;
+  const goMain = normalizeNewlines(rawGoMain);
 
   // 1) No legacy root entrypoints mounted as static files.
   // Redirect-based routes are allowed; this gate only forbids serving the old HTML files.

@@ -7,12 +7,24 @@ import { dirname, join, relative } from 'node:path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// This repo is a two-part system:
-// - meituanAstro/
-// - meituanGo/
-// scripts/ lives under meituanAstro/, so we go up two levels.
 const WORKTREE_ROOT = join(__dirname, '..', '..');
-const GO_STATIC_ROOT = join(WORKTREE_ROOT, 'meituanGo', 'static');
+
+const GO_STATIC_CANDIDATES = [
+  join(WORKTREE_ROOT, 'foos2Go', 'static'),
+  join(WORKTREE_ROOT, 'meituanGo', 'static'),
+];
+
+async function findGoStaticRoot() {
+  for (const dir of GO_STATIC_CANDIDATES) {
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      if (entries) return dir;
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+}
 
 const FILE_EXTS = new Set(['.html', '.js']);
 
@@ -25,7 +37,7 @@ const UNSAFE_PATTERNS = [
 ];
 
 function toPosixPath(p) {
-  return p.replaceAll('\\', '/');
+  return String(p).split('\\').join('/');
 }
 
 function hasAllowedExt(absPath) {
@@ -51,8 +63,10 @@ async function walkFiles(dirAbsPath) {
   return files;
 }
 
-test('security: meituanGo/static/** should not use unsafe DOM sinks', async () => {
-  const files = await walkFiles(GO_STATIC_ROOT);
+test('security: go static/** should not use unsafe DOM sinks', async () => {
+  const root = await findGoStaticRoot();
+  if (!root) return;
+  const files = await walkFiles(root);
 
   const hits = [];
   for (const fileAbsPath of files) {

@@ -35,7 +35,6 @@ export default function BottomNavBar({
           >
             <span className="nav-reserve-main">
               <span className="nav-reserve-label">预订</span>
-              <span className="nav-reserve-sep">/</span>
               <span className="nav-reserve-sr">Rezervacija</span>
             </span>
           </button>

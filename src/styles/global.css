@@ -413,10 +413,6 @@ body {
     font-weight: 800;
   }
 
-  .nav-reserve-sep {
-    display: none;
-  }
-
   .nav-reserve-sr {
     display: block;
     font-size: 9px;
@@ -1548,16 +1544,16 @@ body {
 }
 
 .nav-reserve-sep {
-  display: inline;
-  margin: 0 2px;
-  opacity: 0.9;
+  display: none;
 }
 
 .nav-reserve-sr {
   display: inline;
+  margin-left: 4px;
   font-size: 10px;
   font-weight: 700;
   opacity: 0.95;
+  white-space: nowrap;
 }
 
 .nav-btn {

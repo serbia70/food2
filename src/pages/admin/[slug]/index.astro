@@ -201,10 +201,7 @@ const isNotice = false;
 
 const now = new Date();
 const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-const commissionType = shop.commission_type === 'percentage' ? 'percentage' : 'per_order';
 const commissionValue = Number(shop.commission_value || 30);
 
 // 计算累计消耗

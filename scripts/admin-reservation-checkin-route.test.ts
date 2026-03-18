@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { POST } from '../src/pages/api/admin/reservations/[id]/checkin.ts';
+import { API_BASE_URL } from '../src/config.ts';
 
 test('admin reservation checkin route: uses params.id and forwards Authorization', async () => {
   const originalFetch = globalThis.fetch;
@@ -15,7 +16,7 @@ test('admin reservation checkin route: uses params.id and forwards Authorization
 
         assert.equal(
           String(url),
-          'http://localhost:3030/api/admin/reservations/123/checkin',
+          `${API_BASE_URL}/api/admin/reservations/123/checkin`,
           'should include params.id in upstream URL',
         );
 
@@ -52,6 +53,8 @@ test('admin reservation checkin route: uses params.id and forwards Authorization
 
     assert.equal(res.status, 200);
     assert.equal(sawFetch, true);
+
+    assert.deepEqual(await res.json(), { success: true });
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -8,11 +8,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   try {
     const payload = await request.arrayBuffer();
     const authHeaders = buildAdminAuthHeader(request, cookies);
+    const requestContentType = request.headers.get('content-type');
 
     const res = await fetch(`${API_BASE_URL}/api/admin/upload`, {
       method: 'POST',
       headers: {
-        ...(request.headers.get('content-type') ? { 'Content-Type': request.headers.get('content-type') } : {}),
+        ...(requestContentType ? { 'Content-Type': requestContentType } : {}),
         ...authHeaders,
       },
       body: payload,

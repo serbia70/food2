@@ -195,11 +195,9 @@ const activeDeliveryOrders = orders.filter(
     o.is_deleted !== 1,
 );
 
-const daysLeft = 0;
 const isExpired = false;
 const isWarning = false;
 const isNotice = false;
-const expireDateStr = '按月自动扣费';
 
 const now = new Date();
 const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);

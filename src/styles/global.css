@@ -2296,7 +2296,7 @@ body {
 .remark-ui .remark-note-content textarea {
   width: 100%;
   min-height: 90px;
-  border: 1px solid #e2e8f0;
+  border: none;
   border-radius: 6px;
   padding: 10px 12px;
   font-size: 14px;

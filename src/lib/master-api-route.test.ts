@@ -55,6 +55,34 @@ test('proxyMasterRequest: forwards to upstream and preserves status + content-ty
   }
 });
 
+test('proxyMasterRequest: does not allow fallback token when allowFallbackToken is omitted', async () => {
+  const req = new Request('http://local/api/master/init');
+  const cookies: any = { get: (_k: string) => undefined };
+
+  const fetchOrig = globalThis.fetch;
+  try {
+    let calls = 0;
+    // @ts-ignore
+    globalThis.fetch = async (_url: any, _init?: any) => {
+      calls++;
+      return new Response('OK', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+    };
+
+    const res = await proxyMasterRequest({
+      request: req,
+      cookies,
+      upstreamUrl: 'https://upstream.example.test/api/master/init',
+      fallbackToken: 'fallback-token',
+      method: 'GET',
+    } as any);
+
+    assert.equal(calls, 0, 'expected fetch not to be called');
+    assert.equal(res.status, 401);
+  } finally {
+    globalThis.fetch = fetchOrig;
+  }
+});
+
 test('proxyMasterRequest: should NOT allow fallback token unless explicitly enabled', async () => {
   const req = new Request('http://local/api/master/init');
   const cookies: any = { get: (_k: string) => undefined };

@@ -13,7 +13,7 @@ export async function proxyMasterRequest(options: {
 }): Promise<Response> {
   try {
     const auth = resolveMasterAuth(options.request, options.cookies as any, options.fallbackToken, {
-      allowFallbackToken: options.allowFallbackToken,
+      allowFallbackToken: options.allowFallbackToken === true,
     });
 
     if (!auth) {

@@ -1,22 +1,19 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../config';
+import { buildAdminAuthHeader } from '../../lib/admin-api-route';
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   try {
     const payload = await request.arrayBuffer();
-    const headerAuth = request.headers.get('authorization') || '';
-    const cookieToken = cookies.get('admin_token')?.value || '';
-    const auth = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : '');
+    const authHeaders = buildAdminAuthHeader(request, cookies);
 
     const res = await fetch(`${API_BASE_URL}/api/admin/upload`, {
       method: 'POST',
       headers: {
-        ...(request.headers.get('content-type')
-          ? { 'Content-Type': request.headers.get('content-type') as string }
-          : {}),
-        ...(auth ? { Authorization: auth } : {}),
+        ...(request.headers.get('content-type') ? { 'Content-Type': request.headers.get('content-type') } : {}),
+        ...authHeaders,
       },
       body: payload,
     });

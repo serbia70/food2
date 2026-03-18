@@ -7,12 +7,6 @@ function json(data: any, status = 200) {
   });
 }
 
-function readAuthHeader(request: Request, cookies: any): string {
-  const headerAuth = request.headers.get('authorization') || '';
-  const cookieToken = cookies?.get?.('admin_token')?.value || '';
-  return headerAuth || (cookieToken ? `Bearer ${cookieToken}` : '');
-}
-
 export async function handleLocalizeImagesBatchRequest(options: {
   request: Request;
   authHeader: string;

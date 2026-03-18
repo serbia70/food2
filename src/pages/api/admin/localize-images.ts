@@ -1,12 +1,11 @@
 import type { APIRoute } from 'astro';
+import { readAdminAuth } from '../../../lib/admin-api-route';
 import { handleLocalizeImagesBatchRequest } from './localize-images-batch.ts';
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies }) => {
-  const headerAuth = request.headers.get('authorization') || '';
-  const cookieToken = cookies.get('admin_token')?.value || '';
-  const authHeader = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : '');
+  const authHeader = readAdminAuth(request, cookies);
 
   return handleLocalizeImagesBatchRequest({
     request,

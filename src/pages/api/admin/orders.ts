@@ -1,20 +1,19 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config';
+import { buildAdminAuthHeader } from '../../../lib/admin-api-route';
 // TODO: 移除代理层业务修补，待后端稳定输出订单 items_json 后删除。
 
 export const prerender = false;
 
 export const GET: APIRoute = async ({ request, url, cookies }) => {
-  const headerAuth = request.headers.get('authorization') || '';
-  const cookieToken = cookies.get('admin_token')?.value || '';
-  const auth = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : '');
+  const authHeaders = buildAdminAuthHeader(request, cookies);
   const q = url.search || '';
 
   const res = await fetch(`${API_BASE_URL}/api/admin/orders${q}`, {
     method: 'GET',
     cache: 'no-store',
     headers: {
-      ...(auth ? { Authorization: auth } : {}),
+      ...authHeaders,
       'Cache-Control': 'no-cache',
       Pragma: 'no-cache',
     },

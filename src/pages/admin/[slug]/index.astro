@@ -1,14 +1,9 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 import { API_BASE_URL } from '../../../config';
-import {
-  buildTableValue,
-  isHallLikeZoneName as isSharedHallLikeZoneName,
-  isPlaceholderZoneName,
-  isSimpleHallMode,
-} from '../../../lib/table-config';
-import { parseTableRef, inferLegacySimpleHallNumber, orderMatchesAnyConfiguredTable } from '../../../lib/admin-table-ref';
-import { asObject, parseMaybeJSON, normalizeJSONString, parseDBDateMs, formatHHmm, resolveTableConfig, buildTableCards } from '../../../lib/admin-dashboard-utils';
+import { isHallLikeZoneName, isPlaceholderZoneName } from '../../../lib/table-config';
+import { orderMatchesAnyConfiguredTable } from '../../../lib/admin-table-ref';
+import { asObject, parseMaybeJSON, normalizeJSONString, resolveTableConfig, buildTableCards } from '../../../lib/admin-dashboard-utils';
 import AdminHeader from '../../../components/admin/AdminHeader.astro';
 import AdminTabs from '../../../components/admin/AdminTabs.astro';
 import TabOrders from '../../../components/admin/TabOrders.astro';
@@ -63,20 +58,8 @@ async function fetchJSON(url: string, init: RequestInit = {}) {
   }
 }
 
-function buildTableDisplayLabel(
-  zone: { name?: string; prefix?: string; count?: number },
-  index: number,
-  tableConfig: Array<{ name: string; prefix: string; count: number }>,
-) {
-  return buildTableValue(zone, index, isSimpleHallMode(tableConfig));
-}
-
 function isHallZoneName(v: any) {
-  return isSharedHallLikeZoneName(v);
-}
-
-function isSimpleHallTableConfig(tableConfig: Array<{ name: string; prefix: string; count: number }>) {
-  return isSimpleHallMode(tableConfig);
+  return isHallLikeZoneName(v);
 }
 
 const authHeaders = { Authorization: `Bearer ${token}` };

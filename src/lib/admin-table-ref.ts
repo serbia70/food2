@@ -1,4 +1,4 @@
-import { isHallLikeZoneName, isPlaceholderZoneName, isSimpleHallMode, buildTableValue, type TableZone } from './table-config';
+import { isHallLikeZoneName, isPlaceholderZoneName, isSimpleHallMode, buildTableValue, type TableZone } from './table-config.ts';
 
 export type ParsedTableRef = {
   area: string;

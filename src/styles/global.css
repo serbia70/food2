@@ -2165,6 +2165,7 @@ body {
 
 .remark-ui .remark-category {
   margin-bottom: 15px;
+  border: 1px solid var(--remark-accent);
   border-radius: 12px;
 }
 
@@ -2190,7 +2191,6 @@ body {
 }
 
 .remark-ui .remark-options-grid {
-  border: 1px solid var(--remark-accent);
   border-top: none;
   border-radius: 0 0 12px 12px;
   padding: 15px;
@@ -2285,9 +2285,9 @@ body {
 }
 
 .remark-ui .remark-note-content {
-  padding: 12px;
+  padding: 15px;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
   color: #334155;
   font-size: 13px;

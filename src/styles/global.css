@@ -2158,6 +2158,156 @@ body {
 } /* Bronze */
 
 /* ==================== 澶囨敞閫夋嫨鏍峰紡 ==================== */
+.remark-ui {
+  --remark-accent: #607d8b;
+  --remark-accent-soft: rgba(96, 125, 139, 0.08);
+}
+
+.remark-ui .remark-category {
+  margin-bottom: 15px;
+  border-radius: 12px;
+}
+
+.remark-ui .category-title {
+  padding: 10px 15px;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  background: var(--remark-accent);
+  border-radius: 12px 12px 0 0;
+}
+
+.remark-ui .category-icon {
+  width: 18px;
+  text-align: center;
+}
+
+.remark-ui .category-name {
+  flex: 1;
+}
+
+.remark-ui .remark-options-grid {
+  border: 1px solid var(--remark-accent);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  padding: 15px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.remark-ui .remark-option-btn {
+  min-height: 45px;
+  border: 1px solid #e0e0e0;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  color: #333;
+  transition: all 0.2s;
+}
+
+.remark-ui .remark-option-btn:hover {
+  border-color: var(--remark-accent);
+}
+
+.remark-ui .remark-option-btn.selected {
+  border-color: var(--remark-accent);
+  background: var(--remark-accent-soft);
+  color: var(--remark-accent);
+}
+
+.remark-ui .remark-option-btn:focus-visible {
+  outline: 2px solid var(--remark-accent);
+  outline-offset: 2px;
+}
+
+.remark-ui .option-main {
+  font-size: 14px;
+}
+
+.remark-ui .remark-option-btn.selected .option-main {
+  font-weight: 700;
+}
+
+.remark-ui .option-sub {
+  font-size: 11px;
+  color: #999;
+}
+
+.remark-ui .remark-option-btn.selected .option-sub {
+  color: var(--remark-accent);
+}
+
+.remark-ui .remarks-preview {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.remark-ui .remark-tag {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  border-radius: 999px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.remark-ui .remark-remove {
+  cursor: pointer;
+  font-weight: 800;
+  opacity: 0.7;
+}
+
+.remark-ui .remark-remove:hover {
+  opacity: 1;
+}
+
+.remark-ui .remark-remove:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.remark-ui .remark-note-content {
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+}
+
+.remark-ui .remark-note-content textarea {
+  width: 100%;
+  min-height: 90px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.remark-ui .remark-note-content textarea:focus-visible {
+  outline: 2px solid var(--remark-accent);
+  outline-offset: 2px;
+}
+
 .dine-remarks-section,
 .delivery-remarks-section {
   text-align: left;
@@ -2168,7 +2318,8 @@ body {
   box-shadow: none;
 }
 
-.remarks-toggle {
+.dine-remarks-section .remarks-toggle,
+.delivery-remarks-section .remarks-toggle {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2181,21 +2332,26 @@ body {
   margin-bottom: 12px;
 }
 
-.remarks-toggle:hover {
+.dine-remarks-section .remarks-toggle:hover,
+.delivery-remarks-section .remarks-toggle:hover {
   background: #f1f3f5;
 }
 
-.toggle-title {
+.dine-remarks-section .toggle-title,
+.delivery-remarks-section .toggle-title {
   font-weight: bold;
   color: #333;
 }
 
-.toggle-icon {
+.dine-remarks-section .toggle-icon,
+.delivery-remarks-section .toggle-icon,
+.cart-remarks-section .toggle-icon {
   color: #2196f3;
   font-size: 14px;
 }
 
-.remarks-preview {
+.dine-remarks-section .remarks-preview,
+.delivery-remarks-section .remarks-preview {
   background: #fff;
   border: 1px solid #eee;
   border-radius: 8px;
@@ -2206,7 +2362,8 @@ body {
   gap: 10px;
 }
 
-.remark-tag {
+.dine-remarks-section .remark-tag,
+.delivery-remarks-section .remark-tag {
   background: #e3f2fd;
   color: #1565c0;
   border-radius: 6px;
@@ -2218,7 +2375,8 @@ body {
   font-size: 13px;
 }
 
-.remark-remove {
+.dine-remarks-section .remark-remove,
+.delivery-remarks-section .remark-remove {
   cursor: pointer;
   font-weight: bold;
   opacity: 0.6;
@@ -2226,21 +2384,27 @@ body {
   color: #1565c0;
 }
 
-.remark-remove:hover {
+.dine-remarks-section .remark-remove:hover,
+.delivery-remarks-section .remark-remove:hover {
   opacity: 1;
 }
 
-.remarks-panel {
+.dine-remarks-section .remarks-panel,
+.delivery-remarks-section .remarks-panel,
+.cart-remarks-section .remarks-panel {
   background: #fff;
   overflow-y: auto;
   max-height: 350px;
 }
 
-.remark-category {
+.dine-remarks-section .remark-category,
+.delivery-remarks-section .remark-category,
+.cart-remarks-section .remark-category {
   margin-bottom: 15px;
 }
 
-.remark-category-title {
+.delivery-remarks-section .remark-category-title,
+.cart-remarks-section .remark-category-title {
   font-weight: bold;
   margin-bottom: 10px;
   color: #555;
@@ -2249,13 +2413,17 @@ body {
   border-bottom: 1px solid #eee;
 }
 
-.remark-options-grid {
+.dine-remarks-section .remark-options-grid,
+.delivery-remarks-section .remark-options-grid,
+.cart-remarks-section .remark-options-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
-.remark-option-btn {
+.dine-remarks-section .remark-option-btn,
+.delivery-remarks-section .remark-option-btn,
+.cart-remarks-section .remark-option-btn {
   padding: 8px 14px;
   border: 1px solid #e0e0e0;
   background: #fff;
@@ -2265,12 +2433,16 @@ body {
   font-size: 13px;
 }
 
-.remark-option-btn:hover {
+.dine-remarks-section .remark-option-btn:hover,
+.delivery-remarks-section .remark-option-btn:hover,
+.cart-remarks-section .remark-option-btn:hover {
   background: #f8fbff;
   border-color: #2196f3;
 }
 
-.remark-option-btn.selected {
+.dine-remarks-section .remark-option-btn.selected,
+.delivery-remarks-section .remark-option-btn.selected,
+.cart-remarks-section .remark-option-btn.selected {
   background: #e3f2fd;
   border-color: #2196f3;
   color: #1565c0;
@@ -2320,11 +2492,13 @@ body {
 }
 
 /* 鑷畾涔夊娉ㄨ緭鍏ユ鏍峰紡 */
-.custom-remark-input {
+.delivery-form .custom-remark-input,
+.cart-remarks-section .custom-remark-input {
   margin-top: 10px;
 }
 
-.custom-remark-input textarea {
+.delivery-form .custom-remark-input textarea,
+.cart-remarks-section .custom-remark-input textarea {
   width: 100%;
   padding: 12px;
   border: 1px solid #ddd;
@@ -2333,7 +2507,8 @@ body {
   resize: vertical;
 }
 
-.custom-remark-input textarea:focus {
+.delivery-form .custom-remark-input textarea:focus,
+.cart-remarks-section .custom-remark-input textarea:focus {
   outline: none;
   border-color: #2196f3;
 }

@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../../../config';
 import { isHallLikeZoneName, isPlaceholderZoneName } from '../../../lib/table-config';
 import { orderMatchesAnyConfiguredTable } from '../../../lib/admin-table-ref';
 import { asObject, parseMaybeJSON, normalizeJSONString, resolveTableConfig, buildTableCards } from '../../../lib/admin-dashboard-utils';
+import { fetchJSON } from '../../../lib/admin-fetch-json';
 import AdminHeader from '../../../components/admin/AdminHeader.astro';
 import AdminTabs from '../../../components/admin/AdminTabs.astro';
 import TabOrders from '../../../components/admin/TabOrders.astro';
@@ -31,31 +32,6 @@ const token = Astro.cookies.get('admin_token')?.value;
 if (!token) {
   const q = Astro.url.search || '';
   return Astro.redirect(`/admin/${encodeURIComponent(slug)}/login${q}`, 302);
-}
-
-async function fetchJSON(url: string, init: RequestInit = {}) {
-  try {
-    const mergedInit: RequestInit = {
-      ...init,
-      cache: 'no-store',
-      headers: {
-        ...(init.headers || {}),
-        'Cache-Control': 'no-cache',
-        Pragma: 'no-cache',
-      },
-    };
-    const res = await fetch(url, mergedInit);
-    const text = await res.text();
-    let data: any = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = null;
-    }
-    return { ok: res.ok, status: res.status, data };
-  } catch {
-    return { ok: false, status: 503, data: null };
-  }
 }
 
 function isHallZoneName(v: any) {

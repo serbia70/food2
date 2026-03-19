@@ -164,12 +164,18 @@ export default function CartTableModal({
         </div>
 
         <div className="dine-remarks-section">
-          <div className="remarks-toggle" onClick={onTogglePanel}>
+          <button
+            type="button"
+            className="remarks-toggle"
+            onClick={onTogglePanel}
+            aria-expanded={showRemarksPanel}
+            aria-controls="dine-remarks-panel"
+          >
             <span className="toggle-title">
               🏷️ Ukus / 口味备注 (选填)
             </span>
             <span className="toggle-icon">{showRemarksPanel ? "收起 ▲" : "展开选择 ▼"}</span>
-          </div>
+          </button>
 
           <section className="remark-ui">
             {dineInRemarks.length > 0 && (
@@ -194,7 +200,7 @@ export default function CartTableModal({
             )}
 
             {showRemarksPanel && (
-              <div className="remarks-panel">
+              <div className="remarks-panel" id="dine-remarks-panel">
                 {remarkCategories.map((cat, idx) => {
                   const { accent, soft, icon } = getRemarkCategoryTheme(cat.name);
                   return (

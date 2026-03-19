@@ -678,12 +678,22 @@ export default function ReservationModal({ restaurantId, onClose, requiresPreOrd
             )}
           </div>
 
-          <div style={{ borderRadius: "14px", border: "1px solid #dce9f6", background: "#fff", padding: "14px", marginBottom: "14px" }}>
-            <label style={{ display: "block", marginBottom: "6px", fontWeight: 700, color: "#123250" }}>
-              备注 (可选) / Napomena (opciono)
-            </label>
-            <textarea value={remarks} onInput={(e) => setRemarks((e.target as HTMLTextAreaElement).value)} placeholder="特殊要求... / Posebni zahtevi..." rows={3} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #c9daeb", fontSize: "14px", resize: "vertical", boxSizing: "border-box" }} />
-          </div>
+          <section className="remark-ui">
+            <div className="remark-category">
+              <div className="category-title">
+                <span className="category-icon" aria-hidden="true">🏷️</span>
+                <span className="category-name">备注</span>
+              </div>
+              <div className="remark-note-content">
+                <textarea
+                  value={remarks}
+                  onInput={(e) => setRemarks((e.target as HTMLTextAreaElement).value)}
+                  placeholder="特殊要求... / Posebni zahtevi..."
+                  rows={3}
+                />
+              </div>
+            </div>
+          </section>
 
           <div style={{ position: "sticky", bottom: 0, marginTop: "14px", paddingTop: "8px", background: "linear-gradient(180deg, rgba(246,251,255,0) 0%, #f6fbff 26%)", paddingBottom: "max(6px, env(safe-area-inset-bottom))" }}>
             <button onClick={handleSubmit} disabled={loading} style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "none", background: loading ? "#b9c3cf" : "linear-gradient(120deg, #0f4c81 0%, #1a7fc2 100%)", color: "#fff", fontSize: "16px", fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", boxShadow: "0 10px 24px rgba(15, 76, 129, 0.35)" }}>

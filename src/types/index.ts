@@ -17,6 +17,11 @@ export interface Shop {
   status?: "active" | "pending" | "banned";
   enable_delivery?: number; // 0 or 1
   enable_dine_in?: number; // 0 or 1
+  dine_in_billing_start_at?: string;
+  dine_in_expires_at?: string;
+  dine_in_grace_until?: string;
+  dine_in_disabled_at?: string;
+  dine_in_stop_reason?: "manual" | "auto_expired";
   enable_reservation?: number; // 0 or 1
   billing_plan_type?: "subscription" | "business";
   billing_balance_rsd?: number;

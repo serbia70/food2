@@ -1,3 +1,5 @@
+import { getRemarkCategoryTheme } from "../../lib/remark-ui-theme";
+
 interface TableZone {
   name: string;
   count: number;
@@ -169,146 +171,93 @@ export default function CartTableModal({
             <span className="toggle-icon">{showRemarksPanel ? "收起 ▲" : "展开选择 ▼"}</span>
           </div>
 
-          {dineInRemarks.length > 0 && (
-            <div className="remarks-preview" style={{ padding: "15px 20px" }}>
-              {dineInRemarks.map((r) => (
-                <span key={r} className="remark-tag" style={{ fontSize: "14px", padding: "8px 12px" }}>
-                  {r}{" "}
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleRemark(r);
-                    }}
-                    className="remark-remove"
-                  >
-                    ×
+          <section className="remark-ui">
+            {dineInRemarks.length > 0 && (
+              <div className="remarks-preview">
+                {dineInRemarks.map((remark) => (
+                  <span key={remark} className="remark-tag">
+                    {remark}
+                    <button
+                      type="button"
+                      className="remark-remove"
+                      aria-label={`移除备注：${remark}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleRemark(remark);
+                      }}
+                    >
+                      ×
+                    </button>
                   </span>
-                </span>
-              ))}
-            </div>
-          )}
-
-          {showRemarksPanel && (
-            <div className="remarks-panel" style={{ maxHeight: "400px", padding: "10px" }}>
-              {remarkCategories.map((cat, idx) => {
-                let headerColor = "#607d8b";
-                const n = cat.name;
-                if (n.includes("辣") || n.includes("Spiciness")) headerColor = "#ff7043";
-                else if (n.includes("忌口") || n.includes("Exclusions")) headerColor = "#d32f2f";
-                else if (n.includes("健康") || n.includes("Healthy")) headerColor = "#4caf50";
-                else if (n.includes("过敏") || n.includes("Allergies")) headerColor = "#ffa726";
-                else if (n.includes("修改") || n.includes("Modifications")) headerColor = "#2196f3";
-
-                return (
-                  <div key={idx} className="remark-category" style={{ marginBottom: "20px" }}>
-                    <div
-                      className="category-title"
-                      style={{
-                        backgroundColor: headerColor,
-                        color: "white",
-                        padding: "10px 15px",
-                        borderRadius: "8px 8px 0 0",
-                        fontWeight: "bold",
-                        fontSize: "15px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                      }}
-                    >
-                      {headerColor === "#ff7043" && "🌶️"}
-                      {headerColor === "#d32f2f" && "🚫"}
-                      {headerColor === "#4caf50" && "🥬"}
-                      {cat.name}
-                    </div>
-                    <div
-                      className="remark-options-grid"
-                      style={{
-                        border: `1px solid ${headerColor}`,
-                        borderTop: "none",
-                        borderRadius: "0 0 8px 8px",
-                        padding: "15px",
-                        background: "#fff",
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))",
-                        gap: "10px",
-                      }}
-                    >
-                      {cat.options.map((opt) => {
-                        const isSelected = dineInRemarks.includes(opt);
-                        const [mainText, subText] = opt.split("/");
-                        return (
-                          <button
-                            key={opt}
-                            onClick={() => onToggleRemark(opt)}
-                            className={`remark-option-btn ${isSelected ? "selected" : ""}`}
-                            style={{
-                              minHeight: "45px",
-                              borderColor: isSelected ? headerColor : "#e0e0e0",
-                              backgroundColor: isSelected ? `${headerColor}15` : "#fff",
-                              color: isSelected ? headerColor : "#333",
-                            }}
-                          >
-                            <span className="opt-main" style={{ fontSize: "14px", fontWeight: isSelected ? "bold" : "normal" }}>
-                              {mainText}
-                            </span>
-                            {subText && (
-                              <span className="opt-sub" style={{ fontSize: "11px", color: isSelected ? headerColor : "#999" }}>
-                                {subText}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-
-              <div className="remark-category" style={{ marginTop: "20px", marginBottom: "15px" }}>
-                <div
-                  className="category-title"
-                  style={{
-                    backgroundColor: "#607d8b",
-                    color: "white",
-                    padding: "10px 15px",
-                    borderRadius: "8px 8px 0 0",
-                    fontWeight: "bold",
-                    fontSize: "15px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
-                >
-                  📝 自定义备注 / Custom
-                </div>
-                <div
-                  style={{
-                    border: "1px solid #607d8b",
-                    borderTop: "none",
-                    borderRadius: "0 0 8px 8px",
-                    padding: "15px",
-                    background: "#fff",
-                  }}
-                >
-                  <textarea
-                    placeholder="其他特殊要求... / Other requests..."
-                    value={dineInCustomRemark}
-                    onInput={(e) => onCustomRemarkChange((e.target as HTMLTextAreaElement).value)}
-                    style={{
-                      width: "100%",
-                      padding: "10px",
-                      border: "1px solid #ddd",
-                      borderRadius: "6px",
-                      fontSize: "14px",
-                      resize: "vertical",
-                      minHeight: "60px",
-                    }}
-                    rows={2}
-                  />
-                </div>
+                ))}
               </div>
-            </div>
-          )}
+            )}
+
+            {showRemarksPanel && (
+              <div className="remarks-panel">
+                {remarkCategories.map((cat, idx) => {
+                  const { accent, soft, icon } = getRemarkCategoryTheme(cat.name);
+                  return (
+                    <div
+                      key={idx}
+                      className="remark-category"
+                      style={{ "--remark-accent": accent, "--remark-accent-soft": soft } as any}
+                    >
+                      <div className="category-title">
+                        <span className="category-icon" aria-hidden="true">
+                          {icon}
+                        </span>
+                        <span className="category-name">{cat.name}</span>
+                      </div>
+                      <div className="remark-options-grid">
+                        {cat.options.map((opt) => {
+                          const isSelected = dineInRemarks.includes(opt);
+                          const [main, sub] = opt.split("/");
+                          return (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => onToggleRemark(opt)}
+                              className={`remark-option-btn ${isSelected ? "selected" : ""}`}
+                            >
+                              <span className="option-main">{main?.trim()}</span>
+                              {sub && <span className="option-sub">{sub.trim()}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {(() => {
+                  const { accent, soft, icon } = getRemarkCategoryTheme("自定义备注 / Custom");
+                  return (
+                    <div
+                      className="remark-category"
+                      style={{ "--remark-accent": accent, "--remark-accent-soft": soft } as any}
+                    >
+                      <div className="category-title">
+                        <span className="category-icon" aria-hidden="true">
+                          {icon}
+                        </span>
+                        <span className="category-name">自定义备注 / Custom</span>
+                      </div>
+                      <div className="remark-note-content">
+                        <textarea
+                          placeholder="其他特殊要求... / Other requests..."
+                          value={dineInCustomRemark}
+                          onInput={(e) => onCustomRemarkChange((e.target as HTMLTextAreaElement).value)}
+                          className="form-field form-textarea"
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </section>
         </div>
 
         <button className="cart-btn-dine" style={{ width: "100%", marginTop: "20px" }} onClick={onConfirm}>

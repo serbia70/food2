@@ -1,4 +1,5 @@
 import { matchesTableRef, parseTableRef, inferLegacySimpleHallNumber } from '../../lib/admin-table-ref';
+import { getRemarkCategoryTheme } from '../../lib/remark-ui-theme';
 import { getAdminHandler, getAdminRuntimeState, registerAdminGlobal, showAdminToast } from './globals';
 
 // 全局变量
@@ -385,117 +386,62 @@ function renderRemarksUI() {
   if (!container) return;
 
   const categories = remarkCategories.map((cat) => {
-      let headerColor = "#607d8b";
-      const n = cat.name;
-      let icon = "";
+    const theme = getRemarkCategoryTheme(cat.name);
 
-      if (n.includes("辣") || n.includes("Spiciness")) {
-        headerColor = "#ff7043";
-        icon = "🌶️";
-      } else if (n.includes("忌口") || n.includes("Exclusions")) {
-        headerColor = "#d32f2f";
-        icon = "🚫";
-      } else if (n.includes("健康") || n.includes("Healthy")) {
-        headerColor = "#4caf50";
-        icon = "🥬";
-      } else if (n.includes("过敏") || n.includes("Allergies")) {
-        headerColor = "#ffa726";
-        icon = "⚠️";
-      } else if (n.includes("修改") || n.includes("Modifications")) {
-        headerColor = "#2196f3";
-        icon = "⚙️";
+    const category = document.createElement('div');
+    category.className = 'remark-category';
+    category.style.setProperty('--remark-accent', theme.accent);
+    category.style.setProperty('--remark-accent-soft', theme.soft);
+
+    const title = document.createElement('div');
+    title.className = 'category-title';
+
+    const icon = document.createElement('span');
+    icon.className = 'category-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = theme.icon;
+
+    const name = document.createElement('span');
+    name.className = 'category-name';
+    name.textContent = cat.name;
+
+    title.append(icon, name);
+
+    const grid = document.createElement('div');
+    grid.className = 'remark-options-grid';
+
+    cat.options.forEach((opt) => {
+      const [mainText, subText] = String(opt).split('/');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'remark-option-btn';
+      button.dataset.value = String(opt);
+      button.addEventListener('click', () => toggleRemark(button));
+
+      const main = document.createElement('span');
+      main.className = 'option-main';
+      main.textContent = mainText || '';
+      button.appendChild(main);
+
+      if (subText) {
+        const sub = document.createElement('span');
+        sub.className = 'option-sub';
+        sub.textContent = subText;
+        button.appendChild(sub);
       }
 
-      const category = document.createElement('div');
-      category.className = 'remark-category';
-      category.style.marginBottom = '20px';
-
-      const title = document.createElement('div');
-      title.className = 'category-title';
-      setElementStyles(title, {
-        backgroundColor: headerColor,
-        color: 'white',
-        padding: '10px 15px',
-        borderRadius: '8px 8px 0 0',
-        fontWeight: 'bold',
-        fontSize: '15px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-      });
-      title.textContent = `${icon} ${cat.name}`.trim();
-
-      const grid = document.createElement('div');
-      grid.className = 'remark-options-grid';
-      setElementStyles(grid, {
-        border: `1px solid ${headerColor}`,
-        borderTop: 'none',
-        borderRadius: '0 0 8px 8px',
-        padding: '15px',
-        background: '#fff',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
-        gap: '10px',
-      });
-
-      cat.options.forEach((opt) => {
-        const [mainText, subText] = String(opt).split('/');
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'remark-option-btn';
-        button.dataset.value = String(opt);
-        button.addEventListener('click', () => toggleRemark(button, headerColor));
-        setElementStyles(button, {
-          minHeight: '45px',
-          border: '1px solid #e0e0e0',
-          backgroundColor: '#fff',
-          color: '#333',
-          borderRadius: '6px',
-          cursor: 'pointer',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '5px',
-          transition: 'all 0.2s',
-        });
-        button.appendChild(createTextElement('span', mainText || '', { fontSize: '14px' }));
-        if (subText) {
-          button.appendChild(createTextElement('span', subText, { fontSize: '11px', color: '#999' }));
-        }
-        grid.appendChild(button);
-      });
-
-      category.append(title, grid);
-      return category;
+      grid.appendChild(button);
     });
+
+    category.append(title, grid);
+    return category;
+  });
 
   container.replaceChildren(...categories);
 }
 
-export function toggleRemark(btn: HTMLElement, activeColor: string) {
+export function toggleRemark(btn: HTMLElement) {
   btn.classList.toggle("selected");
-  const isSelected = btn.classList.contains("selected");
-
-  if (isSelected) {
-    btn.style.borderColor = activeColor;
-    btn.style.backgroundColor = `${activeColor}15`;
-    btn.style.color = activeColor;
-    const sub = btn.querySelector("span:last-child") as HTMLElement;
-    if (sub && sub !== btn.querySelector("span:first-child"))
-      sub.style.color = activeColor;
-    const main = btn.querySelector("span:first-child") as HTMLElement;
-    if (main) main.style.fontWeight = "bold";
-  } else {
-    btn.style.borderColor = "#e0e0e0";
-    btn.style.backgroundColor = "#fff";
-    btn.style.color = "#333";
-    const sub = btn.querySelector("span:last-child") as HTMLElement;
-    if (sub && sub !== btn.querySelector("span:first-child"))
-      sub.style.color = "#999";
-    const main = btn.querySelector("span:first-child") as HTMLElement;
-    if (main) main.style.fontWeight = "normal";
-  }
 }
 
 export function closeRemarksModal() {

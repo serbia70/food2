@@ -179,9 +179,11 @@ const { categories } = Astro.props;
   <div class="modal-content" style="max-width:600px; max-height:90vh; display:flex; flex-direction:column;">
     <h3>🏷️ 添加备注 <span id="remarks-table-num"></span></h3>
 
-    <div style="flex:1; overflow-y:auto; margin-bottom:15px; padding-right:5px;" id="remarks-container">
-      <!-- JS injected categories -->
-    </div>
+    <section class="remark-ui" style="flex:1; overflow-y:auto; margin-bottom:15px; padding-right:5px;">
+      <div id="remarks-container">
+        <!-- JS injected categories -->
+      </div>
+    </section>
 
     <div style="border-top:1px solid #eee; padding-top:15px;">
       <div class="form-group">

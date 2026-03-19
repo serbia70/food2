@@ -1,3 +1,5 @@
+import { buildDineInBillingState } from './dine-in-billing.ts';
+
 type MasterShopInput = Record<string, any>;
 
 export type MasterShopView = {
@@ -17,6 +19,7 @@ export type MasterShopView = {
   billingLabel: string;
   expiryLabel: string;
   rowTone: string;
+  dineInRowTone: string;
   billingSeverity: number;
   expirySeverity: number;
   isDeliveryLocked: boolean;
@@ -29,6 +32,13 @@ export type MasterShopView = {
   balanceRsd: number;
   monthCommissionRsd: number;
   totalCommissionRsd: number;
+  dineInBillingStartAt: string;
+  dineInExpiresAt: string;
+  dineInGraceUntil: string;
+  dineInDisabledAt: string;
+  dineInStopReason: string;
+  dineInAlertLevel: string;
+  dineInStatusLabel: string;
   sortValueRevenue: number;
   sortValueOrders: number;
   sortValueBalance: number;
@@ -117,7 +127,7 @@ function resolveRowTone(expiryLabel: string, billingStatus: string): string {
   return 'normal';
 }
 
-export function buildMasterShopView(shop: MasterShopInput): MasterShopView {
+export function buildMasterShopView(shop: MasterShopInput, referenceDate?: string | Date): MasterShopView {
   const slug = String(shop?.slug || '').trim();
   const status = String(shop?.status || '').trim();
   const billingStatus = String(shop?.billing_status || '').trim();
@@ -130,7 +140,15 @@ export function buildMasterShopView(shop: MasterShopInput): MasterShopView {
   const fallbackExpiryLabel = resolveExpiryLabel(String(shop?.expire_date || ''));
   const billingLabel = resolveBillingLabel(billingStatus);
   const billingSeverity = resolveBillingSeverity(billingStatus);
-  const rowTone = resolveRowTone(fallbackExpiryLabel, billingStatus);
+  const walletRowTone = resolveRowTone(fallbackExpiryLabel, billingStatus);
+  const dineInBilling = buildDineInBillingState(shop, referenceDate);
+  const dineInDisabledAt = String(shop?.dine_in_disabled_at || '').trim();
+  const dineInStopReason = String(shop?.dine_in_stop_reason || '').trim();
+
+  let rowTone = walletRowTone;
+  if (rowTone === 'normal' && dineInBilling.rowTone === 'warning') rowTone = 'billing-warning';
+  if (rowTone === 'normal' && dineInBilling.rowTone === 'danger') rowTone = 'billing-overdue';
+  if (rowTone === 'normal' && dineInBilling.rowTone === 'muted') rowTone = 'expired';
 
   const displayStatus = readDisplayStatus(shop, resolveStatusLabel(status));
   const shopStateLabel = readDisplayShopState(shop, displayStatus);
@@ -153,6 +171,7 @@ export function buildMasterShopView(shop: MasterShopInput): MasterShopView {
     billingLabel: readDisplayBillingStatus(shop, billingLabel),
     expiryLabel: readDisplayExpiryStatus(shop, fallbackExpiryLabel),
     rowTone,
+    dineInRowTone: dineInBilling.rowTone,
     billingSeverity,
     expirySeverity: resolveExpirySeverity(fallbackExpiryLabel),
     isDeliveryLocked: Boolean(shop?.delivery_locked),
@@ -165,6 +184,13 @@ export function buildMasterShopView(shop: MasterShopInput): MasterShopView {
     balanceRsd: toNumber(shop?.billing_balance_rsd),
     monthCommissionRsd: toNumber(shop?.commission_month_rsd),
     totalCommissionRsd: toNumber(shop?.commission_total_rsd),
+    dineInBillingStartAt: dineInBilling.billingStartAt,
+    dineInExpiresAt: dineInBilling.expiresAt,
+    dineInGraceUntil: dineInBilling.graceUntil,
+    dineInDisabledAt,
+    dineInStopReason,
+    dineInAlertLevel: dineInBilling.alertLevel,
+    dineInStatusLabel: dineInBilling.statusLabel,
     sortValueRevenue: toNumber(shop?.today_revenue),
     sortValueOrders: toNumber(shop?.today_order_count),
     sortValueBalance: toNumber(shop?.billing_balance_rsd),

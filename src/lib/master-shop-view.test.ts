@@ -158,3 +158,94 @@ test('保留真实营业开关字段供编辑弹窗回填', () => {
   assert.equal(view.enableDineIn, true);
   assert.equal(view.enableReservation, false);
 });
+
+test('堂食账单字段应透传到主控店铺视图并保留钱包字段', () => {
+  const view = buildMasterShopView(
+    {
+      id: 21,
+      name: 'DineIn Shop',
+      slug: 'dinein-shop',
+      status: 'active',
+      billing_status: 'active',
+      billing_balance_rsd: 4200,
+      expire_date: '2099-12-31',
+      dine_in_billing_start_at: '2027-02-01',
+      dine_in_expires_at: '2027-03-01',
+      dine_in_grace_until: '2027-03-06',
+      dine_in_disabled_at: '2027-03-07',
+      dine_in_stop_reason: 'manual',
+      enable_dine_in: 1,
+    },
+    '2027-02-20',
+  );
+
+  assert.equal(view.billingLabel, '正常');
+  assert.equal(view.billingSeverity, 1);
+  assert.equal(view.balanceRsd, 4200);
+  assert.equal(view.rowTone, 'normal');
+
+  assert.equal(view.dineInBillingStartAt, '2027-02-01');
+  assert.equal(view.dineInExpiresAt, '2027-03-01');
+  assert.equal(view.dineInGraceUntil, '2027-03-06');
+  assert.equal(view.dineInDisabledAt, '2027-03-07');
+  assert.equal(view.dineInStopReason, 'manual');
+  assert.equal(view.dineInAlertLevel, 'normal');
+  assert.equal(view.dineInStatusLabel, '正常');
+  assert.equal(view.dineInRowTone, 'normal');
+});
+
+test('堂食预警门店应映射 warning 行风险色', () => {
+  const view = buildMasterShopView(
+    {
+      name: 'DineIn Warning',
+      slug: 'dinein-warning',
+      billing_status: 'active',
+      enable_dine_in: 1,
+      dine_in_expires_at: '2027-03-01',
+      dine_in_grace_until: '2027-03-06',
+    },
+    '2027-02-24',
+  );
+
+  assert.equal(view.rowTone, 'billing-warning');
+  assert.equal(view.dineInAlertLevel, 'warning');
+  assert.equal(view.dineInStatusLabel, '即将到期');
+  assert.equal(view.dineInRowTone, 'warning');
+});
+
+test('堂食逾期门店应映射 danger 行风险色', () => {
+  const view = buildMasterShopView(
+    {
+      name: 'DineIn Overdue',
+      slug: 'dinein-overdue',
+      billing_status: 'active',
+      enable_dine_in: 1,
+      dine_in_expires_at: '2027-03-01',
+      dine_in_grace_until: '2027-03-06',
+    },
+    '2027-03-03',
+  );
+
+  assert.equal(view.rowTone, 'billing-overdue');
+  assert.equal(view.dineInAlertLevel, 'overdue');
+  assert.equal(view.dineInStatusLabel, '已逾期');
+  assert.equal(view.dineInRowTone, 'danger');
+});
+
+test('堂食字段缺失时仍兼容 legacy expire_date 回退', () => {
+  const view = buildMasterShopView(
+    {
+      name: 'Legacy Expire Shop',
+      slug: 'legacy-expire-shop',
+      billing_status: 'active',
+      enable_dine_in: 1,
+      expire_date: '2027-03-01',
+    },
+    '2027-02-24',
+  );
+
+  assert.equal(view.dineInExpiresAt, '2027-03-01');
+  assert.equal(view.dineInStatusLabel, '即将到期');
+  assert.equal(view.dineInAlertLevel, 'warning');
+  assert.equal(view.dineInRowTone, 'warning');
+});

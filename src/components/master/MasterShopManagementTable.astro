@@ -24,6 +24,18 @@ function expiryTagClass(label: string) {
   if (label === '即将到期') return 'tag-expiring';
   return 'tag-normal';
 }
+
+function fmtDate(value: string) {
+  const raw = String(value || '').trim();
+  return raw || '--';
+}
+
+function dineInBadgeClass(level: string) {
+  if (level === 'overdue') return 'badge-billing badge-billing-overdue';
+  if (level === 'warning') return 'badge-billing badge-billing-warning';
+  if (level === 'auto_closed' || level === 'stopped' || level === 'disabled_unknown') return 'badge-billing badge-billing-muted';
+  return 'badge-billing badge-billing-ok';
+}
 ---
 
 <section class="table-card">
@@ -65,7 +77,7 @@ function expiryTagClass(label: string) {
         <option value="revenue_desc">营业额从高到低</option>
         <option value="orders_desc">订单数从高到低</option>
         <option value="balance_desc">余额从高到低</option>
-        <option value="billing_desc">账单风险优先</option>
+        <option value="billing_desc">风险优先</option>
       </select>
     </label>
   </div>
@@ -77,6 +89,7 @@ function expiryTagClass(label: string) {
           <th>店铺</th>
           <th>门店状态</th>
           <th>余额</th>
+          <th>堂食订阅</th>
           <th>今日数据 (外卖/堂食)</th>
           <th>提成累计</th>
           <th>操作</th>
@@ -112,6 +125,13 @@ function expiryTagClass(label: string) {
             <td>
               <div class="billing-cell">
                 <div class="balance-text">{fmt(shop.balanceRsd)} RSD</div>
+              </div>
+            </td>
+            <td>
+              <div class="dine-in-sub-cell">
+                <span class={dineInBadgeClass(shop.dineInAlertLevel)}>{shop.dineInStatusLabel}</span>
+                <div class="state-subtext">到期：{fmtDate(shop.dineInExpiresAt)}</div>
+                <div class="state-subtext">宽限：{fmtDate(shop.dineInGraceUntil)}</div>
               </div>
             </td>
             <td>

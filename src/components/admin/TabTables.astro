@@ -219,7 +219,17 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
               try {
                 const r = JSON.parse(o.remarks_json || '[]');
                 if (Array.isArray(r) && r.length > 0) {
-                  return <div style="color:#e65100; background:#fff3e0; padding:5px; border-radius:4px; margin-top:5px; font-size:13px;"><strong>🏷️ 备注:</strong> {r.join(', ')}</div>;
+                  return (
+                    <section class="remark-ui">
+                      <div class="remark-category">
+                        <div class="category-title">
+                          <span class="category-icon" aria-hidden="true">🏷️</span>
+                          <span class="category-name">备注</span>
+                        </div>
+                        <div class="remark-note-content">{r.join(', ')}</div>
+                      </div>
+                    </section>
+                  );
                 }
               } catch(e) {}
               return null;

@@ -682,7 +682,7 @@ export default function ReservationModal({ restaurantId, onClose, requiresPreOrd
             <div className="remark-category">
               <div className="category-title">
                 <span className="category-icon" aria-hidden="true">🏷️</span>
-                <span className="category-name">备注</span>
+                <span className="category-name">备注 (可选) / Napomena (opciono)</span>
               </div>
               <div className="remark-note-content">
                 <textarea

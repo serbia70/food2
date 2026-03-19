@@ -1,0 +1,65 @@
+---
+---
+
+<div id="master-shop-dinein-panel" class="side-shell" hidden>
+  <div class="side-backdrop" data-close-shop-dinein></div>
+  <aside class="side-panel">
+    <div class="side-head">
+      <div>
+        <div class="side-title">堂食订阅管理</div>
+        <div class="side-subtitle">查看当前堂食账单状态并执行续费 / 停用 / 恢复</div>
+      </div>
+      <button type="button" class="side-close" data-close-shop-dinein>×</button>
+    </div>
+
+    <form
+      id="master-shop-dinein-form"
+      class="side-form"
+      onsubmit="return window.submitMasterShopDineIn ? window.submitMasterShopDineIn(this, event) : false;"
+    >
+      <input type="hidden" name="shopId" />
+
+      <label><span>当前状态</span><input name="dineInStatusLabel" type="text" readonly /></label>
+      <label><span>计费开始</span><input name="dineInBillingStartAt" type="text" readonly /></label>
+      <label><span>到期日期</span><input name="dineInExpiresAt" type="text" readonly /></label>
+      <label><span>宽限截止</span><input name="dineInGraceUntil" type="text" readonly /></label>
+      <label><span>当前开关</span><input name="enableDineIn" type="text" readonly /></label>
+
+      <label>
+        <span>自定义到期日 (YYYY-MM-DD)</span>
+        <input name="expiresAt" type="date" />
+      </label>
+
+      <div class="side-actions side-actions-grid">
+        <button type="submit" class="side-submit" name="action" value="extend_one_year">延长一年</button>
+        <button type="submit" class="side-submit side-submit-alt" name="action" value="set_expiry">设置到期</button>
+        <button type="submit" class="side-submit side-submit-danger" name="action" value="manual_stop">手动停用</button>
+        <button type="submit" class="side-submit side-submit-safe" name="action" value="restore">恢复堂食</button>
+      </div>
+
+      <div id="master-shop-dinein-feedback" class="side-feedback">请选择操作后提交。</div>
+    </form>
+  </aside>
+</div>
+
+<style>
+  .side-shell[hidden] { display: none; }
+  .side-shell { position: fixed; inset: 0; z-index: 95; }
+  .side-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.42); }
+  .side-panel { position: absolute; top: 0; right: 0; width: min(520px, 100%); height: 100%; background: #fff; box-shadow: -18px 0 50px rgba(15, 23, 42, 0.16); display: flex; flex-direction: column; }
+  .side-head { padding: 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; gap: 12px; }
+  .side-title { font-size: 22px; font-weight: 900; color: #0f172a; }
+  .side-subtitle { margin-top: 4px; color: #64748b; font-size: 13px; }
+  .side-close { border: none; background: #f8fafc; color: #334155; width: 36px; height: 36px; border-radius: 10px; cursor: pointer; font-size: 22px; }
+  .side-form { padding: 18px 20px 28px; overflow-y: auto; display: grid; gap: 12px; }
+  .side-form label { display: grid; gap: 6px; }
+  .side-form span { font-size: 12px; font-weight: 700; color: #475569; }
+  .side-form input { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fff; }
+  .side-actions { margin-top: 6px; display: grid; gap: 8px; }
+  .side-actions-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .side-submit { border: none; background: #0f172a; color: #fff; padding: 12px 14px; border-radius: 12px; cursor: pointer; font-weight: 800; }
+  .side-submit-alt { background: #0f766e; }
+  .side-submit-danger { background: #b91c1c; }
+  .side-submit-safe { background: #065f46; }
+  .side-feedback { font-size: 12px; color: #64748b; }
+</style>

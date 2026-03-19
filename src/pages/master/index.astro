@@ -16,6 +16,7 @@ import MasterDangerConfirm from '../../components/master/MasterDangerConfirm.ast
 import MasterShopEditPanel from '../../components/master/MasterShopEditPanel.astro';
 import MasterShopManagementTable from '../../components/master/MasterShopManagementTable.astro';
 import MasterShopTopupPanel from '../../components/master/MasterShopTopupPanel.astro';
+import MasterShopDineInPanel from '../../components/master/MasterShopDineInPanel.astro';
 import MasterWechatSettingsCard from '../../components/master/MasterWechatSettingsCard.astro';
 import { MASTER_TOKEN } from '../../config';
 import { normalizeMasterTab } from '../../lib/master-active-tab';
@@ -1110,6 +1111,10 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
         if (shopId) openShopTopupPanel(shopId);
       };
 
+      window.openMasterShopDineIn = function (shopId) {
+        if (shopId) openShopDineInPanel(shopId);
+      };
+
       window.openMasterStorefront = function (path) {
         if (path) openMasterLink(path);
       };
@@ -1234,6 +1239,27 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
         panel.hidden = false;
       }
 
+      function openShopDineInPanel(shopId) {
+        const shop = findMasterShopById(shopId);
+        const panel = document.getElementById('master-shop-dinein-panel');
+        const form = document.getElementById('master-shop-dinein-form');
+        const feedback = document.getElementById('master-shop-dinein-feedback');
+        if (!(panel instanceof HTMLElement) || !(form instanceof HTMLFormElement) || !shop) return;
+
+        form.elements.shopId.value = String(shop.id || '');
+        form.elements.dineInStatusLabel.value = String(shop.dineInStatusLabel || '--');
+        form.elements.dineInBillingStartAt.value = String(shop.dineInBillingStartAt || '--');
+        form.elements.dineInExpiresAt.value = String(shop.dineInExpiresAt || '--');
+        form.elements.dineInGraceUntil.value = String(shop.dineInGraceUntil || '--');
+        form.elements.enableDineIn.value = shop.enableDineIn ? '已启用' : '已停用';
+        form.elements.expiresAt.value = '';
+
+        if (feedback instanceof HTMLElement) {
+          feedback.textContent = '请选择要执行的堂食订阅操作。';
+        }
+        panel.hidden = false;
+      }
+
       async function handleShopEdit(form) {
         const feedback = document.getElementById('master-shop-edit-feedback');
         const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
@@ -1339,6 +1365,62 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
 
       window.submitMasterShopTopup = function (form) {
         handleShopTopup(form);
+        return false;
+      };
+
+      window.submitMasterShopDineIn = async function (form, event) {
+        const feedback = document.getElementById('master-shop-dinein-feedback');
+        const submitBtn = event && event.submitter instanceof HTMLButtonElement ? event.submitter : null;
+        if (!(form instanceof HTMLFormElement) || !(feedback instanceof HTMLElement) || !submitBtn) return false;
+
+        const formData = new FormData(form);
+        const payload = {
+          id: Number(formData.get('shopId') || 0),
+          action: String(submitBtn.value || '').trim(),
+          expiresAt: String(formData.get('expiresAt') || '').trim(),
+        };
+
+        if (!payload.id || !payload.action) {
+          feedback.textContent = '缺少店铺或操作参数';
+          return false;
+        }
+        if (payload.action === 'set_expiry' && !payload.expiresAt) {
+          feedback.textContent = '请先选择到期日期';
+          return false;
+        }
+
+        const originalText = submitBtn.textContent || '提交';
+        submitBtn.disabled = true;
+        feedback.textContent = '提交中...';
+
+        try {
+          const res = await fetch('/api/master/shop-renew', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (isUnauthorizedResponse(res, data)) {
+            await handleMasterUnauthorized();
+            return false;
+          }
+          if (!res.ok || (data && data.success === false)) {
+            feedback.textContent = (data && data.error) || '堂食订阅操作失败';
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+            return false;
+          }
+
+          const panel = document.getElementById('master-shop-dinein-panel');
+          if (panel instanceof HTMLElement) panel.hidden = true;
+          alert('堂食订阅操作成功，页面将刷新');
+          window.location.reload();
+        } catch {
+          feedback.textContent = '堂食订阅操作失败，请稍后重试';
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
+
         return false;
       };
 
@@ -1548,6 +1630,11 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
           const panel = document.getElementById('master-shop-topup-panel');
           if (panel) panel.hidden = true;
         }
+
+        if (target.closest('[data-close-shop-dinein]')) {
+          const panel = document.getElementById('master-shop-dinein-panel');
+          if (panel) panel.hidden = true;
+        }
       });
 
       document.addEventListener('DOMContentLoaded', () => {
@@ -1701,6 +1788,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
       ) : null}
     </main>\n    <MasterShopEditPanel />
     <MasterShopTopupPanel />
+    <MasterShopDineInPanel />
     <MasterDangerConfirm />
   </body>
 </html>

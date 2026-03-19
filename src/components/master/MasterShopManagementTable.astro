@@ -8,6 +8,7 @@ const fmt = (value: number) => Number(value || 0).toLocaleString('zh-CN');
 function toneClass(tone: string) {
   if (tone === 'billing-overdue') return 'row-billing-overdue';
   if (tone === 'billing-warning') return 'row-billing-warning';
+  if (tone === 'dine-in-closed') return 'row-dine-in-closed';
   if (tone === 'expired') return 'row-expired';
   if (tone === 'expiring') return 'row-expiring';
   return '';
@@ -158,6 +159,7 @@ function dineInBadgeClass(level: string) {
               <div class="action-btns">
                 <button type="button" class="btn-sm btn-light" onclick={`window.openMasterShopEdit(${Number(shop.id || 0)})`}>编辑</button>
                 <button type="button" class="btn-sm btn-light" onclick={`window.openMasterShopTopup(${Number(shop.id || 0)})`}>充值</button>
+                <button type="button" class="btn-sm btn-light" onclick={`window.openMasterShopDineIn(${Number(shop.id || 0)})`}>堂食订阅</button>
                 <button type="button" class="btn-sm btn-dark" onclick={`window.impersonateMasterShop(${Number(shop.id || 0)})`}>后台</button>
                 <button type="button" class="btn-sm btn-light" onclick={`window.openMasterStorefront(${JSON.stringify(shop.copyStorefrontPath)})`}>打开前台</button>
                 <button type="button" class="btn-sm btn-danger" onclick={`window.deleteMasterShop(${Number(shop.id || 0)}, ${JSON.stringify(shop.name)})`}>删除</button>
@@ -327,6 +329,26 @@ function dineInBadgeClass(level: string) {
     font-weight: 800;
   }
 
+  .badge-billing-ok {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .badge-billing-warning {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .badge-billing-overdue {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .badge-billing-muted {
+    background: #e2e8f0;
+    color: #475569;
+  }
+
   .badge-status {
     background: #e0f2fe;
     color: #075985;
@@ -377,6 +399,7 @@ function dineInBadgeClass(level: string) {
 
   .row-expired { background: #fff5f5; }
   .row-expiring { background: #fffaf0; }
+  .row-dine-in-closed { background: #f1f5f9; }
   .row-billing-warning { box-shadow: inset 4px 0 0 #f59e0b; }
   .row-billing-overdue { background: #fff1f2; box-shadow: inset 4px 0 0 #dc2626; }
 

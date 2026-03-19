@@ -25,9 +25,9 @@ export default function CartDineInRemarksPanel({
   onCustomRemarkChange,
 }: CartDineInRemarksPanelProps) {
   return (
-    <div className="cart-remarks-section">
-      <div className="cart-remarks-toggle" onClick={onTogglePanel}>
-        <span>🏷️ Ukus / 口味备注 (选填)</span>
+    <div className="delivery-remarks-section">
+      <div className="remarks-toggle" onClick={onTogglePanel}>
+        <span className="toggle-title">🏷️ 口味备注 (选填)</span>
         <span className="toggle-icon">{showRemarksPanel ? "收起 ▲" : "展开选择 ▼"}</span>
       </div>
 

@@ -454,121 +454,123 @@ export default function CartModal({
             {/* ===== Step 1: 购物车清单 - 图4 ===== */}
             {step === 1 && (
               <>
-                <div className="modal-content">
-                  <div className="cart-list">
-                    {itemsArray.map((item) => (
-                      <div key={item.id} className="cart-item-card">
-                        <img
-                          src={item.img || item.image}
-                          alt={item.name}
-                          className="cart-item-img"
-                        />
+                <div className="cart-scroll-body">
+                  <div className="modal-content">
+                    <div className="cart-list">
+                      {itemsArray.map((item) => (
+                        <div key={item.id} className="cart-item-card">
+                          <img
+                            src={item.img || item.image}
+                            alt={item.name}
+                            className="cart-item-img"
+                          />
 
-                        <div className="cart-item-details">
-                          <div className="cart-item-name">{item.name}</div>
-                          <div className="cart-item-desc">{item.subName}</div>
-                          <div className="cart-item-price">
-                            {item.price} RSD
+                          <div className="cart-item-details">
+                            <div className="cart-item-name">{item.name}</div>
+                            <div className="cart-item-desc">{item.subName}</div>
+                            <div className="cart-item-price">
+                              {item.price} RSD
+                            </div>
+
+                            <div className="cart-qty-bar">
+                              <button
+                                className="qty-minus"
+                                onClick={() => removeOne(item.id)}
+                              >
+                                −
+                              </button>
+                              <span className="qty-value">{item.quantity}</span>
+                              <button
+                                className="qty-plus"
+                                onClick={() => addToCart(item)}
+                              >
+                                +
+                              </button>
+                            </div>
                           </div>
 
-                          <div className="cart-qty-bar">
-                            <button
-                              className="qty-minus"
-                              onClick={() => removeOne(item.id)}
-                            >
-                              −
-                            </button>
-                            <span className="qty-value">{item.quantity}</span>
-                            <button
-                              className="qty-plus"
-                              onClick={() => addToCart(item)}
-                            >
-                              +
-                            </button>
-                          </div>
+                          <button
+                            className="cart-item-remove"
+                            onClick={() => {
+                              // 删除整个商品
+                              for (let i = 0; i < item.quantity; i++)
+                                removeOne(item.id);
+                            }}
+                          >
+                            ×
+                          </button>
                         </div>
+                      ))}
 
-                        <button
-                          className="cart-item-remove"
-                          onClick={() => {
-                            // 删除整个商品
-                            for (let i = 0; i < item.quantity; i++)
-                              removeOne(item.id);
-                          }}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-
-                    {$total.count === 0 && (
-                      <div className="cart-empty">
-                        <p>🛒 Korpa je prazna / 购物车是空的</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 底部 - 图4样式 (蓝色堂食/橙色外卖) */}
-                <div className="cart-summary">
-                  <div className="cart-total-row">
-                    <span>Ukupno / 总计:</span>
-                    <span className="cart-total-val">
-                      {$total.price.toLocaleString()} <small>RSD</small>
-                    </span>
-                  </div>
-
-                  {/* 打烊提示 */}
-                  {!isShopOpen && (
-                    <div className="shop-closed-banner">
-                      🚫 Zatvoreno / 店铺已打烊
-                      <br />
-                      <span>
-                        Radno vreme / 营业时间: {openTime} - {closeTime}
-                      </span>
+                      {$total.count === 0 && (
+                        <div className="cart-empty">
+                          <p>🛒 Korpa je prazna / 购物车是空的</p>
+                        </div>
+                      )}
                     </div>
-                  )}
 
-                  {/* 堂食备注选择（已有桌号时显示） */}
-                  {enableDineIn && !deliveryMode && tableNumber && (
-                    <CartDineInRemarksPanel
-                      showRemarksPanel={showRemarksPanel}
-                      dineInRemarks={dineInRemarks}
-                      dineInCustomRemark={dineInCustomRemark}
-                      remarkCategories={remarkCategories}
-                      onTogglePanel={() => remarkDispatch({ type: "toggle_dine_panel" })}
-                      onToggleRemark={toggleRemark}
-                      onCustomRemarkChange={(value) =>
-                        remarkDispatch({
-                          type: "set_dine_custom",
-                          payload: value,
-                        })
-                      }
-                    />
-                  )}
+                    {/* 底部 - 图4样式 (蓝色堂食/橙色外卖) */}
+                    <div className="cart-summary">
+                      <div className="cart-total-row">
+                        <span>Ukupno / 总计:</span>
+                        <span className="cart-total-val">
+                          {$total.price.toLocaleString()} <small>RSD</small>
+                        </span>
+                      </div>
 
-                  <CartModeActions
-                    enableDineIn={enableDineIn}
-                    enableDelivery={enableDelivery}
-                    deliveryMode={deliveryMode}
-                    tableNumber={tableNumber}
-                    isTableLocked={isTableLocked}
-                    dineInRemarks={dineInRemarks}
-                    totalCount={$total.count}
-                    isShopOpen={isShopOpen}
-                    isDeliveryLocked={isDeliveryLocked}
-                    deliveryLockReason={deliveryLockReason}
-                    onSubmitOrder={submitOrder}
-                    onOpenTableModal={() => {
-                      setIsOpen(false);
-                      setTimeout(() => openTableModal(), 100);
-                    }}
-                    onStartDelivery={() => {
-                      setDeliveryTimeMode("asap");
-                      setReservationTime("");
-                      setStep(2);
-                    }}
-                  />
+                      {/* 打烊提示 */}
+                      {!isShopOpen && (
+                        <div className="shop-closed-banner">
+                          🚫 Zatvoreno / 店铺已打烊
+                          <br />
+                          <span>
+                            Radno vreme / 营业时间: {openTime} - {closeTime}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* 堂食备注选择（已有桌号时显示） */}
+                      {enableDineIn && !deliveryMode && tableNumber && (
+                        <CartDineInRemarksPanel
+                          showRemarksPanel={showRemarksPanel}
+                          dineInRemarks={dineInRemarks}
+                          dineInCustomRemark={dineInCustomRemark}
+                          remarkCategories={remarkCategories}
+                          onTogglePanel={() => remarkDispatch({ type: "toggle_dine_panel" })}
+                          onToggleRemark={toggleRemark}
+                          onCustomRemarkChange={(value) =>
+                            remarkDispatch({
+                              type: "set_dine_custom",
+                              payload: value,
+                            })
+                          }
+                        />
+                      )}
+
+                      <CartModeActions
+                        enableDineIn={enableDineIn}
+                        enableDelivery={enableDelivery}
+                        deliveryMode={deliveryMode}
+                        tableNumber={tableNumber}
+                        isTableLocked={isTableLocked}
+                        dineInRemarks={dineInRemarks}
+                        totalCount={$total.count}
+                        isShopOpen={isShopOpen}
+                        isDeliveryLocked={isDeliveryLocked}
+                        deliveryLockReason={deliveryLockReason}
+                        onSubmitOrder={submitOrder}
+                        onOpenTableModal={() => {
+                          setIsOpen(false);
+                          setTimeout(() => openTableModal(), 100);
+                        }}
+                        onStartDelivery={() => {
+                          setDeliveryTimeMode("asap");
+                          setReservationTime("");
+                          setStep(2);
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </>
             )}

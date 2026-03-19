@@ -94,7 +94,10 @@
       "Bash(node:*)",
       "Bash(cd:*)",
       "Bash(find:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(echo \"merge-base HEAD..food2: $?\")",
+      "Bash(echo \"merge-base food2..main: $?\")",
+      "Bash(npx tsc:*)"
     ]
   }
 }

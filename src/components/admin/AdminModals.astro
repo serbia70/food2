@@ -176,16 +176,16 @@ const { categories } = Astro.props;
 
 <!-- 备注弹窗 (Remarks Modal) -->
 <div id="remarks-modal" class="modal" style="display:none;">
-  <div class="modal-content" style="max-width:600px; max-height:90vh; display:flex; flex-direction:column;">
+  <div class="modal-content" style="max-width:600px; min-height:0; max-height:90vh; display:flex; flex-direction:column; overflow:hidden;">
     <h3>🏷️ 添加备注 <span id="remarks-table-num"></span></h3>
 
-    <section class="remark-ui" style="flex:1; overflow-y:auto; margin-bottom:15px; padding-right:5px;">
+    <section class="remark-ui" style="flex:1; min-height:0; overflow-y:auto; margin-bottom:15px; padding-right:5px;">
       <div id="remarks-container">
         <!-- JS injected categories -->
       </div>
     </section>
 
-    <div style="border-top:1px solid #eee; padding-top:15px;">
+    <div style="border-top:1px solid #eee; padding-top:15px; flex-shrink:0;">
       <div class="form-group">
         <label>自定义备注 (Custom Remark)</label>
         <input id="custom-remarks" placeholder="输入其他要求..." />

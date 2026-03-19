@@ -47,8 +47,8 @@ test('red state lasts through grace day and auto-closes the next day', () => {
   assert.equal(autoClosed.statusLabel, '已自动关闭');
 });
 
-test('manual stop overrides date reminders', () => {
-  const state = buildDineInBillingState(
+test('manual stop applies only when dine-in is disabled', () => {
+  const stopped = buildDineInBillingState(
     {
       enable_dine_in: 0,
       dine_in_stop_reason: 'manual',
@@ -57,8 +57,21 @@ test('manual stop overrides date reminders', () => {
     '2027-02-24',
   );
 
-  assert.equal(state.alertLevel, 'stopped');
-  assert.equal(state.statusLabel, '已停用');
+  const staleManualButEnabled = buildDineInBillingState(
+    {
+      enable_dine_in: 1,
+      dine_in_stop_reason: 'manual',
+      dine_in_expires_at: '2027-03-01',
+      dine_in_grace_until: '2027-03-06',
+    },
+    '2027-02-24',
+  );
+
+  assert.equal(stopped.alertLevel, 'stopped');
+  assert.equal(stopped.statusLabel, '已停用');
+
+  assert.equal(staleManualButEnabled.alertLevel, 'warning');
+  assert.equal(staleManualButEnabled.statusLabel, '即将到期');
 });
 
 test('legacy expire_date still works as fallback', () => {

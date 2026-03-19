@@ -129,7 +129,7 @@ export function buildDineInBillingState(shop: Record<string, any>, referenceDate
 
   let alertLevel: AlertLevel = 'normal';
 
-  if (isManualStop(shop)) {
+  if (!isDineInEnabled(shop) && isManualStop(shop)) {
     alertLevel = 'stopped';
   } else if (!isDineInEnabled(shop)) {
     const reason = String(shop?.dine_in_stop_reason || '').trim().toLowerCase();

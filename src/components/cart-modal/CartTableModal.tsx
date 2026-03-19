@@ -164,8 +164,8 @@ export default function CartTableModal({
         </div>
 
         <div className="dine-remarks-section">
-          <div className="remarks-toggle" onClick={onTogglePanel} style={{ padding: "15px 20px" }}>
-            <span className="toggle-title" style={{ fontSize: "16px" }}>
+          <div className="remarks-toggle" onClick={onTogglePanel}>
+            <span className="toggle-title">
               🏷️ Ukus / 口味备注 (选填)
             </span>
             <span className="toggle-icon">{showRemarksPanel ? "收起 ▲" : "展开选择 ▼"}</span>

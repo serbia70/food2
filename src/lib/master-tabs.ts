@@ -1,7 +1,11 @@
+import { normalizeMasterTab } from './master-active-tab.ts';
+
 export function resolveMasterPanels(activeTab: string) {
+  const tab = normalizeMasterTab(activeTab);
   return {
-    management: activeTab !== 'management',
-    overview: activeTab === 'overview' ? false : true,
-    settings: activeTab !== 'settings',
+    shops: tab !== 'shops',
+    overview: tab !== 'overview',
+    settings: tab !== 'settings',
+    backup: tab !== 'backup',
   };
 }

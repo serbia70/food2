@@ -1,6 +1,23 @@
 import { buildDineInBillingState } from './dine-in-billing.ts';
+import { buildOrderChannelFeePlan, type OrderChannelFeePlan } from './order-channel-fees-view.ts';
 
-type MasterShopInput = Record<string, any>;
+type MasterShopInput = Record<string, unknown>;
+
+type MasterShopPlanDefaults = {
+  enabled?: unknown;
+  commissionType?: unknown;
+  commissionValue?: unknown;
+};
+
+type MasterShopViewDefaults = {
+  reservationPlan?: MasterShopPlanDefaults;
+  deliveryPlan?: MasterShopPlanDefaults;
+};
+
+type MasterShopViewOptions = {
+  referenceDate?: string | Date;
+  defaults?: MasterShopViewDefaults;
+};
 
 export type MasterShopView = {
   id: number;
@@ -10,6 +27,8 @@ export type MasterShopView = {
   billingPlanType: string;
   commissionType: string;
   commissionValue: number;
+  reservationPlan: OrderChannelFeePlan;
+  deliveryPlan: OrderChannelFeePlan;
   enableDelivery: boolean;
   enableDineIn: boolean;
   enableReservation: boolean;
@@ -35,8 +54,6 @@ export type MasterShopView = {
   dineInBillingStartAt: string;
   dineInExpiresAt: string;
   dineInGraceUntil: string;
-  dineInDisabledAt: string;
-  dineInStopReason: string;
   dineInAlertLevel: string;
   dineInStatusLabel: string;
   sortValueRevenue: number;
@@ -46,9 +63,22 @@ export type MasterShopView = {
   copyAdminPath: string;
 };
 
-function toNumber(value: any): number {
+function toNumber(value: unknown): number {
   const n = Number(value || 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+function hasValue(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  return true;
+}
+
+function firstValue(...values: unknown[]): unknown {
+  for (const value of values) {
+    if (hasValue(value)) return value;
+  }
+  return undefined;
 }
 
 function resolveStatusLabel(status: string): string {
@@ -127,28 +157,116 @@ function resolveRowTone(expiryLabel: string, billingStatus: string): string {
   return 'normal';
 }
 
-export function buildMasterShopView(shop: MasterShopInput, referenceDate?: string | Date): MasterShopView {
+function buildReservationPlan(shop: MasterShopInput, defaults?: MasterShopViewDefaults): OrderChannelFeePlan {
+  const defaultPlan = defaults?.reservationPlan || {};
+  return buildOrderChannelFeePlan({
+    channel: 'reservation',
+    scope: 'shop',
+    enabled: firstValue(shop?.reservation_enabled, shop?.enableReservation),
+    commissionType: firstValue(
+      shop?.reservation_commission_type,
+      shop?.subscriptionDeliveryCommissionType,
+      shop?.subscription_delivery_commission_type,
+    ),
+    commissionValue: firstValue(
+      shop?.reservation_commission_value,
+      shop?.subscriptionDeliveryCommissionValue,
+      shop?.subscriptionFeeRsd,
+      shop?.subscription_delivery_commission_value,
+    ),
+    legacyEnabled: firstValue(shop?.enable_reservation, shop?.subscription_enabled),
+    legacyCommissionType: firstValue(shop?.subscriptionDeliveryCommissionType, shop?.subscription_delivery_commission_type),
+    legacyCommissionValue: firstValue(shop?.subscriptionDeliveryCommissionValue, shop?.subscription_delivery_commission_value),
+    defaultEnabled: defaultPlan.enabled ?? true,
+    defaultCommissionType: defaultPlan.commissionType ?? 'percentage',
+    defaultCommissionValue: defaultPlan.commissionValue ?? 3,
+  });
+}
+
+function buildDeliveryPlan(shop: MasterShopInput, defaults?: MasterShopViewDefaults): OrderChannelFeePlan {
+  const defaultPlan = defaults?.deliveryPlan || {};
+  const commissionMode = String(shop?.commission_mode || '').trim().toLowerCase();
+  const overrideCommissionType =
+    commissionMode === 'override'
+      ? firstValue(shop?.commission_override_type, shop?.commission_type)
+      : undefined;
+  const overrideCommissionValue =
+    commissionMode === 'override'
+      ? firstValue(shop?.commission_override_value, shop?.commission_value)
+      : undefined;
+
+  return buildOrderChannelFeePlan({
+    channel: 'delivery',
+    scope: 'shop',
+    enabled: firstValue(shop?.delivery_enabled, shop?.enableDelivery),
+    commissionType: firstValue(
+      shop?.delivery_commission_type,
+      shop?.businessDeliveryCommissionType,
+      shop?.business_delivery_commission_type,
+      overrideCommissionType,
+    ),
+    commissionValue: firstValue(
+      shop?.delivery_commission_value,
+      shop?.businessDeliveryCommissionValue,
+      overrideCommissionValue,
+      shop?.businessFeeRsd,
+      shop?.business_delivery_commission_value,
+    ),
+    legacyEnabled: firstValue(shop?.enable_delivery, shop?.business_enabled),
+    legacyCommissionType: firstValue(shop?.businessDeliveryCommissionType, shop?.business_delivery_commission_type),
+    legacyCommissionValue: firstValue(shop?.businessDeliveryCommissionValue, shop?.business_delivery_commission_value),
+    defaultEnabled: defaultPlan.enabled ?? true,
+    defaultCommissionType: defaultPlan.commissionType ?? 'percentage',
+    defaultCommissionValue: defaultPlan.commissionValue ?? 5,
+  });
+}
+
+function resolveShopViewOptions(value?: string | Date | MasterShopViewOptions) {
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return {
+      referenceDate: value.referenceDate,
+      defaults: value.defaults,
+    };
+  }
+
+  return {
+    referenceDate: value,
+    defaults: undefined,
+  };
+}
+
+export function buildMasterShopView(shop: MasterShopInput, referenceDateOrOptions?: string | Date | MasterShopViewOptions): MasterShopView {
+  const options = resolveShopViewOptions(referenceDateOrOptions);
   const slug = String(shop?.slug || '').trim();
   const status = String(shop?.status || '').trim();
   const billingStatus = String(shop?.billing_status || '').trim();
   const billingPlanType = String(shop?.billing_plan_type || 'subscription').trim() || 'subscription';
   const commissionType = String(shop?.commission_type || 'percentage').trim() || 'percentage';
   const commissionValue = toNumber(shop?.commission_value);
-  const enableDelivery = toNumber(shop?.enable_delivery) !== 0;
-  const enableDineIn = toNumber(shop?.enable_dine_in) !== 0;
-  const enableReservation = toNumber(shop?.enable_reservation) !== 0;
+  const reservationPlan = buildReservationPlan(shop, options.defaults);
+  const deliveryPlan = buildDeliveryPlan(shop, options.defaults);
+  const enableReservation = reservationPlan.enabled;
+  const enableDelivery = deliveryPlan.enabled;
+  const enableDineIn = toNumber(firstValue(shop?.enableDineIn, shop?.enable_dine_in)) !== 0;
+  const todayOrders = toNumber(shop?.today_order_count);
+  const todayRevenue = toNumber(shop?.today_revenue);
+  const deliveryTodayOrders = toNumber(shop?.delivery_today_count);
+  const deliveryTodayRevenue = toNumber(shop?.delivery_today_revenue);
+  const dineInTodayOrders = toNumber(shop?.dine_in_today_count);
+  const dineInTodayRevenue = toNumber(shop?.dine_in_today_revenue);
+  const balanceRsd = toNumber(shop?.billing_balance_rsd);
+  const monthCommissionRsd = toNumber(shop?.commission_month_rsd);
+  const totalCommissionRsd = toNumber(shop?.commission_total_rsd);
   const fallbackExpiryLabel = resolveExpiryLabel(String(shop?.expire_date || ''));
   const billingLabel = resolveBillingLabel(billingStatus);
   const billingSeverity = resolveBillingSeverity(billingStatus);
   const walletRowTone = resolveRowTone(fallbackExpiryLabel, billingStatus);
-  const dineInBilling = buildDineInBillingState(shop, referenceDate);
-  const dineInDisabledAt = String(shop?.dine_in_disabled_at || '').trim();
-  const dineInStopReason = String(shop?.dine_in_stop_reason || '').trim();
+  const dineInBilling = buildDineInBillingState(shop, options.referenceDate);
 
   let rowTone = walletRowTone;
   if (rowTone === 'normal' && dineInBilling.rowTone === 'warning') rowTone = 'billing-warning';
   if (rowTone === 'normal' && dineInBilling.rowTone === 'danger') rowTone = 'billing-overdue';
-  if (rowTone === 'normal' && dineInBilling.rowTone === 'muted') rowTone = 'expired';
+  if (rowTone === 'normal' && dineInBilling.rowTone === 'muted') rowTone = 'dine-in-closed';
 
   const displayStatus = readDisplayStatus(shop, resolveStatusLabel(status));
   const shopStateLabel = readDisplayShopState(shop, displayStatus);
@@ -162,6 +280,8 @@ export function buildMasterShopView(shop: MasterShopInput, referenceDate?: strin
     billingPlanType,
     commissionType,
     commissionValue,
+    reservationPlan,
+    deliveryPlan,
     enableDelivery,
     enableDineIn,
     enableReservation,
@@ -175,25 +295,23 @@ export function buildMasterShopView(shop: MasterShopInput, referenceDate?: strin
     billingSeverity,
     expirySeverity: resolveExpirySeverity(fallbackExpiryLabel),
     isDeliveryLocked: Boolean(shop?.delivery_locked),
-    todayOrders: toNumber(shop?.today_order_count),
-    todayRevenue: toNumber(shop?.today_revenue),
-    deliveryTodayOrders: toNumber(shop?.delivery_today_count),
-    deliveryTodayRevenue: toNumber(shop?.delivery_today_revenue),
-    dineInTodayOrders: toNumber(shop?.dine_in_today_count),
-    dineInTodayRevenue: toNumber(shop?.dine_in_today_revenue),
-    balanceRsd: toNumber(shop?.billing_balance_rsd),
-    monthCommissionRsd: toNumber(shop?.commission_month_rsd),
-    totalCommissionRsd: toNumber(shop?.commission_total_rsd),
+    todayOrders,
+    todayRevenue,
+    deliveryTodayOrders,
+    deliveryTodayRevenue,
+    dineInTodayOrders,
+    dineInTodayRevenue,
+    balanceRsd,
+    monthCommissionRsd,
+    totalCommissionRsd,
     dineInBillingStartAt: dineInBilling.billingStartAt,
     dineInExpiresAt: dineInBilling.expiresAt,
     dineInGraceUntil: dineInBilling.graceUntil,
-    dineInDisabledAt,
-    dineInStopReason,
     dineInAlertLevel: dineInBilling.alertLevel,
     dineInStatusLabel: dineInBilling.statusLabel,
-    sortValueRevenue: toNumber(shop?.today_revenue),
-    sortValueOrders: toNumber(shop?.today_order_count),
-    sortValueBalance: toNumber(shop?.billing_balance_rsd),
+    sortValueRevenue: todayRevenue,
+    sortValueOrders: todayOrders,
+    sortValueBalance: balanceRsd,
     copyStorefrontPath: `/${slug}`,
     copyAdminPath: `/admin/${slug}`,
   };

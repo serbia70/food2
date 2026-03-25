@@ -21,10 +21,14 @@ import MasterWechatSettingsCard from '../../components/master/MasterWechatSettin
 import { MASTER_TOKEN } from '../../config';
 import { normalizeMasterTab } from '../../lib/master-active-tab';
 import { buildEditShopSuccessMessage } from '../../lib/master-edit-feedback';
-import { formatCommissionRule } from '../../lib/master-commission-view';
 import { resolveMasterAuth } from '../../lib/master-auth';
-import { buildMasterSettingsView } from '../../lib/master-settings-view';
-import { buildMasterShopView } from '../../lib/master-shop-view';
+import { buildMasterPricingSettingsPayload } from '../../lib/master-pricing-settings-payload';
+import {
+  buildMasterShopEditPayload,
+  MASTER_SHOP_FEE_FALLBACKS,
+  resetMasterShopFeeOverrides,
+} from '../../lib/master-shop-edit-payload';
+import { buildMasterDashboardView } from '../../lib/master-dashboard-view';
 
 export const prerender = false;
 
@@ -54,7 +58,7 @@ type ShopSummary = {
 
 let shops: ShopSummary[] = [];
 let loadError = '';
-let masterSettings: Record<string, any> = {};
+let masterSettings: Record<string, unknown> = {};
 
 const MASTER_INIT_PROXY_PATH = '/api/master/init';
 const MASTER_INIT_COOKIE_HEADER = 'cookie';
@@ -88,90 +92,40 @@ const hasMasterCookie = Boolean(masterCookie && masterCookie.value);
 const isUnauthorized = loadError === '加载失败 (401)';
 const activeTab = normalizeMasterTab(Astro.url.searchParams.get('tab'));
 const canLoadProtectedMasterActions = hasMasterCookie && !isUnauthorized;
-const shouldShowMasterContent = !loadError;
 
-const totals = shops.reduce(
-  (acc, shop) => {
-    acc.totalShops += 1;
-    acc.todayRevenue += Number(shop.today_revenue || 0);
-    acc.todayOrders += Number(shop.today_order_count || 0);
-    acc.monthCommission += Number(shop.commission_month_rsd || 0);
-    acc.totalBalance += Number(shop.billing_balance_rsd || 0);
-    return acc;
-  },
-  {
-    totalShops: 0,
-    todayRevenue: 0,
-    todayOrders: 0,
-    monthCommission: 0,
-    totalBalance: 0,
-  },
-);
+const dashboardView = buildMasterDashboardView({
+  shops,
+  settings: masterSettings,
+  activeTab,
+  isUnauthorized,
+  loadError,
+});
+const shopViewsData = JSON.stringify(dashboardView.shopManagement.shops);
+const settingsViewData = JSON.stringify(dashboardView.settings);
+const shopEditPanelData = JSON.stringify(dashboardView.panels.shopEdit);
+const shopTopupPanelData = JSON.stringify(dashboardView.panels.shopTopup);
+const shopDineInPanelData = JSON.stringify(dashboardView.panels.shopDineIn);
 
-const shopViews = shops.map((shop) => buildMasterShopView(shop));
-const settingsView = buildMasterSettingsView(masterSettings);
-const shopViewsData = JSON.stringify(shopViews);
+const shouldShowMasterContent = dashboardView.pageState.kind === 'ready';
+const hasDashboardNotices = dashboardView.notices.length > 0;
+const activeNotice = hasDashboardNotices ? dashboardView.notices[0] : null;
+const dashboardActions = dashboardView.actions;
+const heroActions =
+  dashboardView.pageState.kind === 'ready'
+    ? [
+        { key: 'login', kind: 'link' as const, label: hasMasterCookie ? '重新登录' : '登录', href: '/master/login', className: 'primary-btn' },
+        ...(hasMasterCookie
+          ? [{ key: 'logout', kind: 'button' as const, label: '退出', handler: 'logoutMaster' as const, className: 'danger-btn' }]
+          : []),
+        { key: 'refresh', kind: 'button' as const, label: '刷新页面', handler: 'reloadPage' as const, className: 'ghost-btn' },
+      ]
+    : dashboardActions;
 
-type MasterCta =
-  | { key: 'login'; kind: 'link'; label: string; href: string; className: string }
-  | { key: 'logout' | 'refresh'; kind: 'button'; label: string; onClick: string; className: string };
-
-const MASTER_CTA = {
-  login: (label: string, className = 'primary-btn'): MasterCta => ({
-    key: 'login',
-    kind: 'link',
-    label,
-    href: '/master/login',
-    className,
-  }),
-  logout: (className = 'ghost-btn'): MasterCta => ({
-    key: 'logout',
-    kind: 'button',
-    label: '退出',
-    onClick: 'logoutMaster()',
-    className,
-  }),
-  refresh: (className = 'ghost-btn'): MasterCta => ({
-    key: 'refresh',
-    kind: 'button',
-    label: '刷新页面',
-    onClick: 'window.location.reload()',
-    className,
-  }),
-} as const;
-
-const heroCtas: MasterCta[] = [
-  MASTER_CTA.login(hasMasterCookie ? '重新登录' : '登录'),
-  ...(hasMasterCookie ? [MASTER_CTA.logout('danger-btn')] : []),
-  MASTER_CTA.refresh(),
-];
-
-const noticeCtas: MasterCta[] = [MASTER_CTA.login('去登录'), MASTER_CTA.logout(), MASTER_CTA.refresh()];
-
-const escapeHtml = (input: string) =>
-  input
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-
-const renderMasterCtasHtml = (ctas: MasterCta[]) =>
-  ctas
-    .map((cta) => {
-      const label = escapeHtml(cta.label);
-      const className = escapeHtml(cta.className);
-      if (cta.kind === 'link') {
-        const href = escapeHtml(cta.href);
-        return `<a class="${className}" href="${href}">${label}</a>`;
-      }
-      const onClick = escapeHtml(cta.onClick);
-      return `<button class="${className}" type="button" onclick="${onClick}">${label}</button>`;
-    })
-    .join('');
-
-const heroCtasHtml = renderMasterCtasHtml(heroCtas);
-const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
+const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
+  info: 'notice-info',
+  warning: 'notice-warning',
+  error: 'notice-error',
+};
 ---
 
 <html lang="zh-CN">
@@ -269,6 +223,18 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
         color: var(--muted);
       }
 
+      .notice-warning {
+        border-color: #f59e0b;
+        background: #fffbeb;
+        color: #92400e;
+      }
+
+      .notice-error {
+        border-color: #ef4444;
+        background: #fff5f5;
+        color: #991b1b;
+      }
+
       .notice-actions {
         margin-top: 16px;
         display: flex;
@@ -315,7 +281,44 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
         gap: 18px;
       }
     </style>
-    <script define:vars={{ shopViewsData, canLoadProtectedMasterActions }} is:inline>
+    <script define:vars={{ shopViewsData, settingsViewData, shopEditPanelData, shopTopupPanelData, shopDineInPanelData, canLoadProtectedMasterActions }} is:inline>
+      window.__masterRuntime = {
+        shopViewsData,
+        settingsViewData,
+        shopEditPanelData,
+        shopTopupPanelData,
+        shopDineInPanelData,
+        canLoadProtectedMasterActions,
+      };
+    </script>
+    <script>
+      import { buildMasterPricingSettingsPayload } from '../../lib/master-pricing-settings-payload';
+      import {
+  buildMasterShopEditPayload,
+  MASTER_SHOP_FEE_FALLBACKS,
+  resetMasterShopFeeOverrides,
+} from '../../lib/master-shop-edit-payload';
+
+      const masterRuntime = window.__masterRuntime || {};
+      const shopViewsData = String(masterRuntime.shopViewsData || '[]');
+      const settingsViewData = String(masterRuntime.settingsViewData || '{}');
+      const shopEditPanelData = String(masterRuntime.shopEditPanelData || '{}');
+      const shopTopupPanelData = String(masterRuntime.shopTopupPanelData || '{}');
+      const shopDineInPanelData = String(masterRuntime.shopDineInPanelData || '{}');
+      const canLoadProtectedMasterActions = Boolean(masterRuntime.canLoadProtectedMasterActions);
+
+      function parseRuntimeObject(jsonText) {
+        try {
+          const parsed = JSON.parse(jsonText || '{}');
+          return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch {
+          return {};
+        }
+      }
+
+      const shopEditPanelDefaults = parseRuntimeObject(shopEditPanelData);
+      const shopTopupPanelDefaults = parseRuntimeObject(shopTopupPanelData);
+      const shopDineInPanelDefaults = parseRuntimeObject(shopDineInPanelData);
       function isUnauthorizedResponse(res, data) {
         return (res && res.status === 401) || (data && data.error === 'unauthorized');
       }
@@ -378,14 +381,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
         if (!(feedback instanceof HTMLElement) || !(submitBtn instanceof HTMLButtonElement)) return;
 
         const formData = new FormData(form);
-        const payload = {
-          subscriptionFeeRsd: Number(formData.get('subscriptionFeeRsd') || 0),
-          businessFeeRsd: Number(formData.get('businessFeeRsd') || 0),
-          subscriptionDeliveryCommissionType: String(formData.get('subscriptionCommissionType') || 'percentage'),
-          subscriptionDeliveryCommissionValue: Number(formData.get('subscriptionCommissionValue') || 0),
-          businessDeliveryCommissionType: String(formData.get('businessCommissionType') || 'percentage'),
-          businessDeliveryCommissionValue: Number(formData.get('businessCommissionValue') || 0),
-        };
+        const payload = buildMasterPricingSettingsPayload(Object.fromEntries(formData.entries()));
 
         feedback.textContent = '保存中...';
         submitBtn.disabled = true;
@@ -416,6 +412,42 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
 
       window.submitMasterPricingSettings = function (form) {
         handlePricingSettings(form);
+        return false;
+      };
+
+      window.resetMasterShopFeeDefaults = function (form) {
+        if (!(form instanceof HTMLFormElement)) return false;
+
+        const formData = new FormData(form);
+        const current = {
+          reservationEnabled: String(formData.get('reservationEnabled') || '1') === '1',
+          reservationCommissionType: String(formData.get('reservationCommissionType') || 'percentage'),
+          reservationCommissionValue: Number(formData.get('reservationCommissionValue') || 0),
+          deliveryEnabled: String(formData.get('deliveryEnabled') || '1') === '1',
+          deliveryCommissionType: String(formData.get('deliveryCommissionType') || 'percentage'),
+          deliveryCommissionValue: Number(formData.get('deliveryCommissionValue') || 0),
+        };
+        const resetDefaults = shopEditPanelDefaults.resetDefaults || {};
+        const next = resetMasterShopFeeOverrides(current, {
+          reservationCommissionType: String(
+            resetDefaults.reservationCommissionType || MASTER_SHOP_FEE_FALLBACKS.reservationCommissionType,
+          ),
+          reservationCommissionValue: Number(
+            resetDefaults.reservationCommissionValue ?? MASTER_SHOP_FEE_FALLBACKS.reservationCommissionValue,
+          ),
+          deliveryCommissionType: String(
+            resetDefaults.deliveryCommissionType || MASTER_SHOP_FEE_FALLBACKS.deliveryCommissionType,
+          ),
+          deliveryCommissionValue: Number(
+            resetDefaults.deliveryCommissionValue ?? MASTER_SHOP_FEE_FALLBACKS.deliveryCommissionValue,
+          ),
+        });
+
+        form.elements.commissionMode.value = 'global';
+        form.elements.reservationCommissionType.value = next.reservationCommissionType;
+        form.elements.reservationCommissionValue.value = String(next.reservationCommissionValue);
+        form.elements.deliveryCommissionType.value = next.deliveryCommissionType;
+        form.elements.deliveryCommissionValue.value = String(next.deliveryCommissionValue);
         return false;
       };
 
@@ -1212,13 +1244,16 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
         form.elements.name.value = shop.name || '';
         form.elements.slug.value = shop.slug || '';
         form.elements.password.value = '';
-        form.elements.billingPlanType.value = shop.billingPlanType || 'subscription';
-        form.elements.commissionType.value = shop.commissionType || 'percentage';
-        form.elements.commissionValue.value = String(shop.commissionValue || 0);
+        form.elements.reservationEnabled.value = shop.reservationPlan.enabled ? '1' : '0';
+        form.elements.reservationCommissionType.value = shop.reservationPlan.commissionType || 'percentage';
+        form.elements.reservationCommissionValue.value = String(shop.reservationPlan.commissionValue || 0);
+        form.elements.deliveryEnabled.value = shop.deliveryPlan.enabled ? '1' : '0';
+        form.elements.deliveryCommissionType.value = shop.deliveryPlan.commissionType || 'percentage';
+        form.elements.deliveryCommissionValue.value = String(shop.deliveryPlan.commissionValue || 0);
+        form.elements.commissionMode.value =
+          shop.reservationPlan.source === 'default' && shop.deliveryPlan.source === 'default' ? 'global' : 'override';
         form.elements.status.value = shop.rawStatus || 'active';
-        form.elements.enableDelivery.value = shop.enableDelivery ? '1' : '0';
         form.elements.enableDineIn.value = shop.enableDineIn ? '1' : '0';
-        form.elements.enableReservation.value = shop.enableReservation ? '1' : '0';
         if (feedback instanceof HTMLElement) feedback.textContent = '保存后建议刷新当前列表确认结果。';
         panel.hidden = false;
       }
@@ -1235,7 +1270,9 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
         form.elements.currentBalance.value = `${Number(shop.balanceRsd || 0).toLocaleString('zh-CN')} RSD`;
         form.elements.amountRsd.value = '';
         form.elements.note.value = '';
-        if (feedback instanceof HTMLElement) feedback.textContent = '充值成功后建议刷新页面确认余额变化。';
+        if (feedback instanceof HTMLElement) {
+          feedback.textContent = String(shopTopupPanelDefaults.openHint || '充值成功后建议刷新页面确认余额变化。');
+        }
         panel.hidden = false;
       }
 
@@ -1255,7 +1292,7 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
         form.elements.expiresAt.value = '';
 
         if (feedback instanceof HTMLElement) {
-          feedback.textContent = '请选择要执行的堂食订阅操作。';
+          feedback.textContent = String(shopDineInPanelDefaults.openHint || '请选择要执行的堂食订阅操作。');
         }
         panel.hidden = false;
       }
@@ -1266,19 +1303,9 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
         if (!(feedback instanceof HTMLElement) || !(submitBtn instanceof HTMLButtonElement)) return;
 
         const formData = new FormData(form);
-        const payload = {
-          id: Number(formData.get('id') || 0),
-          name: String(formData.get('name') || '').trim(),
-          slug: String(formData.get('slug') || '').trim(),
-          password: String(formData.get('password') || '').trim(),
-          billingPlanType: String(formData.get('billingPlanType') || 'subscription'),
-          commissionType: String(formData.get('commissionType') || 'percentage'),
-          commissionValue: Number(formData.get('commissionValue') || 0),
-          status: String(formData.get('status') || 'active'),
-          enableDelivery: String(formData.get('enableDelivery') || '1') === '1',
-          enableDineIn: String(formData.get('enableDineIn') || '1') === '1',
-          enableReservation: String(formData.get('enableReservation') || '1') === '1',
-        };
+        const payload = buildMasterShopEditPayload(Object.fromEntries(formData.entries()), {
+          defaults: shopEditPanelDefaults.defaults,
+        });
 
         feedback.textContent = '保存中...';
         submitBtn.disabled = true;
@@ -1368,19 +1395,28 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
         return false;
       };
 
-      window.submitMasterShopDineIn = async function (form, event) {
+      function addYearsToDateOnly(dateOnly, years) {
+        const raw = String(dateOnly || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return '';
+        const parsed = new Date(`${raw}T00:00:00Z`);
+        if (Number.isNaN(parsed.getTime())) return '';
+        parsed.setUTCFullYear(parsed.getUTCFullYear() + years);
+        return parsed.toISOString().slice(0, 10);
+      }
+
+      window.submitMasterShopDineIn = async function (form, action, submitButton) {
         const feedback = document.getElementById('master-shop-dinein-feedback');
-        const submitBtn = event && event.submitter instanceof HTMLButtonElement ? event.submitter : null;
+        const submitBtn = submitButton instanceof HTMLButtonElement ? submitButton : null;
         if (!(form instanceof HTMLFormElement) || !(feedback instanceof HTMLElement) || !submitBtn) return false;
 
         const formData = new FormData(form);
         const payload = {
-          id: Number(formData.get('shopId') || 0),
-          action: String(submitBtn.value || '').trim(),
+          shopId: Number(formData.get('shopId') || 0),
+          action: String(action || '').trim(),
           expiresAt: String(formData.get('expiresAt') || '').trim(),
         };
 
-        if (!payload.id || !payload.action) {
+        if (!payload.shopId || !payload.action) {
           feedback.textContent = '缺少店铺或操作参数';
           return false;
         }
@@ -1389,15 +1425,49 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
           return false;
         }
 
+        const shop = findMasterShopById(payload.shopId);
+        if (!shop) {
+          feedback.textContent = '店铺不存在';
+          return false;
+        }
+
+        const currentExpireDate = String(shop.dineInExpiresAt || '').trim() || addYearsToDateOnly(shop.dineInBillingStartAt || '', 1);
+        const expireDate =
+          payload.action === 'set_expiry'
+            ? payload.expiresAt
+            : payload.action === 'extend_one_year'
+              ? addYearsToDateOnly(currentExpireDate, 1)
+              : currentExpireDate;
+        const updatePayload = {
+          ...buildMasterShopEditPayload({
+            id: Number(shop.id || payload.shopId || 0),
+            name: String(shop.name || '').trim(),
+            slug: String(shop.slug || '').trim(),
+            password: '',
+            status: String(shop.rawStatus || 'active'),
+            enableDelivery: Boolean(shop.enableDelivery),
+            enableDineIn: payload.action !== 'manual_stop',
+            enableReservation: Boolean(shop.enableReservation),
+            reservationEnabled: shop.reservationPlan.enabled,
+            reservationCommissionType: shop.reservationPlan.commissionType,
+            reservationCommissionValue: shop.reservationPlan.commissionValue,
+            deliveryEnabled: shop.deliveryPlan.enabled,
+            deliveryCommissionType: shop.deliveryPlan.commissionType,
+            deliveryCommissionValue: shop.deliveryPlan.commissionValue,
+          }),
+          billingPlanType: shop.billingPlanType || 'subscription',
+          expireDate,
+        };
+
         const originalText = submitBtn.textContent || '提交';
         submitBtn.disabled = true;
         feedback.textContent = '提交中...';
 
         try {
-          const res = await fetch('/api/master/shop-renew', {
-            method: 'POST',
+          const res = await fetch(`/api/master/shops/${encodeURIComponent(String(payload.shopId))}`, {
+            method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(updatePayload),
           });
           const data = await res.json().catch(() => ({}));
           if (isUnauthorizedResponse(res, data)) {
@@ -1423,6 +1493,11 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
 
         return false;
       };
+
+      function reloadPage() {
+        window.location.reload();
+      }
+      window.reloadPage = reloadPage;
 
       async function logoutMaster() {
         try {
@@ -1504,7 +1579,10 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
             ? data.commissionRecords
             : [];
 		const fmt = (v) => Number(v || 0).toLocaleString('zh-CN');
-		const commissionRule = formatCommissionRule(shop.commission_type, shop.commission_value);
+		const shopView = findMasterShopById(shopId);
+		const commissionRule = shopView
+		  ? `预订：${shopView.reservationPlan.displayText} / 外卖：${shopView.deliveryPlan.displayText}`
+		  : '预订：- / 外卖：-';
 		if (impersonateBtn) {
             impersonateBtn.hidden = false;
             impersonateBtn.setAttribute('data-shop-id', String(shopId));
@@ -1732,24 +1810,41 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
           <h1 class="hero-title">Master Dashboard</h1>
           <div class="hero-subtitle">Astro 原生首页一期：店铺经营摘要与总览</div>
         </div>
-        <div class="hero-actions" set:html={heroCtasHtml} />
+        <div class="hero-actions">
+          {heroActions.map((action) =>
+            action.kind === 'link' ? (
+              <a class={action.className} href={action.href}>{action.label}</a>
+            ) : (
+              <button class={action.className} type="button" onclick={`${action.handler}()`}>{action.label}</button>
+            )
+          )}
+        </div>
       </section>
 
       <section class="tabs" aria-label="Master sections">
-        <a class:list={["tab-btn", activeTab === 'management' && 'active']} href="/master?tab=management">店铺管理</a>
+        <a class:list={["tab-btn", activeTab === 'shops' && 'active']} href="/master?tab=shops">店铺管理</a>
         <a class:list={["tab-btn", activeTab === 'overview' && 'active']} href="/master?tab=overview">经营总览</a>
         <a class:list={["tab-btn", activeTab === 'settings' && 'active']} href="/master?tab=settings">全局设置</a>
+        <a class:list={["tab-btn", activeTab === 'backup' && 'active']} href="/master?tab=backup">备份管理</a>
       </section>
 
-      <div class="master-stack" data-master-panel="management" hidden={activeTab !== 'management' || !shouldShowMasterContent}>
+      <div class="master-stack" data-master-panel="shops" hidden={activeTab !== 'shops' || !shouldShowMasterContent}>
         <MasterCreateShopCard />
-        {shops.length > 0 ? (
-          <MasterShopManagementTable shops={shopViews} />
+        {dashboardView.shopManagement.shops.length > 0 ? (
+          <MasterShopManagementTable shops={dashboardView.shopManagement.shops} />
         ) : (
-          <div class="notice">
-            {loadError || '暂无店铺经营数据'}
-            {isUnauthorized ? (
-              <div class="notice-actions" set:html={noticeCtasHtml} />
+          <div class:list={['notice', activeNotice && NOTICE_KIND_CLASSNAME[activeNotice.kind]]}>
+            {activeNotice ? activeNotice.message : '暂无店铺经营数据'}
+            {dashboardActions.length > 0 ? (
+              <div class="notice-actions">
+                {dashboardActions.map((action) =>
+                  action.kind === 'link' ? (
+                    <a class={action.className} href={action.href}>{action.label}</a>
+                  ) : (
+                    <button class={action.className} type="button" onclick={`${action.handler}()`}>{action.label}</button>
+                  )
+                )}
+              </div>
             ) : null}
           </div>
         )}
@@ -1757,36 +1852,50 @@ const noticeCtasHtml = renderMasterCtasHtml(noticeCtas);
 
       <div class="master-stack" data-master-panel="overview" hidden={activeTab !== 'overview' || !shouldShowMasterContent}>
         <MasterOverview
-          totalShops={totals.totalShops}
-          todayRevenue={totals.todayRevenue}
-          todayOrders={totals.todayOrders}
-          monthCommission={totals.monthCommission}
-          totalBalance={totals.totalBalance}
+          totalShops={dashboardView.overview.totalShops}
+          todayRevenue={dashboardView.overview.todayRevenue}
+          todayOrders={dashboardView.overview.todayOrders}
+          monthCommission={dashboardView.overview.monthCommission}
+          totalBalance={dashboardView.overview.totalBalance}
         />
       </div>
 
       <div class="settings-grid" data-master-panel="settings" hidden={activeTab !== 'settings' || !shouldShowMasterContent}>
-        <MasterPricingSettingsCard settings={settingsView} />
-        <MasterCategoriesSettingsCard settings={settingsView.categories} />
-        <MasterServerSettingsCard settings={settingsView.server} />
-        <MasterFooterSettingsCard settings={settingsView.footer} />
-        <MasterRateSettingsCard settings={settingsView.rate} />
-        <MasterWechatSettingsCard settings={settingsView.wechat} />
-        <MasterPaymentSettingsCard settings={settingsView.wechat} />
-        <MasterStorageSettingsCard settings={settingsView.storage} />
-        <MasterBackupSettingsCard settings={settingsView.backup} />
-        <MasterDataBackupCard />
-        <MasterCodeBackupCard />
+        <MasterPricingSettingsCard settings={dashboardView.settings} />
+        <MasterCategoriesSettingsCard settings={dashboardView.settings.categories} />
+        <MasterServerSettingsCard settings={dashboardView.settings.server} />
+        <MasterFooterSettingsCard settings={dashboardView.settings.footer} />
+        <MasterRateSettingsCard settings={dashboardView.settings.rate} />
+        <MasterWechatSettingsCard settings={dashboardView.settings.wechat} />
+        <MasterPaymentSettingsCard settings={dashboardView.settings.wechat} />
+        <MasterStorageSettingsCard settings={dashboardView.settings.storage} />
         <MasterSecurityCard />
       </div>
 
+      <div class="settings-grid" data-master-panel="backup" hidden={activeTab !== 'backup' || !shouldShowMasterContent}>
+        <MasterBackupSettingsCard settings={dashboardView.settings.backup} />
+        <MasterDataBackupCard />
+        <MasterCodeBackupCard />
+      </div>
+
       {!shouldShowMasterContent ? (
-        <div class="notice">
-          {loadError || '主控数据加载失败'}
-          <div class="notice-actions" set:html={noticeCtasHtml} />
+        <div class:list={['notice', activeNotice && NOTICE_KIND_CLASSNAME[activeNotice.kind]]}>
+          {activeNotice ? activeNotice.message : '主控数据加载失败'}
+          {dashboardActions.length > 0 ? (
+            <div class="notice-actions">
+              {dashboardActions.map((action) =>
+                action.kind === 'link' ? (
+                  <a class={action.className} href={action.href}>{action.label}</a>
+                ) : (
+                  <button class={action.className} type="button" onclick={`${action.handler}()`}>{action.label}</button>
+                )
+              )}
+            </div>
+          ) : null}
         </div>
       ) : null}
-    </main>\n    <MasterShopEditPanel />
+    </main>
+    <MasterShopEditPanel />
     <MasterShopTopupPanel />
     <MasterShopDineInPanel />
     <MasterDangerConfirm />

@@ -128,20 +128,225 @@ test('显示统一经营限制型门店状态', () => {
   assert.equal(view.billingLabel, '预警');
 });
 
-test('保留真实提成方案字段供编辑弹窗回填', () => {
-  const view = buildMasterShopView({
-    id: 12,
-    name: 'Commission Shop',
-    slug: 'commission-shop',
-    status: 'active',
-    billing_plan_type: 'business',
-    commission_type: 'per_order',
-    commission_value: 18,
-  });
+test('店铺视图应暴露预订和外卖的独立计划', () => {
+  const view = buildMasterShopView(
+    {
+      id: 12,
+      name: 'Commission Shop',
+      slug: 'commission-shop',
+      status: 'active',
+      billing_plan_type: 'business',
+      commission_type: 'per_order',
+      commission_value: 18,
+      reservation_enabled: 1,
+      reservation_commission_type: 'percentage',
+      reservation_commission_value: 0,
+      delivery_enabled: 0,
+      delivery_commission_type: 'per_order',
+      delivery_commission_value: 8,
+    },
+    {
+      defaults: {
+        reservationPlan: { enabled: true, commissionType: 'percentage', commissionValue: 3 },
+        deliveryPlan: { enabled: true, commissionType: 'percentage', commissionValue: 5 },
+      },
+    },
+  );
 
+  assert.equal(view.reservationPlan.enabled, true);
+  assert.equal(view.reservationPlan.commissionType, 'percentage');
+  assert.equal(view.reservationPlan.commissionValue, 0);
+  assert.equal(view.reservationPlan.displayText, '免费');
+  assert.equal(view.reservationPlan.source, 'new');
+  assert.equal(view.reservationPlan.sourceLabel, '店铺覆盖');
+  assert.equal(view.deliveryPlan.enabled, false);
+  assert.equal(view.deliveryPlan.commissionType, 'per_order');
+  assert.equal(view.deliveryPlan.commissionValue, 8);
+  assert.equal(view.deliveryPlan.displayText, '每单 8 RSD');
+  assert.equal(view.deliveryPlan.source, 'new');
+  assert.equal(view.deliveryPlan.sourceLabel, '店铺覆盖');
   assert.equal(view.billingPlanType, 'business');
   assert.equal(view.commissionType, 'per_order');
   assert.equal(view.commissionValue, 18);
+});
+
+test('保存回包仅返回 legacy commission_value 时仍能回填外卖计划', () => {
+  const view = buildMasterShopView(
+    {
+      id: 13,
+      name: 'Legacy Commission Shop',
+      slug: 'legacy-commission-shop',
+      status: 'active',
+      commission_type: 'per_order',
+      commission_value: 18,
+      enable_reservation: 1,
+      enable_delivery: 0,
+    },
+    {
+      defaults: {
+        reservationPlan: { enabled: true, commissionType: 'percentage', commissionValue: 3 },
+        deliveryPlan: { enabled: true, commissionType: 'percentage', commissionValue: 5 },
+      },
+    },
+  );
+
+  assert.equal(view.reservationPlan.enabled, true);
+  assert.equal(view.reservationPlan.commissionType, 'percentage');
+  assert.equal(view.reservationPlan.commissionValue, 3);
+  assert.equal(view.reservationPlan.displayText, '3%');
+  assert.equal(view.reservationPlan.source, 'default');
+  assert.equal(view.reservationPlan.sourceLabel, '全局默认');
+  assert.equal(view.deliveryPlan.enabled, false);
+  assert.equal(view.deliveryPlan.commissionType, 'percentage');
+  assert.equal(view.deliveryPlan.commissionValue, 5);
+  assert.equal(view.deliveryPlan.displayText, '5%');
+  assert.equal(view.deliveryPlan.source, 'default');
+  assert.equal(view.deliveryPlan.sourceLabel, '全局默认');
+});
+
+test('master init 回包中的 commission_mode override 应回填外卖覆盖值', () => {
+  const view = buildMasterShopView(
+    {
+      id: 18,
+      name: 'Saved Override Shop',
+      slug: 'saved-override-shop',
+      status: 'active',
+      commission_mode: 'override',
+      commission_type: 'percentage',
+      commission_value: 6,
+      commission_override_type: 'percentage',
+      commission_override_value: 6,
+    },
+    {
+      defaults: {
+        reservationPlan: { enabled: true, commissionType: 'percentage', commissionValue: 3 },
+        deliveryPlan: { enabled: true, commissionType: 'percentage', commissionValue: 5 },
+      },
+    },
+  );
+
+  assert.equal(view.deliveryPlan.enabled, true);
+  assert.equal(view.deliveryPlan.commissionType, 'percentage');
+  assert.equal(view.deliveryPlan.commissionValue, 6);
+  assert.equal(view.deliveryPlan.displayText, '6%');
+  assert.equal(view.deliveryPlan.source, 'new');
+  assert.equal(view.deliveryPlan.sourceLabel, '店铺覆盖');
+});
+
+test('编辑回包中的兼容费率字段也应视为店铺覆盖', () => {
+  const view = buildMasterShopView(
+    {
+      id: 14,
+      name: 'Edit Echo Shop',
+      slug: 'edit-echo-shop',
+      status: 'active',
+      commission_type: 'per_order',
+      commission_value: 30,
+      subscriptionDeliveryCommissionType: 'percentage',
+      subscriptionDeliveryCommissionValue: 0,
+      businessDeliveryCommissionType: 'per_order',
+      businessDeliveryCommissionValue: 8,
+    },
+    {
+      defaults: {
+        reservationPlan: { enabled: true, commissionType: 'percentage', commissionValue: 3 },
+        deliveryPlan: { enabled: true, commissionType: 'percentage', commissionValue: 5 },
+      },
+    },
+  );
+
+  assert.equal(view.reservationPlan.enabled, true);
+  assert.equal(view.reservationPlan.commissionType, 'percentage');
+  assert.equal(view.reservationPlan.commissionValue, 0);
+  assert.equal(view.reservationPlan.displayText, '免费');
+  assert.equal(view.reservationPlan.source, 'new');
+  assert.equal(view.reservationPlan.sourceLabel, '店铺覆盖');
+  assert.equal(view.deliveryPlan.enabled, true);
+  assert.equal(view.deliveryPlan.commissionType, 'per_order');
+  assert.equal(view.deliveryPlan.commissionValue, 8);
+  assert.equal(view.deliveryPlan.displayText, '每单 8 RSD');
+  assert.equal(view.deliveryPlan.source, 'new');
+  assert.equal(view.deliveryPlan.sourceLabel, '店铺覆盖');
+});
+
+test('分拆字段和兼容别名同时存在时应优先使用分拆字段', () => {
+  const view = buildMasterShopView({
+    id: 15,
+    name: 'Snake Case Shop',
+    slug: 'snake-case-shop',
+    status: 'active',
+    reservation_commission_type: 'per_order',
+    reservation_commission_value: 30,
+    subscriptionFeeRsd: 18,
+    delivery_commission_type: 'percentage',
+    delivery_commission_value: 5,
+    businessFeeRsd: 30,
+  });
+
+  assert.equal(view.reservationPlan.commissionType, 'per_order');
+  assert.equal(view.reservationPlan.commissionValue, 30);
+  assert.equal(view.reservationPlan.displayText, '每单 30 RSD');
+  assert.equal(view.reservationPlan.source, 'new');
+  assert.equal(view.reservationPlan.sourceLabel, '店铺覆盖');
+  assert.equal(view.deliveryPlan.commissionType, 'percentage');
+  assert.equal(view.deliveryPlan.commissionValue, 5);
+  assert.equal(view.deliveryPlan.displayText, '5%');
+  assert.equal(view.deliveryPlan.source, 'new');
+  assert.equal(view.deliveryPlan.sourceLabel, '店铺覆盖');
+});
+
+test('编辑回包中的 snake_case 兼容费率字段也应视为店铺覆盖', () => {
+  const view = buildMasterShopView({
+    id: 15,
+    name: 'Snake Case Shop',
+    slug: 'snake-case-shop',
+    status: 'active',
+    enable_reservation: 0,
+    subscription_delivery_commission_type: 'per_order',
+    subscription_delivery_commission_value: 30,
+    enable_delivery: 0,
+    business_delivery_commission_type: 'per_order',
+    business_delivery_commission_value: 30,
+  });
+
+  assert.equal(view.reservationPlan.enabled, false);
+  assert.equal(view.reservationPlan.commissionType, 'per_order');
+  assert.equal(view.reservationPlan.commissionValue, 30);
+  assert.equal(view.reservationPlan.source, 'new');
+  assert.equal(view.reservationPlan.sourceLabel, '店铺覆盖');
+  assert.equal(view.reservationPlan.displayText, '每单 30 RSD');
+  assert.equal(view.deliveryPlan.enabled, false);
+  assert.equal(view.deliveryPlan.commissionType, 'per_order');
+  assert.equal(view.deliveryPlan.commissionValue, 30);
+  assert.equal(view.deliveryPlan.source, 'new');
+  assert.equal(view.deliveryPlan.sourceLabel, '店铺覆盖');
+  assert.equal(view.deliveryPlan.displayText, '每单 30 RSD');
+});
+
+test('新 camelCase 兼容字段应覆盖旧 snake_case 里的 30 RSD', () => {
+  const view = buildMasterShopView({
+    id: 16,
+    name: 'Mixed Alias Shop',
+    slug: 'mixed-alias-shop',
+    status: 'active',
+    subscriptionDeliveryCommissionType: 'percentage',
+    subscriptionDeliveryCommissionValue: 5,
+    subscription_delivery_commission_type: 'per_order',
+    subscription_delivery_commission_value: 30,
+    businessDeliveryCommissionType: 'percentage',
+    businessDeliveryCommissionValue: 6,
+    business_delivery_commission_type: 'per_order',
+    business_delivery_commission_value: 30,
+  });
+
+  assert.equal(view.reservationPlan.commissionType, 'percentage');
+  assert.equal(view.reservationPlan.commissionValue, 5);
+  assert.equal(view.reservationPlan.displayText, '5%');
+  assert.equal(view.reservationPlan.source, 'new');
+  assert.equal(view.deliveryPlan.commissionType, 'percentage');
+  assert.equal(view.deliveryPlan.commissionValue, 6);
+  assert.equal(view.deliveryPlan.displayText, '6%');
+  assert.equal(view.deliveryPlan.source, 'new');
 });
 
 test('保留真实营业开关字段供编辑弹窗回填', () => {
@@ -159,6 +364,18 @@ test('保留真实营业开关字段供编辑弹窗回填', () => {
   assert.equal(view.enableReservation, false);
 });
 
+test('编辑回包中的 enableDineIn 兼容字段也应覆盖旧开关值', () => {
+  const view = buildMasterShopView({
+    id: 17,
+    name: 'Dine Toggle Shop',
+    slug: 'dine-toggle-shop',
+    enableDineIn: 0,
+    enable_dine_in: 1,
+  });
+
+  assert.equal(view.enableDineIn, false);
+});
+
 test('堂食账单字段应透传到主控店铺视图并保留钱包字段', () => {
   const view = buildMasterShopView(
     {
@@ -172,8 +389,6 @@ test('堂食账单字段应透传到主控店铺视图并保留钱包字段', ()
       dine_in_billing_start_at: '2027-02-01',
       dine_in_expires_at: '2027-03-01',
       dine_in_grace_until: '2027-03-06',
-      dine_in_disabled_at: '2027-03-07',
-      dine_in_stop_reason: 'manual',
       enable_dine_in: 1,
     },
     '2027-02-20',
@@ -187,8 +402,6 @@ test('堂食账单字段应透传到主控店铺视图并保留钱包字段', ()
   assert.equal(view.dineInBillingStartAt, '2027-02-01');
   assert.equal(view.dineInExpiresAt, '2027-03-01');
   assert.equal(view.dineInGraceUntil, '2027-03-06');
-  assert.equal(view.dineInDisabledAt, '2027-03-07');
-  assert.equal(view.dineInStopReason, 'manual');
   assert.equal(view.dineInAlertLevel, 'normal');
   assert.equal(view.dineInStatusLabel, '正常');
   assert.equal(view.dineInRowTone, 'normal');
@@ -248,4 +461,78 @@ test('堂食字段缺失时仍兼容 legacy expire_date 回退', () => {
   assert.equal(view.dineInStatusLabel, '即将到期');
   assert.equal(view.dineInAlertLevel, 'warning');
   assert.equal(view.dineInRowTone, 'warning');
+});
+
+test('新店缺失堂食日期时应推导默认账期', () => {
+  const view = buildMasterShopView(
+    {
+      name: 'New DineIn Shop',
+      slug: 'new-dinein-shop',
+      billing_status: 'active',
+      enable_dine_in: 1,
+    },
+    '2027-02-15',
+  );
+
+  assert.equal(view.dineInBillingStartAt, '2027-03-01');
+  assert.equal(view.dineInExpiresAt, '2028-03-01');
+  assert.equal(view.dineInGraceUntil, '2028-03-06');
+  assert.equal(view.dineInStatusLabel, '正常');
+});
+
+test('堂食手动停用时应保留钱包风险优先且使用 muted 行风险色', () => {
+  const view = buildMasterShopView(
+    {
+      name: 'Manual Stop Shop',
+      slug: 'manual-stop-shop',
+      billing_status: 'past_due',
+      enable_dine_in: 0,
+      dine_in_stop_reason: 'manual',
+      dine_in_expires_at: '2027-03-01',
+    },
+    '2027-02-24',
+  );
+
+  assert.equal(view.rowTone, 'billing-overdue');
+  assert.equal(view.dineInAlertLevel, 'stopped');
+  assert.equal(view.dineInStatusLabel, '已停用');
+  assert.equal(view.dineInRowTone, 'muted');
+});
+
+test('堂食自动关闭时应映射为 muted 行风险色', () => {
+  const view = buildMasterShopView(
+    {
+      name: 'Auto Closed Shop',
+      slug: 'auto-closed-shop',
+      billing_status: 'active',
+      enable_dine_in: 0,
+      dine_in_stop_reason: 'auto_expired',
+      dine_in_expires_at: '2027-03-01',
+      dine_in_grace_until: '2027-03-06',
+    },
+    '2027-03-07',
+  );
+
+  assert.equal(view.rowTone, 'dine-in-closed');
+  assert.equal(view.dineInAlertLevel, 'auto_closed');
+  assert.equal(view.dineInStatusLabel, '已自动关闭');
+  assert.equal(view.dineInRowTone, 'muted');
+});
+
+test('店铺视图应优先读取 businessFeeRsd 覆盖旧外卖提成', () => {
+  const view = buildMasterShopView({
+    id: 999,
+    name: 'Alias Fee Shop',
+    slug: 'alias-fee-shop',
+    status: 'active',
+    commission_type: 'per_order',
+    commission_value: 30,
+    businessFeeRsd: 5,
+  });
+
+  assert.equal(view.deliveryPlan.commissionType, 'percentage');
+  assert.equal(view.deliveryPlan.commissionValue, 5);
+  assert.equal(view.deliveryPlan.displayText, '5%');
+  assert.equal(view.deliveryPlan.source, 'new');
+  assert.equal(view.deliveryPlan.sourceLabel, '店铺覆盖');
 });

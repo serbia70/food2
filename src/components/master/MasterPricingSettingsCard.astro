@@ -8,41 +8,64 @@ const { settings } = Astro.props as { settings: MasterSettingsView };
   <div class="settings-head">
     <div>
       <div class="settings-title">套餐与提成设置</div>
-      <div class="settings-subtitle">集中管理订阅版 / 商务版月费和配送提成策略。</div>
+      <div class="settings-subtitle">分别管理预订和外卖的全局默认技术服务费，0 代表免费。</div>
     </div>
   </div>
 
   <form id="master-pricing-settings-form" class="settings-form" onsubmit="return window.submitMasterPricingSettings ? window.submitMasterPricingSettings(this) : false;">
-    <label>
-      <span>订阅版月费</span>
-      <input name="subscriptionFeeRsd" type="number" min="1" step="1" value={settings.subscriptionFeeRsd} />
-    </label>
-    <label>
-      <span>商务版月费</span>
-      <input name="businessFeeRsd" type="number" min="1" step="1" value={settings.businessFeeRsd} />
-    </label>
-    <label>
-      <span>订阅版提成类型</span>
-      <select name="subscriptionCommissionType">
-        <option value="percentage" selected={settings.subscriptionCommissionType === 'percentage'}>按百分比</option>
-        <option value="per_order" selected={settings.subscriptionCommissionType === 'per_order'}>按单固定额</option>
-      </select>
-    </label>
-    <label>
-      <span>订阅版提成数值</span>
-      <input name="subscriptionCommissionValue" type="number" min="0.1" step="0.1" value={settings.subscriptionCommissionValue} />
-    </label>
-    <label>
-      <span>商务版提成类型</span>
-      <select name="businessCommissionType">
-        <option value="percentage" selected={settings.businessCommissionType === 'percentage'}>按百分比</option>
-        <option value="per_order" selected={settings.businessCommissionType === 'per_order'}>按单固定额</option>
-      </select>
-    </label>
-    <label>
-      <span>商务版提成数值</span>
-      <input name="businessCommissionValue" type="number" min="0.1" step="0.1" value={settings.businessCommissionValue} />
-    </label>
+    <section class="plan-card">
+      <div class="plan-card-head">
+        <div>
+          <div class="plan-card-title">预订</div>
+          <div class="plan-card-subtitle">当前：{settings.reservationPlan.displayText} · {settings.reservationPlan.sourceLabel}</div>
+        </div>
+      </div>
+      <label>
+        <span>启用</span>
+        <select name="reservationEnabled">
+          <option value="1" selected={settings.reservationPlan.enabled}>开启</option>
+          <option value="0" selected={!settings.reservationPlan.enabled}>关闭</option>
+        </select>
+      </label>
+      <label>
+        <span>提成类型</span>
+        <select name="reservationCommissionType">
+          <option value="percentage" selected={settings.reservationPlan.commissionType === 'percentage'}>按百分比</option>
+          <option value="per_order" selected={settings.reservationPlan.commissionType === 'per_order'}>按单固定额</option>
+        </select>
+      </label>
+      <label>
+        <span>提成数值</span>
+        <input name="reservationCommissionValue" type="number" min="0" step="0.1" value={settings.reservationPlan.commissionValue} />
+      </label>
+    </section>
+
+    <section class="plan-card">
+      <div class="plan-card-head">
+        <div>
+          <div class="plan-card-title">外卖</div>
+          <div class="plan-card-subtitle">当前：{settings.deliveryPlan.displayText} · {settings.deliveryPlan.sourceLabel}</div>
+        </div>
+      </div>
+      <label>
+        <span>启用</span>
+        <select name="deliveryEnabled">
+          <option value="1" selected={settings.deliveryPlan.enabled}>开启</option>
+          <option value="0" selected={!settings.deliveryPlan.enabled}>关闭</option>
+        </select>
+      </label>
+      <label>
+        <span>提成类型</span>
+        <select name="deliveryCommissionType">
+          <option value="percentage" selected={settings.deliveryPlan.commissionType === 'percentage'}>按百分比</option>
+          <option value="per_order" selected={settings.deliveryPlan.commissionType === 'per_order'}>按单固定额</option>
+        </select>
+      </label>
+      <label>
+        <span>提成数值</span>
+        <input name="deliveryCommissionValue" type="number" min="0" step="0.1" value={settings.deliveryPlan.commissionValue} />
+      </label>
+    </section>
 
     <div class="settings-actions">
       <button type="submit" class="settings-submit">保存套餐与提成设置</button>
@@ -81,6 +104,34 @@ const { settings } = Astro.props as { settings: MasterSettingsView };
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
+  }
+
+  .plan-card {
+    display: grid;
+    gap: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 14px;
+    background: #f8fafc;
+  }
+
+  .plan-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .plan-card-title {
+    font-size: 16px;
+    font-weight: 900;
+    color: #0f172a;
+  }
+
+  .plan-card-subtitle {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #64748b;
   }
 
   .settings-form label {

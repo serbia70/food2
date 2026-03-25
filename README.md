@@ -9,41 +9,41 @@
 
 ## 项目结构
 
-```
-meituanAstro/
-├── src/
-│   ├── layouts/
-│   │   └── Layout.astro      # 基础布局
-│   ├── pages/
-│   │   ├── index.astro       # 首页
-│   │   ├── [slug]/
-│   │   │   ├── index.astro   # 店铺页面
-│   │   │   └── admin.astro   # 商家后台
-│   │   └── admin/
-│   │       └── login.astro   # 登录页面
-│   └── config.ts             # 配置文件
-├── public/
-│   │   └── favicon.svg       # 网站图标
-└── package.json
+```text
+src/
+├── pages/        路由层（页面 + API）
+│   ├── [slug]/   顾客店铺页
+│   ├── admin/    商家后台页
+│   ├── master/   主控后台页
+│   └── api/      同源代理 / 登录 / 管理接口
+├── components/   Astro 组件与 Preact islands
+├── lib/          共享业务逻辑、状态、归一化
+├── layouts/      全局布局
+├── styles/       全局样式
+└── config.ts     运行时配置
+public/           静态资源
+scripts/          Node 测试与校验脚本
 ```
 
 ## 页面说明
 
 - `/` - 首页，引导进入
-- `/{slug}` - 顾客店铺页面（如: `/demo`）
-- `/{slug}/admin` - 商家后台管理
-- `/admin/login` - 商家登录
+- `/{slug}` - 顾客店铺页面（如：`/demo`）
+- `/admin/{slug}` - 商家后台管理
+- `/admin/{slug}/login` - 商家登录
+- `/master` - 主控后台
+- `/master/login` - 主控登录
 
 ## 本地开发
 ```bash
 # 安装依赖
-npm install
+pnpm install
 
 # 启动开发服务器
-npm run build
+pnpm dev
 
 # 构建
-npm run build
+pnpm build
 ```
 
 ## 部署
@@ -53,12 +53,12 @@ npm run build
 1. 构建项目:
 
    ```bash
-   npm run build
+   pnpm build
    ```
 
 2. 使用 Wrangler 部署:
    ```bash
-   npx wrangler pages deploy dist
+   pnpm exec wrangler pages deploy dist
    ```
 
 ### 自动部署 (GitHub Actions)
@@ -74,7 +74,7 @@ npm run build
 编辑 `src/config.ts` 或在构建时设置环境变量
 
 ```bash
-PUBLIC_API_URL=https://api.yourdomain.com npm run build
+PUBLIC_API_URL=https://api.yourdomain.com pnpm build
 ```
 
 ## 环境变量

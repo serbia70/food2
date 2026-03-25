@@ -79,6 +79,17 @@ function addDays(dateOnly: string, days: number): string {
   return `${year}-${month}-${day}`;
 }
 
+function addMonths(dateOnly: string, months: number): string {
+  const parsed = parseDateOnly(dateOnly);
+  if (!parsed) return '';
+  const utcMs = Date.UTC(parsed.year, parsed.month - 1 + months, parsed.day);
+  const next = new Date(utcMs);
+  const year = String(next.getUTCFullYear());
+  const month = String(next.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(next.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function resolveLabel(alertLevel: AlertLevel): string {
   if (alertLevel === 'normal') return '正常';
   if (alertLevel === 'warning') return '即将到期';
@@ -97,15 +108,39 @@ function resolveRowTone(alertLevel: AlertLevel): string {
   return 'muted';
 }
 
+function hasValue(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  return true;
+}
+
+function firstValue(...values: unknown[]): unknown {
+  for (const value of values) {
+    if (hasValue(value)) return value;
+  }
+  return undefined;
+}
+
+function toBoolean(value: unknown, fallback: boolean): boolean {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return fallback;
+  if (raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on') return true;
+  if (raw === 'false' || raw === '0' || raw === 'no' || raw === 'off') return false;
+  return fallback;
+}
+
 function isManualStop(shop: Record<string, any>): boolean {
   const reason = String(shop?.dine_in_stop_reason || '').trim().toLowerCase();
   return reason === 'manual';
 }
 
 function isDineInEnabled(shop: Record<string, any>): boolean {
-  const value = Number(shop?.enable_dine_in);
-  if (Number.isFinite(value)) return value !== 0;
-  return true;
+  const value = firstValue(shop?.enableDineIn, shop?.enable_dine_in);
+  if (value === undefined) return true;
+  return toBoolean(value, true);
 }
 
 export function getNextDineInBillingStart(referenceDate?: string | Date): string {
@@ -124,7 +159,10 @@ export function buildDineInBillingState(shop: Record<string, any>, referenceDate
   const billingStartAt =
     toDateOnly(shop?.dine_in_billing_start_at) || getNextDineInBillingStart(currentDate);
 
-  const expiresAt = toDateOnly(shop?.dine_in_expires_at) || toDateOnly(shop?.expire_date);
+  const expiresAt =
+    toDateOnly(shop?.dine_in_expires_at) ||
+    toDateOnly(shop?.expire_date) ||
+    (billingStartAt ? addMonths(billingStartAt, 12) : '');
   const graceUntil = toDateOnly(shop?.dine_in_grace_until) || (expiresAt ? addDays(expiresAt, 5) : '');
 
   let alertLevel: AlertLevel = 'normal';

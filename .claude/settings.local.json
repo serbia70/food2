@@ -97,7 +97,21 @@
       "Bash(ls:*)",
       "Bash(echo \"merge-base HEAD..food2: $?\")",
       "Bash(echo \"merge-base food2..main: $?\")",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(NODE_OPTIONS=--max-old-space-size=4096 pnpm build)",
+      "Bash(cp:*)",
+      "Bash(curl:*)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :3001)",
+      "Bash(printf '\\\\n---BODY---\\\\n')",
+      "Read(//tmp/**)",
+      "Bash(printf '\\\\n---PAGE---\\\\n')",
+      "Bash(go test:*)",
+      "Bash(gofmt:*)",
+      "Bash(go build:*)",
+      "Bash(go run:*)",
+      "WebFetch(domain:food2.serbia70.com)",
+      "Bash(go env:*)"
     ]
   }
 }

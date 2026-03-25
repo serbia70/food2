@@ -17,3 +17,20 @@ test('step 1 cart summary stays inside the scrollable modal body', async () => {
   assert.ok(summaryIndex > -1);
   assert.ok(openDivs > closeDivs);
 });
+
+test('delivery button state contract is locked in CartModeActions', async () => {
+  const source = await readFile(resolve(process.cwd(), 'src/components/cart-modal/CartModeActions.tsx'), 'utf8');
+
+  assert.match(source, /const deliveryDisabled = totalCount === 0 \|\| !isShopOpen \|\| isDeliveryLocked \|\| !enableDelivery;/);
+  assert.match(source, /const deliveryLabel = !enableDelivery[\s\S]*"Dostava nije dostupna \/ 外卖尚未开通"[\s\S]*"🔒 外卖暂停"[\s\S]*"Dostava \/ 外卖"/);
+  assert.match(source, /\{!tableNumber && \(/);
+  assert.doesNotMatch(source, /\{enableDelivery && !tableNumber && \(/);
+  assert.match(source, /disabled=\{deliveryDisabled\}/);
+  assert.match(source, /onClick=\{\(\) => \{[\s\S]*if \(deliveryDisabled\) return;[\s\S]*onStartDelivery\(\);[\s\S]*\}\}/);
+});
+
+test('delivery button state contract is locked in shop page', async () => {
+  const pageSource = await readFile(resolve(process.cwd(), 'src/pages/[slug]/index.astro'), 'utf8');
+
+  assert.match(pageSource, /enableDelivery=\{enableDelivery\}/);
+});

@@ -35,6 +35,13 @@ export default function CartModeActions({
   onOpenTableModal,
   onStartDelivery,
 }: CartModeActionsProps) {
+  const deliveryDisabled = totalCount === 0 || !isShopOpen || isDeliveryLocked || !enableDelivery;
+  const deliveryLabel = !enableDelivery
+    ? "Dostava nije dostupna / 外卖尚未开通"
+    : isDeliveryLocked
+      ? "🔒 外卖暂停"
+      : "Dostava / 外卖";
+
   return (
     <div className="cart-action-btns">
       {enableDineIn && !deliveryMode && (
@@ -53,14 +60,17 @@ export default function CartModeActions({
         </button>
       )}
 
-      {enableDelivery && !tableNumber && (
+      {!tableNumber && (
         <button
           className="cart-btn-delivery"
-          onClick={onStartDelivery}
-          disabled={totalCount === 0 || !isShopOpen || isDeliveryLocked}
-          title={isDeliveryLocked ? deliveryLockReason : ""}
+          onClick={() => {
+            if (deliveryDisabled) return;
+            onStartDelivery();
+          }}
+          disabled={deliveryDisabled}
+          title={!enableDelivery ? "" : isDeliveryLocked ? deliveryLockReason : ""}
         >
-          {isDeliveryLocked ? "🔒 外卖暂停" : "Dostava / 外卖"}
+          {deliveryLabel}
         </button>
       )}
     </div>

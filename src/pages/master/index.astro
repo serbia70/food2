@@ -433,13 +433,17 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
             resetDefaults.reservationCommissionType || MASTER_SHOP_FEE_FALLBACKS.reservationCommissionType,
           ),
           reservationCommissionValue: Number(
-            resetDefaults.reservationCommissionValue ?? MASTER_SHOP_FEE_FALLBACKS.reservationCommissionValue,
+            resetDefaults.reservationCommissionValue === undefined
+              ? MASTER_SHOP_FEE_FALLBACKS.reservationCommissionValue
+              : resetDefaults.reservationCommissionValue,
           ),
           deliveryCommissionType: String(
             resetDefaults.deliveryCommissionType || MASTER_SHOP_FEE_FALLBACKS.deliveryCommissionType,
           ),
           deliveryCommissionValue: Number(
-            resetDefaults.deliveryCommissionValue ?? MASTER_SHOP_FEE_FALLBACKS.deliveryCommissionValue,
+            resetDefaults.deliveryCommissionValue === undefined
+              ? MASTER_SHOP_FEE_FALLBACKS.deliveryCommissionValue
+              : resetDefaults.deliveryCommissionValue,
           ),
         });
 

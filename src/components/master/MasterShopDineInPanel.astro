@@ -15,7 +15,7 @@
     <form
       id="master-shop-dinein-form"
       class="side-form"
-      onsubmit="return window.submitMasterShopDineIn ? window.submitMasterShopDineIn(this, event) : false;"
+      onsubmit="return false;"
     >
       <input type="hidden" name="shopId" />
 
@@ -31,10 +31,10 @@
       </label>
 
       <div class="side-actions side-actions-grid">
-        <button type="submit" class="side-submit" name="action" value="extend_one_year">延长一年</button>
-        <button type="submit" class="side-submit side-submit-alt" name="action" value="set_expiry">设置到期</button>
-        <button type="submit" class="side-submit side-submit-danger" name="action" value="manual_stop">手动停用</button>
-        <button type="submit" class="side-submit side-submit-safe" name="action" value="restore">恢复堂食</button>
+        <button type="button" class="side-submit" onclick="return window.submitMasterShopDineIn ? window.submitMasterShopDineIn(this.form, 'extend_one_year', this) : false;">延长一年</button>
+        <button type="button" class="side-submit side-submit-alt" onclick="return window.submitMasterShopDineIn ? window.submitMasterShopDineIn(this.form, 'set_expiry', this) : false;">设置到期</button>
+        <button type="button" class="side-submit side-submit-danger" onclick="return window.submitMasterShopDineIn ? window.submitMasterShopDineIn(this.form, 'manual_stop', this) : false;">手动停用</button>
+        <button type="button" class="side-submit side-submit-safe" onclick="return window.submitMasterShopDineIn ? window.submitMasterShopDineIn(this.form, 'restore', this) : false;">恢复堂食</button>
       </div>
 
       <div id="master-shop-dinein-feedback" class="side-feedback">请选择操作后提交。</div>

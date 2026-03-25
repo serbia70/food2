@@ -3,33 +3,61 @@ import assert from 'node:assert/strict';
 
 import { buildMasterSettingsView } from './master-settings-view.ts';
 
-test('从 settings 中提取套餐月费与提成配置', () => {
+test('从 settings 中提取预订与外卖默认配置', () => {
   const view = buildMasterSettingsView({
-    subscription_fee_rsd: 1200,
-    business_fee_rsd: 1800,
+    reservation_enabled: 1,
+    reservation_commission_type: 'percentage',
+    reservation_commission_value: 0,
+    delivery_enabled: 0,
+    delivery_commission_type: 'per_order',
+    delivery_commission_value: 5,
     subscription_delivery_commission_type: 'percentage',
     subscription_delivery_commission_value: 3,
     business_delivery_commission_type: 'per_order',
     business_delivery_commission_value: 35,
   });
 
-  assert.equal(view.subscriptionFeeRsd, 1200);
-  assert.equal(view.businessFeeRsd, 1800);
+  assert.equal(view.reservationPlan.enabled, true);
+  assert.equal(view.reservationPlan.commissionType, 'percentage');
+  assert.equal(view.reservationPlan.commissionValue, 0);
+  assert.equal(view.reservationPlan.displayText, '免费');
+  assert.equal(view.reservationPlan.source, 'new');
+  assert.equal(view.reservationPlan.sourceLabel, '店铺覆盖');
+  assert.equal(view.deliveryPlan.enabled, false);
+  assert.equal(view.deliveryPlan.commissionType, 'per_order');
+  assert.equal(view.deliveryPlan.commissionValue, 5);
+  assert.equal(view.deliveryPlan.displayText, '每单 5 RSD');
+  assert.equal(view.deliveryPlan.source, 'new');
+  assert.equal(view.deliveryPlan.sourceLabel, '店铺覆盖');
+  assert.equal(view.subscriptionFeeRsd, 0);
+  assert.equal(view.businessFeeRsd, 5);
   assert.equal(view.subscriptionCommissionType, 'percentage');
-  assert.equal(view.subscriptionCommissionValue, 3);
+  assert.equal(view.subscriptionCommissionValue, 0);
   assert.equal(view.businessCommissionType, 'per_order');
-  assert.equal(view.businessCommissionValue, 35);
+  assert.equal(view.businessCommissionValue, 5);
 });
 
 test('缺失设置字段时回退默认值', () => {
   const view = buildMasterSettingsView({});
 
-  assert.equal(view.subscriptionFeeRsd, 1200);
-  assert.equal(view.businessFeeRsd, 1800);
+  assert.equal(view.reservationPlan.enabled, true);
+  assert.equal(view.reservationPlan.commissionType, 'percentage');
+  assert.equal(view.reservationPlan.commissionValue, 3);
+  assert.equal(view.reservationPlan.displayText, '3%');
+  assert.equal(view.reservationPlan.source, 'default');
+  assert.equal(view.reservationPlan.sourceLabel, '全局默认');
+  assert.equal(view.deliveryPlan.enabled, true);
+  assert.equal(view.deliveryPlan.commissionType, 'percentage');
+  assert.equal(view.deliveryPlan.commissionValue, 5);
+  assert.equal(view.deliveryPlan.displayText, '5%');
+  assert.equal(view.deliveryPlan.source, 'default');
+  assert.equal(view.deliveryPlan.sourceLabel, '全局默认');
+  assert.equal(view.subscriptionFeeRsd, 3);
+  assert.equal(view.businessFeeRsd, 5);
   assert.equal(view.subscriptionCommissionType, 'percentage');
   assert.equal(view.subscriptionCommissionValue, 3);
   assert.equal(view.businessCommissionType, 'percentage');
-  assert.equal(view.businessCommissionValue, 3);
+  assert.equal(view.businessCommissionValue, 5);
   assert.deepEqual(view.footer, {
     footerText: '',
     footerPhone: '',

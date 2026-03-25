@@ -86,3 +86,32 @@ test('legacy expire_date still works as fallback', () => {
   assert.equal(state.statusLabel, '即将到期');
   assert.equal(state.expiresAt, '2027-03-01');
 });
+
+test('camelCase enableDineIn overrides stale snake_case enable flag', () => {
+  const state = buildDineInBillingState(
+    {
+      enableDineIn: 0,
+      enable_dine_in: 1,
+      dine_in_stop_reason: 'manual',
+      dine_in_expires_at: '2027-03-01',
+      dine_in_grace_until: '2027-03-06',
+    },
+    '2027-02-24',
+  );
+
+  assert.equal(state.alertLevel, 'stopped');
+  assert.equal(state.statusLabel, '已停用');
+});
+
+test('missing dine-in dates fall back to next month start plus 12 months', () => {
+  const state = buildDineInBillingState(
+    {
+      enable_dine_in: 1,
+    },
+    '2027-02-15',
+  );
+
+  assert.equal(state.billingStartAt, '2027-03-01');
+  assert.equal(state.expiresAt, '2028-03-01');
+  assert.equal(state.graceUntil, '2028-03-06');
+});

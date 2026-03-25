@@ -17,6 +17,7 @@ import {
   isPlaceholderZoneName,
   isSimpleHallMode,
 } from '../../lib/table-config';
+import { buildDineInBillingState } from '../../lib/dine-in-billing.ts';
 import { buildTableLookupKeys } from '../../scripts/shop/table-utils';
 
 export const prerender = false;
@@ -127,21 +128,13 @@ const phone = settings?.contact?.phone || settings?.phone || shop?.phone || '061
 const addressForMap = String(settings?.contact?.address || settings?.address || shop?.address || shop?.zone || shop?.name || slug || '').trim();
 const mapUrl = String(settings?.contact?.map_url || settings?.map_url || (addressForMap ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressForMap)}` : '')).trim();
 
-const today = new Date();
-today.setHours(0, 0, 0, 0);
-
-let isDineInExpired = false;
-if (shop?.expire_date) {
-  const expireDate = new Date(shop.expire_date);
-  expireDate.setHours(0, 0, 0, 0);
-  if (expireDate < today) isDineInExpired = true;
-}
-
 let isDeliveryLocked = Boolean(shop?.delivery_locked);
 const deliveryLockReason = String(
   shop?.delivery_lock_reason ||
     '余额不足，请先充值后使用外卖 / Insufficient wallet balance, please top up first',
 );
+const dineInBilling = buildDineInBillingState(shop);
+const dineInSubscriptionBlocked = ['stopped', 'auto_closed', 'disabled_unknown'].includes(dineInBilling.alertLevel);
 
 const tableNum = Astro.url.searchParams.get('table');
 const mode = Astro.url.searchParams.get('mode');
@@ -323,7 +316,7 @@ if (String(ogImage).startsWith('/')) ogImage = `${Astro.url.origin}${ogImage}`;
 
 const showClosedPage = false;
 const enableDelivery = Number(shop?.enable_delivery ?? 1) !== 0;
-const enableDineIn = Number(shop?.enable_dine_in ?? 1) !== 0;
+const enableDineIn = Number(shop?.enable_dine_in ?? 1) !== 0 && !dineInSubscriptionBlocked;
 const billingPlanType = String(shop?.billing_plan_type || 'subscription').toLowerCase();
 const enableReservation = (billingPlanType === 'subscription' || billingPlanType === 'business') && Number(shop?.enable_reservation ?? 1) !== 0;
 ---
@@ -417,10 +410,16 @@ const enableReservation = (billingPlanType === 'subscription' || billingPlanType
                       )}
 
                       <div class="table-actions-row">
-                        <button type="button" class="table-action-btn primary" onclick={`window.openTableOrder(${JSON.stringify(table.value)})`}>
-                          点餐 / Poruci
-                        </button>
-                        {status.occupied && (
+                        {enableDineIn ? (
+                          <button type="button" class="table-action-btn primary" onclick={`window.openTableOrder(${JSON.stringify(table.value)})`}>
+                            点餐 / Poruci
+                          </button>
+                        ) : (
+                          <div class="table-closed-banner" style="color:#d84315; font-weight:700; font-size:13px; padding:8px 10px; background:#fff3e0; border-radius:10px;">
+                            堂食已关闭
+                          </div>
+                        )}
+                        {enableDineIn && status.occupied && (
                           <>
                             <button type="button" class="table-action-btn warning" onclick={`window.openTableAdd(${JSON.stringify(table.value)})`}>
                               加餐 / Dodaj

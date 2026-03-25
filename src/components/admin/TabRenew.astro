@@ -8,33 +8,35 @@ const {
   lastMonthName,
   billingAlertLevel = 'normal',
   billingBalanceRSD = 0,
-  subscriptionFeeRSD = 1280,
-  businessFeeRSD = 1800,
   billingStatus = 'active',
-  billingNextChargeDate = '',
-  billingGraceUntil = '',
   billingPlanType = 'subscription',
   pendingPlanType = '',
   upgradeChargeRSD = 0,
+  walletCopy = '预订 / 外卖余额',
+  walletHint = '仅用于预订 / 外卖技术服务费，不包含堂食年费',
+  balanceReminderText = '',
+  balanceReminderLevel = 'normal',
+  reservationPlan = { displayText: '' },
+  deliveryPlan = { displayText: '' },
 } = Astro.props;
 
 const isSubscriptionPlan = String(billingPlanType || 'subscription').toLowerCase() === 'subscription';
 const isBusinessPlan = String(billingPlanType || 'subscription').toLowerCase() === 'business';
 
 const billingColor =
-  billingAlertLevel === 'overdue' ? '#742a2a' : 
-  billingAlertLevel === 'critical' ? '#c53030' : 
-  billingAlertLevel === 'warning' ? '#b7791f' : '#2f855a';
+  balanceReminderLevel === 'overdue' ? '#742a2a' :
+  balanceReminderLevel === 'critical' ? '#c53030' :
+  balanceReminderLevel === 'warning' ? '#b7791f' : '#2f855a';
 
 const billingBg =
-  billingAlertLevel === 'overdue' ? '#fff5f5' : 
-  billingAlertLevel === 'critical' ? '#fff5f5' : 
-  billingAlertLevel === 'warning' ? '#fffaf0' : '#f0fff4';
+  balanceReminderLevel === 'overdue' ? '#fff5f5' :
+  balanceReminderLevel === 'critical' ? '#fff5f5' :
+  balanceReminderLevel === 'warning' ? '#fffaf0' : '#f0fff4';
 
 const alertText =
   isSubscriptionPlan || isBusinessPlan
-    ? billingAlertLevel === 'overdue' ? '欠费宽限中，请尽快充值' : 
-      billingAlertLevel === 'critical' ? '余额不足，请立即充值' : 
+    ? billingAlertLevel === 'overdue' ? '欠费宽限中，请尽快充值' :
+      billingAlertLevel === 'critical' ? '余额不足，请立即充值' :
       billingAlertLevel === 'warning' ? '余额较低，建议尽快充值' : '余额充足'
     : '状态异常，请联系平台';
 ---
@@ -44,18 +46,18 @@ const alertText =
 
     {/* 1. 订阅钱包卡片 */}
     <div style={`background:${billingBg}; border:2px solid ${billingColor}; border-radius:12px; margin-bottom:20px; padding:20px;`}>
-      <h4 style={`margin:0 0 10px; color:${billingColor}; font-size:14px;`}>💳 订阅钱包余额 / Wallet Balance</h4>
+      <h4 style={`margin:0 0 10px; color:${billingColor}; font-size:14px;`}>💳 {walletCopy}</h4>
       <div style="display:flex; justify-content:center; align-items:baseline; gap:6px; margin-bottom:8px;">
         <span style={`font-size:32px; font-weight:800; color:${billingColor};`}>{billingBalanceRSD}</span>
         <span style="font-size:14px; color:#4a5568;">RSD</span>
       </div>
-      <p style={`margin:0; font-size:14px; color:${billingColor}; font-weight:700;`}>{alertText}</p>
-      
-      <div style="margin-top:15px; padding-top:15px; border-top:1px solid rgba(0,0,0,0.05); font-size:12px; color:#64748b; display:flex; justify-content:space-around;">
-        <div>计划: <strong>{isBusinessPlan ? '商务版' : '订阅版'}</strong></div>
-        <div>月费: <strong>{isBusinessPlan ? businessFeeRSD : subscriptionFeeRSD} RSD</strong></div>
-        <div>扣费日: <strong>每月1号</strong></div>
+      <p style={`margin:0; font-size:14px; color:${billingColor}; font-weight:700;`}>{balanceReminderText || alertText}</p>
+
+      <div style="margin-top:15px; padding-top:15px; border-top:1px solid rgba(0,0,0,0.05); font-size:12px; color:#64748b; display:flex; justify-content:space-around; gap:12px; flex-wrap:wrap;">
+        <div>预订：<strong>{reservationPlan.displayText || '未设置'}</strong></div>
+        <div>外卖：<strong>{deliveryPlan.displayText || '未设置'}</strong></div>
       </div>
+      <div style="margin-top:10px; font-size:12px; color:#475569; text-align:left;">{walletHint}</div>
     </div>
 
     {/* 2. 佣金统计卡片 */}
@@ -87,7 +89,7 @@ const alertText =
               </div>
             </>
           )}
-          
+
           <div style="margin-top:12px; display:flex; justify-content:center; gap:20px; font-size:12px; color:#64748b;">
             <div>上月累计扣费: <strong>{lastMonthCommission}</strong></div>
             <div>本月累计扣费: <strong>{thisMonthCommission}</strong></div>

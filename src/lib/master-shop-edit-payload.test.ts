@@ -69,6 +69,7 @@ test('shop payload keeps split plan fields and compatibility aliases', () => {
   assert.equal(payload.commission_value, 5);
   assert.equal(payload.enableDelivery, true);
   assert.equal(payload.enableReservation, true);
+  assert.equal(payload.enable_reservation, 1);
   assert.equal(payload.commissionMode, 'override');
 });
 
@@ -141,6 +142,31 @@ test('global mode stays global when fees are unchanged from defaults', () => {
   assert.equal(payload.commissionMode, 'global');
 });
 
+test('global mode switches to override when reservation enabled flag differs from defaults', () => {
+  const payload = buildMasterShopEditPayload(
+    {
+      id: '10',
+      name: 'Global Shop Toggle Change',
+      slug: 'global-shop-toggle-change',
+      reservationEnabled: '0',
+      reservationCommissionType: 'percentage',
+      reservationCommissionValue: '3',
+      deliveryEnabled: '1',
+      deliveryCommissionType: 'percentage',
+      deliveryCommissionValue: '5',
+      commissionMode: 'global',
+    },
+    {
+      defaults: {
+        reservationPlan: { enabled: true, commissionType: 'percentage', commissionValue: 3 },
+        deliveryPlan: { enabled: true, commissionType: 'percentage', commissionValue: 5 },
+      },
+    },
+  );
+
+  assert.equal(payload.commissionMode, 'override');
+});
+
 test('global mode stays global after resetting fee fields back to defaults', () => {
   const reset = resetMasterShopFeeOverrides(
     {
@@ -181,4 +207,31 @@ test('global mode stays global after resetting fee fields back to defaults', () 
   );
 
   assert.equal(payload.commissionMode, 'global');
+});
+
+test('shop edit payload keeps legacy manage contract fields for update_shop', () => {
+  const payload = buildMasterShopEditPayload({
+    id: '12',
+    name: 'Manage Shop',
+    slug: 'manage-shop',
+    password: 'next-pass',
+    status: 'active',
+    enableDelivery: '0',
+    enableDineIn: '1',
+    enableReservation: '0',
+    reservationEnabled: '0',
+    reservationCommissionType: 'percentage',
+    reservationCommissionValue: '3',
+    deliveryEnabled: '0',
+    deliveryCommissionType: 'percentage',
+    deliveryCommissionValue: '5',
+    commissionMode: 'override',
+  });
+
+  assert.equal(payload.newPassword, 'next-pass');
+  assert.equal(payload.enableReservation, false);
+  assert.equal(payload.enableDelivery, false);
+  assert.equal(payload.enableDineIn, true);
+  assert.equal(payload.commissionType, 'percentage');
+  assert.equal(payload.commissionValue, 5);
 });

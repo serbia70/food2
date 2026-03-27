@@ -9,6 +9,7 @@ import { getAdminHandlers } from './globals';
 import { invokeAdminAction } from './action-registry';
 import {
   handleModify as handleModifyTable,
+  handleTableDetails as handleTableDetailsForTable,
   handleTableOrder as handleTableOrderForTable,
   handleTableRemarks as handleTableRemarksForTable,
   closeOrderModal as closeOrderModalUI,
@@ -73,6 +74,7 @@ export function bindAdminClickDelegation(options: {
     else if (action === 'table-checkout') (window as any).handleTableCheckout?.(table || '');
     else if (action === 'table-print') void handlePrintTableUI(table || '');
     else if (action === 'table-order') handleTableOrderForTable(table || '');
+    else if (action === 'table-details') handleTableDetailsForTable(table || '');
     else if (action === 'table-modify') handleModifyTable(table || '');
     else if (action === 'table-remarks') handleTableRemarksForTable(table || '');
     else if (action === 'order-remarks') handleTableRemarksForTable(null as any, id || null);

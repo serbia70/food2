@@ -251,6 +251,24 @@ test('非法 shop commission_mode 应继续回退到 settings override', () => {
   assert.equal(view.deliveryPlan.displayText, '6%');
 });
 
+test('reservation 应回退读取 legacy enable_reservation 开关', () => {
+  const view = buildAdminOrderChannelBillingView(
+    {
+      billing: { balance_rsd: 1800, billing_alert_level: 'normal' },
+      shop: {
+        enable_reservation: 0,
+      },
+      settings: {},
+    },
+    {
+      reservationPlan: { enabled: true, commissionType: 'percentage', commissionValue: 3 },
+      deliveryPlan: { commissionType: 'percentage', commissionValue: 5 },
+    },
+  );
+
+  assert.equal(view.reservationPlan.enabled, false);
+});
+
 test('shop 与 settings 的非法 commission_mode 都应回退到 global delivery 字段', () => {
   const view = buildAdminOrderChannelBillingView(
     {

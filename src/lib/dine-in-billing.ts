@@ -1,3 +1,5 @@
+import { pickFirstMeaningfulValue } from './master-value-selection.ts';
+
 const BUSINESS_TIMEZONE = 'Europe/Belgrade';
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -108,19 +110,6 @@ function resolveRowTone(alertLevel: AlertLevel): string {
   return 'muted';
 }
 
-function hasValue(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  if (typeof value === 'string') return value.trim() !== '';
-  return true;
-}
-
-function firstValue(...values: unknown[]): unknown {
-  for (const value of values) {
-    if (hasValue(value)) return value;
-  }
-  return undefined;
-}
-
 function toBoolean(value: unknown, fallback: boolean): boolean {
   if (value === undefined || value === null) return fallback;
   if (typeof value === 'boolean') return value;
@@ -138,7 +127,7 @@ function isManualStop(shop: Record<string, any>): boolean {
 }
 
 function isDineInEnabled(shop: Record<string, any>): boolean {
-  const value = firstValue(shop?.enableDineIn, shop?.enable_dine_in);
+  const value = pickFirstMeaningfulValue(shop?.enableDineIn, shop?.enable_dine_in);
   if (value === undefined) return true;
   return toBoolean(value, true);
 }

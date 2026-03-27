@@ -17,14 +17,14 @@ const { settings } = Astro.props as { settings: MasterSettingsView['wechat'] };
       <span>支付宝收款码 URL</span>
       <div class="upload-row">
         <input name="alipayPaymentQr" type="text" value={settings.alipayPaymentQr} placeholder="/uploads/alipay.jpg 或 https://..." />
-        <button type="button" class="upload-btn" onclick="window.triggerMasterUpload ? window.triggerMasterUpload('alipayPaymentQr') : null">上传</button>
+        <button type="button" class="upload-btn" data-master-upload-field="alipayPaymentQr" onclick="window.triggerMasterUpload ? window.triggerMasterUpload('alipayPaymentQr') : null">上传</button>
       </div>
     </label>
     <label>
       <span>微信收款码 URL</span>
       <div class="upload-row">
         <input name="wechatPaymentQr" type="text" value={settings.wechatPaymentQr} placeholder="/uploads/wechat.jpg 或 https://..." />
-        <button type="button" class="upload-btn" onclick="window.triggerMasterUpload ? window.triggerMasterUpload('wechatPaymentQr') : null">上传</button>
+        <button type="button" class="upload-btn" data-master-upload-field="wechatPaymentQr" onclick="window.triggerMasterUpload ? window.triggerMasterUpload('wechatPaymentQr') : null">上传</button>
       </div>
     </label>
 

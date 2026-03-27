@@ -18,6 +18,12 @@ const {
   balanceReminderLevel = 'normal',
   reservationPlan = { displayText: '' },
   deliveryPlan = { displayText: '' },
+  dineInBillingStatusLabel = '',
+  dineInBillingStartAt = '',
+  dineInBillingExpiresAt = '',
+  dineInBillingGraceUntil = '',
+  dineInStopReason = '',
+  dineInToggleLabel = '',
 } = Astro.props;
 
 const isSubscriptionPlan = String(billingPlanType || 'subscription').toLowerCase() === 'subscription';
@@ -58,6 +64,16 @@ const alertText =
         <div>外卖：<strong>{deliveryPlan.displayText || '未设置'}</strong></div>
       </div>
       <div style="margin-top:10px; font-size:12px; color:#475569; text-align:left;">{walletHint}</div>
+    </div>
+
+    <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; margin-bottom:20px; padding:16px; text-align:left;">
+      <h4 style="margin:0 0 10px; color:#9a3412; font-size:14px;">🍽️ 堂食订阅</h4>
+      <div style="font-size:13px; color:#7c2d12; font-weight:700; margin-bottom:6px;">{dineInBillingStatusLabel || '--'}</div>
+      <div style="font-size:12px; color:#9a3412; margin-top:4px;">计费开始：{dineInBillingStartAt || '--'}</div>
+      <div style="font-size:12px; color:#9a3412; margin-top:4px;">到期日期：{dineInBillingExpiresAt || '--'}</div>
+      <div style="font-size:12px; color:#b45309; margin-top:4px;">宽限截止：{dineInBillingGraceUntil || '--'}</div>
+      <div style="font-size:12px; color:#475569; margin-top:4px;">{dineInStopReason || '--'}</div>
+      <div style="font-size:12px; color:#475569; margin-top:4px;">{dineInToggleLabel || '--'}</div>
     </div>
 
     {/* 2. 佣金统计卡片 */}

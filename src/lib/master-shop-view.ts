@@ -1,4 +1,5 @@
 import { buildDineInBillingState } from './dine-in-billing.ts';
+import { pickFirstMeaningfulValue } from './master-value-selection.ts';
 import { buildOrderChannelFeePlan, type OrderChannelFeePlan } from './order-channel-fees-view.ts';
 
 type MasterShopInput = Record<string, unknown>;
@@ -66,19 +67,6 @@ export type MasterShopView = {
 function toNumber(value: unknown): number {
   const n = Number(value || 0);
   return Number.isFinite(n) ? n : 0;
-}
-
-function hasValue(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  if (typeof value === 'string') return value.trim() !== '';
-  return true;
-}
-
-function firstValue(...values: unknown[]): unknown {
-  for (const value of values) {
-    if (hasValue(value)) return value;
-  }
-  return undefined;
 }
 
 function resolveStatusLabel(status: string): string {
@@ -162,21 +150,21 @@ function buildReservationPlan(shop: MasterShopInput, defaults?: MasterShopViewDe
   return buildOrderChannelFeePlan({
     channel: 'reservation',
     scope: 'shop',
-    enabled: firstValue(shop?.reservation_enabled, shop?.enableReservation),
-    commissionType: firstValue(
+    enabled: pickFirstMeaningfulValue(shop?.reservation_enabled, shop?.enableReservation),
+    commissionType: pickFirstMeaningfulValue(
       shop?.reservation_commission_type,
       shop?.subscriptionDeliveryCommissionType,
       shop?.subscription_delivery_commission_type,
     ),
-    commissionValue: firstValue(
+    commissionValue: pickFirstMeaningfulValue(
       shop?.reservation_commission_value,
       shop?.subscriptionDeliveryCommissionValue,
       shop?.subscriptionFeeRsd,
       shop?.subscription_delivery_commission_value,
     ),
-    legacyEnabled: firstValue(shop?.enable_reservation, shop?.subscription_enabled),
-    legacyCommissionType: firstValue(shop?.subscriptionDeliveryCommissionType, shop?.subscription_delivery_commission_type),
-    legacyCommissionValue: firstValue(shop?.subscriptionDeliveryCommissionValue, shop?.subscription_delivery_commission_value),
+    legacyEnabled: pickFirstMeaningfulValue(shop?.enable_reservation, shop?.subscription_enabled),
+    legacyCommissionType: pickFirstMeaningfulValue(shop?.subscriptionDeliveryCommissionType, shop?.subscription_delivery_commission_type),
+    legacyCommissionValue: pickFirstMeaningfulValue(shop?.subscriptionDeliveryCommissionValue, shop?.subscription_delivery_commission_value),
     defaultEnabled: defaultPlan.enabled ?? true,
     defaultCommissionType: defaultPlan.commissionType ?? 'percentage',
     defaultCommissionValue: defaultPlan.commissionValue ?? 3,
@@ -188,33 +176,33 @@ function buildDeliveryPlan(shop: MasterShopInput, defaults?: MasterShopViewDefau
   const commissionMode = String(shop?.commission_mode || '').trim().toLowerCase();
   const overrideCommissionType =
     commissionMode === 'override'
-      ? firstValue(shop?.commission_override_type, shop?.commission_type)
+      ? pickFirstMeaningfulValue(shop?.commission_override_type, shop?.commission_type)
       : undefined;
   const overrideCommissionValue =
     commissionMode === 'override'
-      ? firstValue(shop?.commission_override_value, shop?.commission_value)
+      ? pickFirstMeaningfulValue(shop?.commission_override_value, shop?.commission_value)
       : undefined;
 
   return buildOrderChannelFeePlan({
     channel: 'delivery',
     scope: 'shop',
-    enabled: firstValue(shop?.delivery_enabled, shop?.enableDelivery),
-    commissionType: firstValue(
+    enabled: pickFirstMeaningfulValue(shop?.delivery_enabled, shop?.enableDelivery),
+    commissionType: pickFirstMeaningfulValue(
       shop?.delivery_commission_type,
       shop?.businessDeliveryCommissionType,
       shop?.business_delivery_commission_type,
       overrideCommissionType,
     ),
-    commissionValue: firstValue(
+    commissionValue: pickFirstMeaningfulValue(
       shop?.delivery_commission_value,
       shop?.businessDeliveryCommissionValue,
       overrideCommissionValue,
       shop?.businessFeeRsd,
       shop?.business_delivery_commission_value,
     ),
-    legacyEnabled: firstValue(shop?.enable_delivery, shop?.business_enabled),
-    legacyCommissionType: firstValue(shop?.businessDeliveryCommissionType, shop?.business_delivery_commission_type),
-    legacyCommissionValue: firstValue(shop?.businessDeliveryCommissionValue, shop?.business_delivery_commission_value),
+    legacyEnabled: pickFirstMeaningfulValue(shop?.enable_delivery, shop?.business_enabled),
+    legacyCommissionType: pickFirstMeaningfulValue(shop?.businessDeliveryCommissionType, shop?.business_delivery_commission_type),
+    legacyCommissionValue: pickFirstMeaningfulValue(shop?.businessDeliveryCommissionValue, shop?.business_delivery_commission_value),
     defaultEnabled: defaultPlan.enabled ?? true,
     defaultCommissionType: defaultPlan.commissionType ?? 'percentage',
     defaultCommissionValue: defaultPlan.commissionValue ?? 5,
@@ -247,7 +235,7 @@ export function buildMasterShopView(shop: MasterShopInput, referenceDateOrOption
   const deliveryPlan = buildDeliveryPlan(shop, options.defaults);
   const enableReservation = reservationPlan.enabled;
   const enableDelivery = deliveryPlan.enabled;
-  const enableDineIn = toNumber(firstValue(shop?.enableDineIn, shop?.enable_dine_in)) !== 0;
+  const enableDineIn = toNumber(pickFirstMeaningfulValue(shop?.enableDineIn, shop?.enable_dine_in)) !== 0;
   const todayOrders = toNumber(shop?.today_order_count);
   const todayRevenue = toNumber(shop?.today_revenue);
   const deliveryTodayOrders = toNumber(shop?.delivery_today_count);

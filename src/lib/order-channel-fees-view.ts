@@ -1,3 +1,5 @@
+import { hasMeaningfulValue } from './master-value-selection.ts';
+
 export type OrderChannel = 'reservation' | 'delivery';
 export type OrderChannelFeeType = 'percentage' | 'per_order';
 export type OrderChannelFeeSource = 'new' | 'legacy' | 'default';
@@ -26,12 +28,6 @@ export type OrderChannelFeePlanInput = {
   legacyCommissionType?: unknown;
   legacyCommissionValue?: unknown;
 };
-
-function hasValue(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  if (typeof value === 'string') return value.trim() !== '';
-  return true;
-}
 
 function toNumber(value: unknown, fallback: number): number {
   if (value === undefined || value === null) return fallback;
@@ -86,23 +82,23 @@ export function formatOrderChannelFeeRule(type: unknown, value: unknown): string
 }
 
 export function buildOrderChannelFeePlan(input: OrderChannelFeePlanInput): OrderChannelFeePlan {
-  const hasNewInput = hasValue(input.enabled) || hasValue(input.commissionType) || hasValue(input.commissionValue);
-  const hasLegacyInput = hasValue(input.legacyEnabled) || hasValue(input.legacyCommissionType) || hasValue(input.legacyCommissionValue);
+  const hasNewInput = hasMeaningfulValue(input.enabled) || hasMeaningfulValue(input.commissionType) || hasMeaningfulValue(input.commissionValue);
+  const hasLegacyInput = hasMeaningfulValue(input.legacyEnabled) || hasMeaningfulValue(input.legacyCommissionType) || hasMeaningfulValue(input.legacyCommissionValue);
 
   const enabledFallback = input.scope === 'global' ? false : true;
-  const enabledValue = hasValue(input.enabled)
+  const enabledValue = hasMeaningfulValue(input.enabled)
     ? input.enabled
-    : hasValue(input.legacyEnabled)
+    : hasMeaningfulValue(input.legacyEnabled)
       ? input.legacyEnabled
       : input.defaultEnabled;
-  const typeValue = hasValue(input.commissionType)
+  const typeValue = hasMeaningfulValue(input.commissionType)
     ? input.commissionType
-    : hasValue(input.legacyCommissionType)
+    : hasMeaningfulValue(input.legacyCommissionType)
       ? input.legacyCommissionType
       : input.defaultCommissionType;
-  const commissionValue = hasValue(input.commissionValue)
+  const commissionValue = hasMeaningfulValue(input.commissionValue)
     ? input.commissionValue
-    : hasValue(input.legacyCommissionValue)
+    : hasMeaningfulValue(input.legacyCommissionValue)
       ? input.legacyCommissionValue
       : input.defaultCommissionValue;
   const enabled = toBoolean(enabledValue, enabledFallback);

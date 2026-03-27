@@ -317,8 +317,15 @@ if (String(ogImage).startsWith('/')) ogImage = `${Astro.url.origin}${ogImage}`;
 const showClosedPage = false;
 const enableDelivery = Number(shop?.enable_delivery ?? 1) !== 0;
 const enableDineIn = Number(shop?.enable_dine_in ?? 1) !== 0 && !dineInSubscriptionBlocked;
-const billingPlanType = String(shop?.billing_plan_type || 'subscription').toLowerCase();
-const enableReservation = (billingPlanType === 'subscription' || billingPlanType === 'business') && Number(shop?.enable_reservation ?? 1) !== 0;
+const reservationEnabled = Number(
+  shop?.reservation_enabled ??
+    settings?.reservation_enabled ??
+    shop?.enableReservation ??
+    shop?.enable_reservation ??
+    settings?.subscription_enabled ??
+    1,
+) !== 0;
+const enableReservation = reservationEnabled;
 ---
 
 {showClosedPage ? (

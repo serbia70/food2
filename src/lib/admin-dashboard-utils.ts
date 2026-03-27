@@ -49,6 +49,25 @@ export function normalizeJSONString(v: any, fallback: string): string {
   }
 }
 
+export function normalizeRemarkJSONString(v: any): string {
+  if (v == null) return '[]';
+  if (typeof v === 'string') {
+    const t = v.trim();
+    if (!t) return '[]';
+    try {
+      const parsed = JSON.parse(t);
+      return JSON.stringify(parsed);
+    } catch {
+      return JSON.stringify([t]);
+    }
+  }
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return '[]';
+  }
+}
+
 export function parseDBDateMs(v: any): number {
   if (!v) return 0;
   const raw = String(v).trim();

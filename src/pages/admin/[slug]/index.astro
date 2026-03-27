@@ -3,7 +3,7 @@ import Layout from '../../../layouts/Layout.astro';
 import { API_BASE_URL } from '../../../config';
 import { isHallLikeZoneName, isPlaceholderZoneName } from '../../../lib/table-config';
 import { orderMatchesAnyConfiguredTable } from '../../../lib/admin-table-ref';
-import { asObject, parseMaybeJSON, normalizeJSONString, resolveTableConfig, buildTableCards } from '../../../lib/admin-dashboard-utils';
+import { asObject, parseMaybeJSON, normalizeJSONString, normalizeRemarkJSONString, resolveTableConfig, buildTableCards } from '../../../lib/admin-dashboard-utils';
 import { fetchJSON } from '../../../lib/admin-fetch-json';
 import { buildAdminOrderChannelBillingView } from '../../../lib/admin-order-channel-billing-view.ts';
 import { buildDineInBillingState } from '../../../lib/dine-in-billing.ts';
@@ -117,7 +117,7 @@ const deliveryChargeRSD = Number(rawShop?.delivery_charge_rsd || 0);
 const deliveryLocked = Boolean(rawShop?.delivery_locked);
 const deliveryLockReason = String(rawShop?.delivery_lock_reason || '');
 const isPaidPlan = billingPlanType === 'subscription' || billingPlanType === 'business';
-const showReservationTab = isPaidPlan && Number(shop?.enable_reservation ?? 0) !== 0;
+const showReservationTab = adminBillingView.reservationPlan.enabled;
 const showStatsTab = isPaidPlan;
 const showMarketingTab = billingPlanType === 'business';
 const showCustomersTab = billingPlanType === 'subscription' || billingPlanType === 'business';
@@ -153,7 +153,7 @@ const orders = rawOrders.map((o: any) => ({
   status: String(o?.status || 'pending'),
   total_amount: Number(o?.total_amount || 0),
   items_json: normalizeJSONString(o?.items_json, '{}'),
-  remarks_json: normalizeJSONString(o?.remarks_json, '[]'),
+  remarks_json: normalizeRemarkJSONString(o?.remarks_json),
   table_info: String(o?.table_info || ''),
   user_phone: String(o?.user_phone || ''),
   scheduled_for: String(o?.scheduled_for || ''),
@@ -269,46 +269,6 @@ const cities = {
           </span>
         </div>
 
-        <div
-          style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:8px;"
-        >
-          <div style="background:#ecfdf5; border:1px solid #86efac; border-radius:8px; padding:10px;">
-            <div style="font-size:12px; color:#166534;">钱包余额</div>
-            <div style="font-size:20px; font-weight:800; color:#166534;">{billingBalanceRSD} RSD</div>
-            <div style="font-size:12px; color:#166534; margin-top:2px;">套餐：{billingPlanType === 'business' ? '商务版' : '订阅版'}</div>
-            <div style="font-size:12px; color:#166534; margin-top:2px;">仅用于预订 / 外卖费用</div>
-          </div>
-          <div style="background:#eff6ff; border:1px solid #93c5fd; border-radius:8px; padding:10px;">
-            <div style="font-size:12px; color:#1e3a8a;">外卖扣点门槛</div>
-            <div style="font-size:20px; font-weight:800; color:#1d4ed8;">{deliveryChargeRSD} RSD</div>
-            <div style="font-size:12px; color:#1e40af; margin-top:2px;">用于余额锁单判断，实际扣点按提成规则计算</div>
-          </div>
-          <div style={`border-radius:8px; padding:10px; border:1px solid ${deliveryLocked ? '#fecaca' : '#86efac'}; background:${deliveryLocked ? '#fef2f2' : '#f0fdf4'};`}>
-            <div style={`font-size:12px; color:${deliveryLocked ? '#991b1b' : '#166534'};`}>外卖状态</div>
-            <div style={`font-size:20px; font-weight:800; color:${deliveryLocked ? '#b91c1c' : '#15803d'};`}>
-              {deliveryLocked ? '受限（需充值）' : '正常可接单'}
-            </div>
-            <div style={`font-size:12px; margin-top:2px; color:${deliveryLocked ? '#991b1b' : '#166534'};`}>
-              {deliveryLocked ? (deliveryLockReason || '余额不足，请先充值') : '扣点成功后自动放行下一单'}
-            </div>
-          </div>
-          <div id="admin-dine-in-reminder-card" style={`border-radius:8px; padding:10px; border:1px solid ${dineInBilling.alertLevel === 'warning' ? '#fcd34d' : dineInBilling.alertLevel === 'overdue' ? '#fecaca' : dineInBilling.alertLevel === 'auto_closed' || dineInBilling.alertLevel === 'stopped' ? '#cbd5e1' : '#86efac'}; background:${dineInBilling.alertLevel === 'warning' ? '#fffbeb' : dineInBilling.alertLevel === 'overdue' ? '#fff1f2' : dineInBilling.alertLevel === 'auto_closed' || dineInBilling.alertLevel === 'stopped' ? '#f8fafc' : '#f0fdf4'};`}>
-            <div style="font-size:12px; color:#92400e;">堂食订阅提醒</div>
-            <div style="font-size:13px; font-weight:700; color:#78350f; margin-top:3px;">{dineInBilling.statusLabel}</div>
-            <div style="font-size:12px; color:#92400e; margin-top:3px;">计费开始：{dineInBilling.billingStartAt || '--'}</div>
-            <div style="font-size:12px; color:#92400e; margin-top:3px;">到期日期：{dineInBilling.expiresAt || '--'}</div>
-            <div style="font-size:12px; color:#b91c1c; margin-top:3px;">宽限截止：{dineInBilling.graceUntil || '--'}</div>
-            <div style="font-size:12px; color:#475569; margin-top:3px;">{dineInStopReason}</div>
-            <div style="font-size:12px; color:#475569; margin-top:3px;">{dineInToggleLabel}</div>
-          </div>
-          <div style={`border-radius:8px; padding:10px; border:1px solid ${isPaidPlan ? '#fcd34d' : '#cbd5e1'}; background:${isPaidPlan ? '#fffbeb' : '#f8fafc'};`}>
-            <div style="font-size:12px; color:#92400e;">缴费提醒</div>
-            <div style="font-size:13px; font-weight:700; color:#78350f; margin-top:3px;">{adminBillingView.balanceReminderText}</div>
-            {isPaidPlan && billingGraceUntil && (
-              <div style="font-size:12px; color:#b91c1c; margin-top:3px;">宽限截止：{billingGraceUntil}</div>
-            )}
-          </div>
-        </div>
 
         {
           billingAlertLevel !== 'normal' && (
@@ -403,6 +363,12 @@ const cities = {
         balanceReminderLevel={adminBillingView.balanceReminderLevel}
         reservationPlan={adminBillingView.reservationPlan}
         deliveryPlan={adminBillingView.deliveryPlan}
+        dineInBillingStatusLabel={dineInBilling.statusLabel}
+        dineInBillingStartAt={dineInBilling.billingStartAt}
+        dineInBillingExpiresAt={dineInBilling.expiresAt}
+        dineInBillingGraceUntil={dineInBilling.graceUntil}
+        dineInStopReason={dineInStopReason}
+        dineInToggleLabel={dineInToggleLabel}
       />
     </div>
   </div>

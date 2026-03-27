@@ -5,11 +5,14 @@ import {
   asObject,
   parseMaybeJSON,
   normalizeJSONString,
+  normalizeRemarkJSONString,
   parseDBDateMs,
   formatHHmm,
   resolveTableConfig,
   buildTableCards,
 } from './admin-dashboard-utils.ts';
+import { orderMatchesAnyConfiguredTable } from './admin-table-ref.ts';
+import type { TableZone } from './table-config.ts';
 
 test('asObject: returns {} for non-object values', () => {
   assert.deepEqual(asObject(null), {});
@@ -46,6 +49,10 @@ test('normalizeJSONString: string JSON -> canonical JSON.stringify(parsed)', () 
 
 test('normalizeJSONString: invalid string -> fallback', () => {
   assert.equal(normalizeJSONString('oops', '[]'), '[]');
+});
+
+test('normalizeRemarkJSONString: wraps plain remark string as JSON array', () => {
+  assert.equal(normalizeRemarkJSONString('少盐, 不要辣'), '["少盐, 不要辣"]');
 });
 
 test('normalizeJSONString: object -> JSON.stringify(object); stringify error -> fallback', () => {
@@ -153,4 +160,12 @@ test('buildTableCards: filters active dine-in and marks newest as isNew', () => 
   } finally {
     Date.now = originalNow;
   }
+});
+
+test('orderMatchesAnyConfiguredTable: matches hall-like orders against simple hall table config', () => {
+  const tableConfig: TableZone[] = [{ name: '大厅', prefix: '', count: 6 }];
+
+  assert.equal(orderMatchesAnyConfiguredTable('Main Hall / 大厅 2号桌', tableConfig), true);
+  assert.equal(orderMatchesAnyConfiguredTable('Main Hall / 大厅 1号桌', tableConfig), true);
+  assert.equal(orderMatchesAnyConfiguredTable('Main Hall 6号桌', tableConfig), true);
 });

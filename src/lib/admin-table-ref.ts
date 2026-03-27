@@ -26,12 +26,23 @@ export function parseTableRef(input: unknown): ParsedTableRef {
   return { area, number, key: `${area}${number}` };
 }
 
+function isLegacySimpleHallArea(rawArea: unknown): boolean {
+  return String(rawArea || '')
+    .split(/[\/|｜]+/u)
+    .some((part) => {
+      const trimmed = String(part || '').trim();
+      return isHallLikeZoneName(trimmed) || isPlaceholderZoneName(trimmed) || normalizeTableArea(trimmed) === 'mainhall';
+    });
+}
+
 export function inferLegacySimpleHallNumber(raw: unknown, maxCount: number): string {
-  const compact = String(raw || '').replace(/\s+/g, '').trim();
+  const rawText = String(raw || '').trim();
+  const compact = rawText.replace(/\s+/g, '').trim();
   if (!compact) return '';
 
   const ref = parseTableRef(compact);
-  if (ref.number && (!ref.area || isHallLikeZoneName(ref.area) || isPlaceholderZoneName(ref.area))) {
+  const areaText = rawText.replace(/\s*(号桌|桌号|桌)\s*$/u, '').replace(/\d+\s*$/u, '').trim();
+  if (ref.number && (!ref.area || isLegacySimpleHallArea(areaText))) {
     return ref.number;
   }
 
@@ -58,7 +69,7 @@ export function matchesTableRef(targetRef: ParsedTableRef, orderTableInfo: unkno
   const singleRoomLegacyMatch =
     !!(!targetRef.number && targetRef.area && orderRef.area && targetRef.area === orderRef.area);
   const legacySimpleHallMatch =
-    !!(!targetRef.area && targetRef.number && inferLegacySimpleHallNumber(orderTableInfo, simpleHallMaxCount) === targetRef.number);
+    !!(targetRef.number && inferLegacySimpleHallNumber(orderTableInfo, simpleHallMaxCount) === targetRef.number);
 
   return sameExact || sameNumberWithCompatibleArea || singleRoomLegacyMatch || legacySimpleHallMatch;
 }

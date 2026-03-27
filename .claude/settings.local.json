@@ -111,7 +111,14 @@
       "Bash(go build:*)",
       "Bash(go run:*)",
       "WebFetch(domain:food2.serbia70.com)",
-      "Bash(go env:*)"
+      "Bash(go env:*)",
+      "Bash(go:*)",
+      "Bash(printf '\\\\n---FULL-DIFF---\\\\n')",
+      "Bash(CI=true pnpm --dir \"D:/ai/food/.worktrees/food/food2astro\" install)",
+      "Bash(mkdir -p \"D:/ai/food-data/foos2Go-local\")",
+      "Bash(cp \"D:/ai/food/.worktrees/food/foos2Go/data/meituan.db\" \"D:/ai/food-data/foos2Go-local/meituan.db\")",
+      "Bash(cp \"D:/ai/food/.worktrees/food/foos2Go/data/meituan.db-shm\" \"D:/ai/food-data/foos2Go-local/meituan.db-shm\")",
+      "Bash(cp \"D:/ai/food/.worktrees/food/foos2Go/data/meituan.db-wal\" \"D:/ai/food-data/foos2Go-local/meituan.db-wal\")"
     ]
   }
 }

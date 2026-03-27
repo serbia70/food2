@@ -14,6 +14,7 @@ test('settings payload keeps new plan fields and legacy aliases together', () =>
   });
 
   assert.equal(payload.reservation_enabled, 1);
+  assert.equal(payload.enable_reservation, 1);
   assert.equal(payload.reservation_commission_value, 0);
   assert.equal(payload.delivery_enabled, 1);
   assert.equal(payload.delivery_commission_value, 5);

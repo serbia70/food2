@@ -117,8 +117,18 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
         data-order-time={card.orderTimeTimestamp}
       >
         <div class="card-header">
-          <div class="table-title">
-            {formatTableTitle(card)}
+          <div class="table-title" style="display:flex; align-items:center; gap:6px;">
+            <span>{formatTableTitle(card)}</span>
+            {card.hasOrder && (
+              <button
+                type="button"
+                class="btn-action"
+                data-admin-action="table-details"
+                data-table={card.tableNum}
+                title="订单详情"
+                style="height:22px; width:22px; font-size:12px;"
+              >📋</button>
+            )}
           </div>
           {card.hasOrder ? (
             <div class="status-info">
@@ -214,27 +224,6 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
               ))}
             </div>
 
-            {/* 备注显示 */}
-            {(() => {
-              try {
-                const r = JSON.parse(o.remarks_json || '[]');
-                if (Array.isArray(r) && r.length > 0) {
-                  return (
-                    <section class="remark-ui">
-                      <div class="remark-category">
-                        <div class="category-title">
-                          <span class="category-icon" aria-hidden="true">🏷️</span>
-                          <span class="category-name">备注</span>
-                        </div>
-                        <div class="remark-note-content">{r.join(', ')}</div>
-                      </div>
-                    </section>
-                  );
-                }
-              } catch(e) {}
-              return null;
-            })()}
-
             <div class="order-footer" style="margin-top:10px; padding-top:10px; border-top:1px dashed #eee;">
               <div class="footer-left">
                 <span class={`status-tag status-${o.status}`}>
@@ -258,7 +247,6 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
                   <button data-admin-action="open-chat" data-phone={o.user_phone} title="发消息" style="height:24px; width:24px; font-size:12px; background:#0891b2; color:#fff; border:none; border-radius:4px; cursor:pointer;">💬</button>
                 )}
 
-                <button class="btn-action" data-admin-action="order-remarks" data-order-id={o.id} title="备注" style="height:24px; width:24px; font-size:12px;">🏷️</button>
                 {(o.status === 'pending' || o.status === 'confirmed' || o.status === 'delivering') && (
                   <button class="btn-action" data-admin-action="edit-order" data-order-id={o.id} title="编辑" style="height:24px; width:24px; font-size:12px;">✏️</button>
                 )}

@@ -153,8 +153,14 @@ function getOrdersForTable(tableNum: string) {
   }, 0);
   const allOrders = document.querySelectorAll<HTMLElement>(".hidden-data");
   const tableOrders: any[] = [];
+  const seen = new Set<string>();
 
   allOrders.forEach((el) => {
+    const oidRaw = String(el.dataset.oid || el.dataset.orderId || '').trim();
+    if (oidRaw) {
+      if (seen.has(oidRaw)) return;
+      seen.add(oidRaw);
+    }
     const status = el.dataset.status || "pending";
     // 忽略已完成或已取消的订单
     if (
@@ -496,6 +502,18 @@ export async function saveRemarks() {
 
 // ================== 3. 详情/修改逻辑 ==================
 
+export function handleTableDetails(tableNum: string) {
+  currentTableNum = tableNum;
+  const orders = getOrdersForTable(tableNum);
+
+  if (orders.length === 0) {
+    showAdminToast('该桌号没有活跃订单');
+    return;
+  }
+
+  showDetailsModal(tableNum, orders);
+}
+
 export function handleModify(tableNum: string) {
   currentTableNum = tableNum;
   const orders = getOrdersForTable(tableNum);
@@ -558,6 +576,33 @@ function showDetailsModal(tableNum: string, orders: any[]) {
         itemsWrap.appendChild(createOrderItemDetailNode(item));
       });
 
+      const remarks = Array.isArray(order.remarks) ? order.remarks.filter(Boolean) : [];
+      const remarksSection = remarks.length
+        ? (() => {
+            const wrap = document.createElement('div');
+            setElementStyles(wrap, {
+              marginTop: '10px',
+              marginBottom: '10px',
+              padding: '10px',
+              background: '#fff7ed',
+              border: '1px solid #fed7aa',
+              borderRadius: '6px',
+            });
+            wrap.append(
+              createTextElement('div', '备注', {
+                fontWeight: 'bold',
+                color: '#9a3412',
+                marginBottom: '6px',
+              }),
+              createTextElement('div', remarks.join('，'), {
+                fontSize: '13px',
+                color: '#7c2d12',
+              }),
+            );
+            return wrap;
+          })()
+        : null;
+
       const amount = createTextElement('div', `${order.amount} RSD`, {
         textAlign: 'right',
         fontWeight: 'bold',
@@ -580,6 +625,7 @@ function showDetailsModal(tableNum: string, orders: any[]) {
       editButton.addEventListener('click', () => triggerEditOrder(String(order.id)));
       actions.appendChild(editButton);
 
+      if (remarksSection) card.appendChild(remarksSection);
       card.append(header, itemsWrap, amount, actions);
       return card;
     });
@@ -859,6 +905,7 @@ if (typeof window !== "undefined") {
   registerAdminGlobal('toggleRemark', toggleRemark);
   registerAdminGlobal('closeRemarksModal', closeRemarksModal);
   registerAdminGlobal('saveRemarks', saveRemarks);
+  registerAdminGlobal('handleTableDetails', handleTableDetails);
   registerAdminGlobal('handleModify', handleModify);
   registerAdminGlobal('closeDetailsModal', closeDetailsModal);
   registerAdminGlobal('triggerEditOrder', triggerEditOrder);

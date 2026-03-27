@@ -28,6 +28,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       headers: { Authorization: auth },
     });
     const data = await res.json().catch(() => ({}));
+    const secure = import.meta.env.PROD || new URL(request.url).protocol === 'https:';
 
     if (!res.ok || !data?.success || !data?.token || !data?.slug) {
       return new Response(JSON.stringify({ success: false, error: data?.error || 'impersonate failed' }), {
@@ -40,7 +41,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       path: '/',
       httpOnly: true,
       sameSite: 'lax',
-      secure: false,
+      secure,
       maxAge: 60 * 60 * 2,
     });
 
@@ -48,7 +49,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       path: '/',
       httpOnly: false,
       sameSite: 'lax',
-      secure: false,
+      secure,
       maxAge: 60 * 60 * 2,
     });
 
@@ -56,7 +57,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       path: '/',
       httpOnly: false,
       sameSite: 'lax',
-      secure: false,
+      secure,
       maxAge: 60 * 60 * 2,
     });
 

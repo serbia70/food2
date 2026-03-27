@@ -118,7 +118,8 @@
       "Bash(mkdir -p \"D:/ai/food-data/foos2Go-local\")",
       "Bash(cp \"D:/ai/food/.worktrees/food/foos2Go/data/meituan.db\" \"D:/ai/food-data/foos2Go-local/meituan.db\")",
       "Bash(cp \"D:/ai/food/.worktrees/food/foos2Go/data/meituan.db-shm\" \"D:/ai/food-data/foos2Go-local/meituan.db-shm\")",
-      "Bash(cp \"D:/ai/food/.worktrees/food/foos2Go/data/meituan.db-wal\" \"D:/ai/food-data/foos2Go-local/meituan.db-wal\")"
+      "Bash(cp \"D:/ai/food/.worktrees/food/foos2Go/data/meituan.db-wal\" \"D:/ai/food-data/foos2Go-local/meituan.db-wal\")",
+      "Bash(cmd /c \"D:\\\\ai\\\\food\\\\.worktrees\\\\260311\\\\food2astro\\\\上传3.bat\")"
     ]
   }
 }

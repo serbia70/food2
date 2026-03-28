@@ -1,5 +1,5 @@
 import { atom, map } from "nanostores";
-import { DEFAULT_USER_PASSWORD } from "./clientConfig";
+import { DEFAULT_USER_PASSWORD } from "./clientConfig.ts";
 
 const KEY_USER = "food_order_user";
 const KEY_LEGACY_USER = "user_info";

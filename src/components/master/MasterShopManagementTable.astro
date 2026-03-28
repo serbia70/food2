@@ -81,6 +81,7 @@ function dineInBadgeClass(level: string) {
           <th>堂食订阅</th>
           <th>今日数据 (外卖/堂食)</th>
           <th>提成累计</th>
+          <th>版本</th>
           <th>操作</th>
         </tr>
       </thead>
@@ -91,7 +92,7 @@ function dineInBadgeClass(level: string) {
             data-master-shop-row
             data-name={shop.name.toLowerCase()}
             data-slug={shop.slug.toLowerCase()}
-            data-status={shop.statusLabel}
+            data-status={shop.shopStateLabel}
             data-billing={shop.billingLabel}
             data-billing-severity={String(shop.billingSeverity)}
             data-revenue={String(shop.sortValueRevenue)}
@@ -107,6 +108,8 @@ function dineInBadgeClass(level: string) {
             </td>
             <td>
               <div class="shop-state-grid" aria-label="门店状态">
+                <div class="shop-state-text">{shop.shopStateLabel}</div>
+                {shop.shopStateReason && <div class="shop-state-reason">{shop.shopStateReason}</div>}
                 <div class="shop-state-row shop-state-row-single">
                   <span class:list={['shop-state-pill', shop.enableDineIn ? 'is-on' : 'is-off']}>堂食</span>
                 </div>
@@ -158,6 +161,12 @@ function dineInBadgeClass(level: string) {
                   <span class="plan-summary-value">{shop.deliveryPlan.displayText}</span>
                   <span class="plan-summary-source">{shop.deliveryPlan.sourceLabel}</span>
                 </div>
+              </div>
+            </td>
+            <td>
+              <div class="shop-tier-cell">
+                <div class="shop-tier-text">{shop.shopTier.displayText}</div>
+                <div class="shop-tier-source">{shop.shopTier.sourceLabel}</div>
               </div>
             </td>
             <td>
@@ -364,6 +373,18 @@ function dineInBadgeClass(level: string) {
     gap: 6px;
   }
 
+  .shop-state-text {
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.4;
+  }
+
+  .shop-state-reason {
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+
   .shop-state-row {
     display: flex;
     gap: 6px;
@@ -410,6 +431,23 @@ function dineInBadgeClass(level: string) {
   .commission-main {
     font-weight: 800;
     color: #1e293b;
+  }
+
+  .shop-tier-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .shop-tier-text {
+    font-weight: 700;
+    font-size: 13px;
+    color: #0f172a;
+  }
+
+  .shop-tier-source {
+    font-size: 11px;
+    color: #64748b;
   }
 
   .action-btns {

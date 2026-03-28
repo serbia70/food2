@@ -130,6 +130,38 @@ test('buildMasterDashboardView passes settings fee defaults into shop fallback p
     deliveryCommissionType: 'percentage',
     deliveryCommissionValue: 7,
   });
+  assert.equal(view.panels.shopEdit.defaults.defaultShopTier, 'subscription');
+});
+
+test('buildMasterDashboardView passes default shop tier into shop edit panel defaults', () => {
+  const view = buildMasterDashboardView({
+    shops: [{ id: 20, name: 'Tier Shop', slug: 'tier-shop' }],
+    settings: {
+      defaultShopTier: 'business',
+    },
+    activeTab: 'shops',
+    isUnauthorized: false,
+    loadError: '',
+  });
+
+  assert.equal(view.shopManagement.shops[0].shopTier.effectiveTier, 'business');
+  assert.equal(view.panels.shopEdit.defaults.defaultShopTier, 'business');
+});
+
+test('buildMasterDashboardView should use normalized snake_case default shop tier for shop views', () => {
+  const view = buildMasterDashboardView({
+    shops: [{ id: 21, name: 'Snake Tier Shop', slug: 'snake-tier-shop', shop_tier_mode: 'global' }],
+    settings: {
+      default_shop_tier: 'business',
+    },
+    activeTab: 'shops',
+    isUnauthorized: false,
+    loadError: '',
+  });
+
+  assert.equal(view.settings.defaultShopTier, 'business');
+  assert.equal(view.shopManagement.shops[0].shopTier.effectiveTier, 'business');
+  assert.equal(view.panels.shopEdit.defaults.defaultShopTier, 'business');
 });
 
 test('buildMasterDashboardView keeps activeTab strictly within legal tab union inputs', () => {

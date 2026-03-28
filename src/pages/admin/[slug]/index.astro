@@ -3,10 +3,11 @@ import Layout from '../../../layouts/Layout.astro';
 import { API_BASE_URL } from '../../../config';
 import { isHallLikeZoneName, isPlaceholderZoneName } from '../../../lib/table-config';
 import { orderMatchesAnyConfiguredTable } from '../../../lib/admin-table-ref';
-import { asObject, parseMaybeJSON, normalizeJSONString, normalizeRemarkJSONString, resolveTableConfig, buildTableCards } from '../../../lib/admin-dashboard-utils';
+import { asObject, parseMaybeJSON, normalizeJSONString, normalizeRemarkJSONString, resolveTableConfig, buildTableCards, isActiveDineInOrder } from '../../../lib/admin-dashboard-utils';
 import { fetchJSON } from '../../../lib/admin-fetch-json';
 import { buildAdminOrderChannelBillingView } from '../../../lib/admin-order-channel-billing-view.ts';
 import { buildDineInBillingState } from '../../../lib/dine-in-billing.ts';
+import { buildAdminTabVisibility, resolveShopTier, type ShopTierView } from '../../../lib/shop-tier.ts';
 import AdminHeader from '../../../components/admin/AdminHeader.astro';
 import AdminTabs from '../../../components/admin/AdminTabs.astro';
 import TabOrders from '../../../components/admin/TabOrders.astro';
@@ -34,10 +35,6 @@ const token = Astro.cookies.get('admin_token')?.value;
 if (!token) {
   const q = Astro.url.search || '';
   return Astro.redirect(`/admin/${encodeURIComponent(slug)}/login${q}`, 302);
-}
-
-function isHallZoneName(v: any) {
-  return isHallLikeZoneName(v);
 }
 
 const authHeaders = { Authorization: `Bearer ${token}` };
@@ -90,37 +87,25 @@ const adminBillingView = buildAdminOrderChannelBillingView({
   settings,
 });
 const billingBalanceRSD = adminBillingView.billingBalanceRsd;
-const billingPlanType = String(billingData.plan_type || 'subscription').toLowerCase();
-const pendingPlanType = String(billingData.pending_plan_type || '').toLowerCase();
-const billingStatus = String(billingData.billing_status || 'active');
-const billingNextChargeDate = String(billingData.next_charge_date || '');
-const billingGraceUntil = String(billingData.grace_until || '');
 const billingAlertLevel = adminBillingView.balanceReminderLevel;
-const upgradeChargeRSD = Number(billingData.upgrade_charge_rsd || 0);
 const dineInBilling = buildDineInBillingState(shop);
 const dineInToggleLabel = Number(shop.enable_dine_in ?? 1) !== 0 ? '堂食开关：开启' : '堂食开关：关闭';
-const dineInStopReason =
-  dineInBilling.alertLevel === 'stopped'
-    ? '停用原因：手动关闭'
-    : dineInBilling.alertLevel === 'auto_closed'
-      ? '停用原因：到期自动关闭'
-      : dineInBilling.alertLevel === 'disabled_unknown'
-        ? '停用原因：关闭状态'
-        : '停用原因：当前可用';
 
 // 从后端获取真实的营业额（包含已清理的记录）
 const lastMonthRevenue = Number(billingData.last_month_revenue || 0);
 const thisMonthRevenue = Number(billingData.this_month_revenue || 0);
 
-const deliveryChargeRSD = Number(rawShop?.delivery_charge_rsd || 0);
-
-const deliveryLocked = Boolean(rawShop?.delivery_locked);
-const deliveryLockReason = String(rawShop?.delivery_lock_reason || '');
-const isPaidPlan = billingPlanType === 'subscription' || billingPlanType === 'business';
+const billingPlanTier = String(rawShop?.billing_plan_type || '').trim();
+const hasTierMode = String(rawShop?.shop_tier_mode ?? '').trim() !== '';
+const hasTierOverride = String(rawShop?.shop_tier_override ?? '').trim() !== '';
+const shopTierView: ShopTierView = resolveShopTier({
+  defaultShopTier: settings.default_shop_tier ?? settings.defaultShopTier,
+  shop_tier_mode: hasTierMode || hasTierOverride ? rawShop?.shop_tier_mode : billingPlanTier ? 'override' : rawShop?.shop_tier_mode,
+  shop_tier_override: hasTierMode || hasTierOverride ? rawShop?.shop_tier_override : billingPlanTier || rawShop?.shop_tier_override,
+});
+const billingPlanType = shopTierView.effectiveTier;
 const showReservationTab = adminBillingView.reservationPlan.enabled;
-const showStatsTab = isPaidPlan;
-const showMarketingTab = billingPlanType === 'business';
-const showCustomersTab = billingPlanType === 'subscription' || billingPlanType === 'business';
+const { showStatsTab, showMarketingTab, showCustomersTab } = buildAdminTabVisibility(shopTierView);
 
 const rawMenu = Array.isArray(menuResp.data) ? menuResp.data : [];
 const categories = rawMenu.map((c: any) => ({
@@ -166,18 +151,10 @@ const firstZoneName = String(tableConfig?.[0]?.name || '').trim();
 const firstZonePrefix = String(tableConfig?.[0]?.prefix || '').trim();
 const useSimpleHallLabel =
   tableConfig.length === 1 &&
-  (!firstZoneName && !firstZonePrefix || isHallZoneName(firstZoneName) || isHallZoneName(firstZonePrefix) || isPlaceholderZoneName(firstZoneName) || isPlaceholderZoneName(firstZonePrefix));
+  (!firstZoneName && !firstZonePrefix || isHallLikeZoneName(firstZoneName) || isHallLikeZoneName(firstZonePrefix) || isPlaceholderZoneName(firstZoneName) || isPlaceholderZoneName(firstZonePrefix));
 const tableCardsData = buildTableCards(orders, tableConfig);
 const unmatchedDineInOrders = orders
-  .filter(
-    (o: any) =>
-      o.order_type === 'dine_in' &&
-      o.status !== 'completed' &&
-      o.status !== 'cancelled' &&
-      o.status !== 'archived' &&
-      o.status !== 'paid' &&
-      o.is_deleted !== 1,
-  )
+  .filter(isActiveDineInOrder)
   .filter((o: any) => !orderMatchesAnyConfiguredTable(o.table_info, tableConfig));
 const activeDeliveryOrders = orders.filter(
   (o: any) =>
@@ -185,13 +162,6 @@ const activeDeliveryOrders = orders.filter(
     (o.status === 'pending' || o.status === 'confirmed' || o.status === 'delivering') &&
     o.is_deleted !== 1,
 );
-
-const isExpired = false;
-const isWarning = false;
-const isNotice = false;
-
-const now = new Date();
-const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
 const commissionValue = adminBillingView.deliveryPlan.commissionValue;
 
@@ -201,13 +171,6 @@ const thisMonthCommission = Math.round(thisMonthRevenue * (commissionValue / 100
 
 // 如果余额为负，则视为“待付”
 const debtAmount = billingBalanceRSD < 0 ? Math.abs(billingBalanceRSD) : 0;
-
-const isBillPeriod = now.getDate() <= 6;
-
-const lastMonthKey = prevMonthStart.toISOString().slice(0, 7);
-const isLastMonthPaid = String(shop.last_paid_month || '') === lastMonthKey;
-const showPayWarning = isBillPeriod && lastMonthCommission > 0 && !isLastMonthPaid;
-const lastMonthName = prevMonthStart.getMonth() + 1;
 
 const brokerIp = String(settings.mqtt_broker || 'mqtt.serbia70.com');
 
@@ -246,85 +209,71 @@ const cities = {
   <script type="application/json" id="products-data" is:inline>{JSON.stringify(products)}</script>
   <input type="hidden" id="shop-id-hidden" value={String(shop.id)} />
 
-  {
-    isExpired ? (
-      <div style="background:#d32f2f; color:#fff; padding:15px; text-align:center; position:fixed; top:0; left:0; right:0; z-index:9999;">
-        <h3 style="margin:0;">服务已到期</h3>
-        <p style="margin:6px 0 0;">请联系管理员缴纳费用后恢复服务。</p>
-      </div>
+  <div style="display:flex; flex-direction:column; gap:5px; margin-bottom:10px;">
+    <div style="text-align:center; padding:8px; font-size:13px; font-weight:bold; border-radius:4px; background:#e8f5e9; color:#2e7d32; border:1px solid #c8e6c9;">
+      <span id="mqtt-status-indicator" style="margin-left:10px; font-size:11px; padding:2px 6px; border-radius:10px; background:#eee; color:#999;">
+        MQTT: 连接中...
+      </span>
+    </div>
 
-    ) : (
-      <div style="display:flex; flex-direction:column; gap:5px; margin-bottom:10px;">
+    {
+      billingAlertLevel !== 'normal' && (
         <div
-          style={`text-align:center; padding:8px; font-size:13px; font-weight:bold; border-radius:4px; ${
-            isWarning
-              ? 'background:#ffebee; color:#d32f2f; border:1px solid #ffcdd2;'
-              : isNotice
-                ? 'background:#fff8e1; color:#f57c00; border:1px solid #ffe0b2;'
-                : 'background:#e8f5e9; color:#2e7d32; border:1px solid #c8e6c9;'
-          }`}
+          style={`text-align:center; padding:10px; font-size:13px; font-weight:bold; border-radius:4px; border:1px solid ${
+            billingAlertLevel === 'overdue'
+              ? '#fecaca'
+              : billingAlertLevel === 'critical'
+                ? '#fecaca'
+                : '#fde68a'
+          }; background:${
+            billingAlertLevel === 'overdue'
+              ? '#fef2f2'
+              : billingAlertLevel === 'critical'
+                ? '#fff1f2'
+                : '#fffbeb'
+          }; color:${
+            billingAlertLevel === 'overdue'
+              ? '#7f1d1d'
+              : billingAlertLevel === 'critical'
+                ? '#991b1b'
+                : '#92400e'
+          };`}
         >
-          <span id="mqtt-status-indicator" style="margin-left:10px; font-size:11px; padding:2px 6px; border-radius:10px; background:#eee; color:#999;">
-            MQTT: 连接中...
-          </span>
+          {billingAlertLevel === 'overdue'
+            ? `欠费宽限中，请尽快充值（余额 ${billingBalanceRSD} RSD）`
+            : billingAlertLevel === 'critical'
+              ? `余额低于 200 RSD（当前 ${billingBalanceRSD} RSD），请立即充值`
+              : `余额低于 1000 RSD（当前 ${billingBalanceRSD} RSD），建议尽快充值`}
         </div>
+      )
+    }
 
-
-        {
-          billingAlertLevel !== 'normal' && (
-            <div
-              style={`text-align:center; padding:10px; font-size:13px; font-weight:bold; border-radius:4px; border:1px solid ${
-                billingAlertLevel === 'overdue'
-                  ? '#fecaca'
-                  : billingAlertLevel === 'critical'
-                    ? '#fecaca'
-                    : '#fde68a'
-              }; background:${
-                billingAlertLevel === 'overdue'
-                  ? '#fef2f2'
-                  : billingAlertLevel === 'critical'
-                    ? '#fff1f2'
-                    : '#fffbeb'
-              }; color:${
-                billingAlertLevel === 'overdue'
-                  ? '#7f1d1d'
-                  : billingAlertLevel === 'critical'
-                    ? '#991b1b'
-                    : '#92400e'
-              };`}
-            >
-              {billingAlertLevel === 'overdue'
-                ? `欠费宽限中，请尽快充值（余额 ${billingBalanceRSD} RSD）`
-                : billingAlertLevel === 'critical'
-                  ? `余额低于 200 RSD（当前 ${billingBalanceRSD} RSD），请立即充值`
-                  : `余额低于 1000 RSD（当前 ${billingBalanceRSD} RSD），建议尽快充值`}
-            </div>
-          )
-        }
-
-        {
-          lastMonthCommission > 0 && (
-            <div
-              style={`text-align:center; padding:10px; font-size:13px; font-weight:bold; border-radius:4px; border:1px solid ${isLastMonthPaid ? '#c8e6c9' : '#b3e5fc'}; background:${isLastMonthPaid ? '#e8f5e9' : '#e1f5fe'}; color:${isLastMonthPaid ? '#2e7d32' : '#0277bd'};`}
-            >
-              <div style="font-size:15px; margin-bottom:4px;">
-                {isLastMonthPaid
-                  ? `${lastMonthName} 月已结清: ${lastMonthCommission} RSD`
-                  : `${lastMonthName} 月待付佣金: ${lastMonthCommission} RSD`}
-              </div>
-              {showPayWarning && <div style="margin-top:5px; color:#c62828;">请于 6 号前完成支付</div>}
-            </div>
-          )
-        }
-      </div>
-    )
-  }
+    {
+      lastMonthCommission > 0 && (
+        <div
+          style="text-align:center; padding:10px; font-size:13px; font-weight:bold; border-radius:4px; border:1px solid #b3e5fc; background:#e1f5fe; color:#0277bd;"
+        >
+          <div style="font-size:15px; margin-bottom:4px;">上月待付佣金: {lastMonthCommission} RSD</div>
+        </div>
+      )
+    }
+  </div>
 
   <div id="page-wrapper" style="max-width:1400px; margin:0 auto; width:100%; box-sizing:border-box;">
     <div class="admin-container">
       <AdminHeader shop={shop} restaurantId={slug} />
       <AdminTabs showReservationTab={showReservationTab} showStatsTab={showStatsTab} showMarketingTab={showMarketingTab} showCustomersTab={showCustomersTab} />
-      <TabTables tableCardsData={tableCardsData} activeDeliveryOrders={activeDeliveryOrders} unmatchedDineInOrders={unmatchedDineInOrders} useSimpleHallLabel={useSimpleHallLabel} />
+      <TabTables
+        tableCardsData={tableCardsData}
+        activeDeliveryOrders={activeDeliveryOrders}
+        unmatchedDineInOrders={unmatchedDineInOrders}
+        useSimpleHallLabel={useSimpleHallLabel}
+        billingPlanType={billingPlanType}
+        dineInBillingExpiresAt={dineInBilling.expiresAt}
+        dineInBillingGraceUntil={dineInBilling.graceUntil}
+        dineInBillingStatusLabel={dineInBilling.statusLabel}
+        dineInToggleLabel={dineInToggleLabel}
+      />
       <TabOrders orders={orders} useSimpleHallLabel={useSimpleHallLabel} />
       {showReservationTab && <TabReservations />}
       <TabMenu categories={categories} products={products} shop={shop} />
@@ -345,30 +294,15 @@ const cities = {
         lastMonthCommission={lastMonthCommission}
         thisMonthCommission={thisMonthCommission}
         debtAmount={debtAmount}
-        isBillPeriod={isBillPeriod}
-        showPayWarning={showPayWarning}
-        isLastMonthPaid={isLastMonthPaid}
-        lastMonthName={lastMonthName}
         billingAlertLevel={billingAlertLevel}
         billingBalanceRSD={billingBalanceRSD}
-        billingStatus={billingStatus}
-        billingNextChargeDate={billingNextChargeDate}
-        billingGraceUntil={billingGraceUntil}
         billingPlanType={billingPlanType}
-        pendingPlanType={pendingPlanType}
-        upgradeChargeRSD={upgradeChargeRSD}
         walletCopy={adminBillingView.walletCopy}
         walletHint={adminBillingView.walletHint}
         balanceReminderText={adminBillingView.balanceReminderText}
         balanceReminderLevel={adminBillingView.balanceReminderLevel}
         reservationPlan={adminBillingView.reservationPlan}
         deliveryPlan={adminBillingView.deliveryPlan}
-        dineInBillingStatusLabel={dineInBilling.statusLabel}
-        dineInBillingStartAt={dineInBilling.billingStartAt}
-        dineInBillingExpiresAt={dineInBilling.expiresAt}
-        dineInBillingGraceUntil={dineInBilling.graceUntil}
-        dineInStopReason={dineInStopReason}
-        dineInToggleLabel={dineInToggleLabel}
       />
     </div>
   </div>

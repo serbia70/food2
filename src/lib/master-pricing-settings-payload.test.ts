@@ -39,3 +39,44 @@ test('settings payload preserves zero values when fields are empty strings', () 
   assert.equal(payload.subscriptionDeliveryCommissionValue, 0);
   assert.equal(payload.businessDeliveryCommissionValue, 0);
 });
+
+test('settings payload includes default_shop_tier', () => {
+  const payload = buildMasterPricingSettingsPayload({
+    reservationEnabled: '1',
+    reservationCommissionType: 'percentage',
+    reservationCommissionValue: '0',
+    deliveryEnabled: '1',
+    deliveryCommissionType: 'per_order',
+    deliveryCommissionValue: '5',
+    defaultShopTier: 'business',
+  });
+
+  assert.equal(payload.default_shop_tier, 'business');
+});
+
+test('settings payload defaults default_shop_tier to subscription', () => {
+  const payload = buildMasterPricingSettingsPayload({
+    reservationEnabled: '1',
+    reservationCommissionType: 'percentage',
+    reservationCommissionValue: '0',
+    deliveryEnabled: '1',
+    deliveryCommissionType: 'per_order',
+    deliveryCommissionValue: '5',
+  });
+
+  assert.equal(payload.default_shop_tier, 'subscription');
+});
+
+test('settings payload accepts invalid default_shop_tier and defaults to subscription', () => {
+  const payload = buildMasterPricingSettingsPayload({
+    reservationEnabled: '1',
+    reservationCommissionType: 'percentage',
+    reservationCommissionValue: '0',
+    deliveryEnabled: '1',
+    deliveryCommissionType: 'per_order',
+    deliveryCommissionValue: '5',
+    defaultShopTier: 'invalid',
+  });
+
+  assert.equal(payload.default_shop_tier, 'subscription');
+});

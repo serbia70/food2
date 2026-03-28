@@ -11,6 +11,8 @@ export type MasterSettingsView = {
   subscriptionCommissionValue: number;
   businessCommissionType: string;
   businessCommissionValue: number;
+  defaultShopTier: 'subscription' | 'business';
+  defaultShopTierText: '会员版' | '商务版';
   footer: {
     footerText: string;
     footerPhone: string;
@@ -80,6 +82,12 @@ function toBoolean(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+function toDefaultShopTier(value: unknown): 'subscription' | 'business' {
+  const raw = String(value ?? '').trim();
+  if (raw === 'subscription' || raw === 'business') return raw;
+  return 'subscription';
+}
+
 function toChoice(value: unknown, allowed: string[], fallback: string): string {
   const raw = String(value ?? '').trim();
   return allowed.includes(raw) ? raw : fallback;
@@ -133,6 +141,8 @@ export function buildMasterSettingsView(settings: MasterSettingsInput): MasterSe
   const reservationPlan = buildReservationPlan(settings);
   const deliveryPlan = buildDeliveryPlan(settings);
 
+  const defaultShopTier = toDefaultShopTier(settings?.default_shop_tier ?? settings?.defaultShopTier);
+
   return {
     reservationPlan,
     deliveryPlan,
@@ -142,6 +152,8 @@ export function buildMasterSettingsView(settings: MasterSettingsInput): MasterSe
     subscriptionCommissionValue: reservationPlan.commissionValue,
     businessCommissionType: deliveryPlan.commissionType,
     businessCommissionValue: deliveryPlan.commissionValue,
+    defaultShopTier,
+    defaultShopTierText: defaultShopTier === 'subscription' ? '会员版' : '商务版',
     footer: {
       footerText: toStringValue(settings?.footer_text ?? settings?.footerText),
       footerPhone: toStringValue(settings?.footer_phone ?? settings?.footerPhone),

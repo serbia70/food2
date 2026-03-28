@@ -1,6 +1,7 @@
 import { buildDineInBillingState } from './dine-in-billing.ts';
 import { pickFirstMeaningfulValue } from './master-value-selection.ts';
 import { buildOrderChannelFeePlan, type OrderChannelFeePlan } from './order-channel-fees-view.ts';
+import { resolveShopTier, type ShopTierView } from './shop-tier.ts';
 
 type MasterShopInput = Record<string, unknown>;
 
@@ -13,6 +14,7 @@ type MasterShopPlanDefaults = {
 type MasterShopViewDefaults = {
   reservationPlan?: MasterShopPlanDefaults;
   deliveryPlan?: MasterShopPlanDefaults;
+  defaultShopTier?: unknown;
 };
 
 type MasterShopViewOptions = {
@@ -57,6 +59,7 @@ export type MasterShopView = {
   dineInGraceUntil: string;
   dineInAlertLevel: string;
   dineInStatusLabel: string;
+  shopTier: ShopTierView;
   sortValueRevenue: number;
   sortValueOrders: number;
   sortValueBalance: number;
@@ -116,14 +119,15 @@ function resolveBillingSeverity(status: string): number {
   return 0;
 }
 
-function resolveExpiryLabel(expireDate: string): string {
+function resolveExpiryLabel(expireDate: string, referenceDate?: string | Date): string {
   const raw = String(expireDate || '').trim();
   if (!raw) return '未设置';
 
   const expiry = new Date(raw);
   if (Number.isNaN(expiry.getTime())) return '未设置';
 
-  const now = new Date();
+  const now = referenceDate ? new Date(referenceDate) : new Date();
+  if (Number.isNaN(now.getTime())) return '未设置';
   const days = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   if (days < 0) return '已过期';
   if (days <= 7) return '即将到期';
@@ -245,7 +249,7 @@ export function buildMasterShopView(shop: MasterShopInput, referenceDateOrOption
   const balanceRsd = toNumber(shop?.billing_balance_rsd);
   const monthCommissionRsd = toNumber(shop?.commission_month_rsd);
   const totalCommissionRsd = toNumber(shop?.commission_total_rsd);
-  const fallbackExpiryLabel = resolveExpiryLabel(String(shop?.expire_date || ''));
+  const fallbackExpiryLabel = resolveExpiryLabel(String(shop?.expire_date || ''), options.referenceDate);
   const billingLabel = resolveBillingLabel(billingStatus);
   const billingSeverity = resolveBillingSeverity(billingStatus);
   const walletRowTone = resolveRowTone(fallbackExpiryLabel, billingStatus);
@@ -259,6 +263,15 @@ export function buildMasterShopView(shop: MasterShopInput, referenceDateOrOption
   const displayStatus = readDisplayStatus(shop, resolveStatusLabel(status));
   const shopStateLabel = readDisplayShopState(shop, displayStatus);
   const shopStateReason = readDisplayShopStateReason(shop);
+
+  const billingPlanTier = String(shop?.billing_plan_type || '').trim();
+  const hasTierMode = String(shop?.shop_tier_mode ?? '').trim() !== '';
+  const hasTierOverride = String(shop?.shop_tier_override ?? '').trim() !== '';
+  const shopTier = resolveShopTier({
+    defaultShopTier: options.defaults?.defaultShopTier,
+    shop_tier_mode: hasTierMode || hasTierOverride ? shop.shop_tier_mode : billingPlanTier ? 'override' : shop.shop_tier_mode,
+    shop_tier_override: hasTierMode || hasTierOverride ? shop.shop_tier_override : billingPlanTier || shop.shop_tier_override,
+  });
 
   return {
     id: toNumber(shop?.id),
@@ -297,6 +310,7 @@ export function buildMasterShopView(shop: MasterShopInput, referenceDateOrOption
     dineInGraceUntil: dineInBilling.graceUntil,
     dineInAlertLevel: dineInBilling.alertLevel,
     dineInStatusLabel: dineInBilling.statusLabel,
+    shopTier,
     sortValueRevenue: todayRevenue,
     sortValueOrders: todayOrders,
     sortValueBalance: balanceRsd,

@@ -16,6 +16,22 @@ const { settings } = Astro.props as { settings: MasterSettingsView };
     <section class="plan-card">
       <div class="plan-card-head">
         <div>
+          <div class="plan-card-title">店铺版本默认值</div>
+          <div class="plan-card-subtitle">当前：{settings.defaultShopTierText} · 新注册店铺的默认版本</div>
+        </div>
+      </div>
+      <label>
+        <span>默认版本</span>
+        <select name="defaultShopTier">
+          <option value="subscription" selected={settings.defaultShopTier === 'subscription'}>会员版</option>
+          <option value="business" selected={settings.defaultShopTier === 'business'}>商务版</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="plan-card">
+      <div class="plan-card-head">
+        <div>
           <div class="plan-card-title">预订</div>
           <div class="plan-card-subtitle">当前：{settings.reservationPlan.displayText} · {settings.reservationPlan.sourceLabel}</div>
         </div>

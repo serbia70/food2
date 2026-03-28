@@ -139,16 +139,19 @@ export function resolveTableConfig(shop: any, settings: any): Array<{ name: stri
   return [{ name: '大厅', prefix: '', count: 12 }];
 }
 
-export function buildTableCards(orders: any[], tableConfig: Array<{ name: string; prefix: string; count: number }>): TableCard[] {
-  const activeDineIn = orders.filter(
-    (o) =>
-      o.order_type === 'dine_in' &&
-      o.status !== 'completed' &&
-      o.status !== 'cancelled' &&
-      o.status !== 'archived' &&
-      o.status !== 'paid' &&
-      o.is_deleted !== 1,
+export function isActiveDineInOrder(order: any): boolean {
+  return (
+    order?.order_type === 'dine_in' &&
+    order?.status !== 'completed' &&
+    order?.status !== 'cancelled' &&
+    order?.status !== 'archived' &&
+    order?.status !== 'paid' &&
+    order?.is_deleted !== 1
   );
+}
+
+export function buildTableCards(orders: any[], tableConfig: Array<{ name: string; prefix: string; count: number }>): TableCard[] {
+  const activeDineIn = orders.filter(isActiveDineInOrder);
 
   const latestActiveId = activeDineIn.reduce((max, o) => Math.max(max, Number(o.id || 0)), 0);
   const cards: TableCard[] = [];

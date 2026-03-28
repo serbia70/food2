@@ -24,6 +24,8 @@ test('admin view shows current values and no monthly charge copy', () => {
   assert.equal(view.walletCopy.includes('每月1号'), false);
   assert.equal(view.walletHint.includes('堂食年费'), true);
   assert.equal(view.balanceReminderText.includes('每月1号'), false);
+  assert.equal(view.balanceReminderText.includes('当前 1800 RSD'), false);
+  assert.equal(view.balanceReminderText, '');
   assert.equal(view.reservationPlan.displayText, '免费');
   assert.equal(view.deliveryPlan.displayText, '5%');
   assert.equal(view.balanceReminderLevel, 'normal');

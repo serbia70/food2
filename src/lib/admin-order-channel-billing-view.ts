@@ -107,15 +107,15 @@ function resolveBalanceReminderLevel(billing: BillingInput, billingBalanceRsd: n
 
 function resolveBalanceReminderText(level: string, billingBalanceRsd: number): string {
   if (level === 'overdue') {
-    return `余额不足，请尽快充值（当前 ${billingBalanceRsd} RSD）`;
+    return '余额不足，请尽快充值';
   }
   if (level === 'critical') {
-    return `余额紧张，请立即充值（当前 ${billingBalanceRsd} RSD）`;
+    return '余额紧张，请立即充值';
   }
   if (level === 'warning') {
-    return `余额偏低，建议尽快充值（当前 ${billingBalanceRsd} RSD）`;
+    return '余额偏低，建议尽快充值';
   }
-  return `余额充足（当前 ${billingBalanceRsd} RSD）`;
+  return '';
 }
 
 function buildReservationPlan(input: BillingInput, defaults?: AdminOrderChannelBillingDefaults): OrderChannelFeePlan {

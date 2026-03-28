@@ -1,11 +1,16 @@
-import { useState, useEffect } from "preact/hooks";
+import { useMemo, useState, useEffect } from "preact/hooks";
 import { useStore } from "@nanostores/preact";
 import {
   cartItems,
-  cartTotal,
   addToCart,
   removeOne,
+  removeFromCart,
   clearCart,
+  getCartTotals,
+  getSpecialPriceDisplay,
+  getSpendDiscountStatus,
+  type SpecialPromotion,
+  type SpendDiscountPromotion,
 } from "../store/cartStore";
 import { getUserInfo, saveUserInfo } from "../lib/userStore";
 import {
@@ -51,6 +56,8 @@ interface ShopSettings {
 interface CartModalProps {
   restaurantId?: string | number;
   shopSettings?: ShopSettings;
+  specialPromotionMap?: Record<string, SpecialPromotion>;
+  spendDiscountPromotion?: SpendDiscountPromotion | null;
   isDeliveryLocked?: boolean;
   deliveryLockReason?: string;
   isTableLocked?: boolean;
@@ -86,6 +93,8 @@ declare global {
 export default function CartModal({
   restaurantId,
   shopSettings,
+  specialPromotionMap = {},
+  spendDiscountPromotion = null,
   isDeliveryLocked = false,
   deliveryLockReason = "余额不足，请先充值后使用外卖 / Insufficient wallet balance, please top up first",
   isTableLocked = false,
@@ -95,8 +104,8 @@ export default function CartModal({
   isAdmin = false,
   tableConfig = [],
 }: CartModalProps) {
-  const $total = useStore(cartTotal);
   const $items = useStore(cartItems);
+  const $total = useMemo(() => getCartTotals($items, specialPromotionMap), [$items, specialPromotionMap]);
 
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState(1); // 1=购物车, 2=外卖表单
@@ -182,7 +191,8 @@ export default function CartModal({
   };
 
   const isShopOpen = checkShopOpen();
-  
+  const spendDiscountStatus = getSpendDiscountStatus($total.price, spendDiscountPromotion);
+
   const currentShipping = $total.price >= freeThreshold ? 0 : deliveryFee;
 
   const isFreeShipping = $total.price >= freeThreshold;
@@ -203,7 +213,7 @@ export default function CartModal({
   // 生成订单文本
   const generateOrderText = () => {
     const items = Object.values($items)
-      .map((i) => `${i.name}${i.subName ? " " + i.subName : ""} x${i.quantity}`)
+      .map((i) => `${i.name}${(i.subName || i.sub_name) ? " " + (i.subName || i.sub_name) : ""} x${i.quantity}`)
       .join(", ");
     return `订单: ${items}\n地址: ${form.address}\n总计: ${finalTotalDelivery} RSD (¥${cnyTotal})`;
   };
@@ -234,6 +244,7 @@ export default function CartModal({
     isAdmin,
     form,
     items: $items,
+    promotionMap: specialPromotionMap,
     finalTotalDelivery,
     finalTotalDine,
     deliveryTimeMode,
@@ -457,7 +468,10 @@ export default function CartModal({
                 <div className="cart-scroll-body">
                   <div className="modal-content">
                     <div className="cart-list">
-                      {itemsArray.map((item) => (
+                      {itemsArray.map((item) => {
+                        const { displayPrice, originalPrice, isSpecialPrice } = getSpecialPriceDisplay(item, specialPromotionMap);
+
+                        return (
                         <div key={item.id} className="cart-item-card">
                           <img
                             src={item.img || item.image}
@@ -467,9 +481,19 @@ export default function CartModal({
 
                           <div className="cart-item-details">
                             <div className="cart-item-name">{item.name}</div>
-                            <div className="cart-item-desc">{item.subName}</div>
-                            <div className="cart-item-price">
-                              {item.price} RSD
+                            <div className="cart-item-desc">{item.subName || item.sub_name}</div>
+                            <div className="cart-item-price" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                              {isSpecialPrice && (
+                                <span style={{ fontSize: "10px", fontWeight: "700", color: "#c53030", background: "#fed7d7", borderRadius: "999px", padding: "1px 6px", width: "fit-content" }}>
+                                  今日特价
+                                </span>
+                              )}
+                              <span>{displayPrice} RSD</span>
+                              {isSpecialPrice && (
+                                <span style={{ color: "#a0aec0", fontSize: "12px", textDecoration: "line-through" }}>
+                                  {originalPrice} RSD
+                                </span>
+                              )}
                             </div>
 
                             <div className="cart-qty-bar">
@@ -491,16 +515,13 @@ export default function CartModal({
 
                           <button
                             className="cart-item-remove"
-                            onClick={() => {
-                              // 删除整个商品
-                              for (let i = 0; i < item.quantity; i++)
-                                removeOne(item.id);
-                            }}
+                            onClick={() => removeFromCart(item.id)}
                           >
                             ×
                           </button>
                         </div>
-                      ))}
+                        );
+                      })}
 
                       {$total.count === 0 && (
                         <div className="cart-empty">
@@ -517,6 +538,14 @@ export default function CartModal({
                           {$total.price.toLocaleString()} <small>RSD</small>
                         </span>
                       </div>
+
+                      {spendDiscountStatus && (
+                        <div style={{ marginTop: "8px", padding: "10px 12px", borderRadius: "10px", background: "#fffaf0", color: "#9c4221" }}>
+                          {spendDiscountStatus.qualified
+                            ? `已享满 ${spendDiscountStatus.minSpend} 减 ${spendDiscountStatus.discountAmount}`
+                            : `再买 ${spendDiscountStatus.remaining} RSD，即可满 ${spendDiscountStatus.minSpend} 减 ${spendDiscountStatus.discountAmount}`}
+                        </div>
+                      )}
 
                       {/* 打烊提示 */}
                       {!isShopOpen && (

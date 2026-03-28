@@ -18,6 +18,29 @@
       onsubmit="return false;"
     >
       <input type="hidden" name="shopId" />
+      <input type="hidden" name="shopTierMode" />
+      <input type="hidden" name="shopTierOverride" />
+
+      <section class="side-card-block">
+        <div class="side-card-title">店铺版本</div>
+        <div class="side-card-subtitle">版本功能跟随堂食订阅管理一起维护</div>
+        <label>
+          <span>版本模式</span>
+          <select name="shopTierModeSelect">
+            <option value="global">使用全局默认</option>
+            <option value="override">店铺覆盖</option>
+          </select>
+        </label>
+        <label>
+          <span>覆盖版本</span>
+          <select name="shopTierOverrideSelect">
+            <option value="subscription">会员版</option>
+            <option value="business">商务版</option>
+          </select>
+        </label>
+        <div class="side-feedback side-feedback-strong">全局默认：<span data-shop-tier-default-text>会员版</span></div>
+        <button type="button" class="side-submit side-submit-tier" onclick="return window.submitMasterShopTier ? window.submitMasterShopTier(this.form, this) : false;">保存版本设置</button>
+      </section>
 
       <label><span>当前状态</span><input name="dineInStatusLabel" type="text" readonly /></label>
       <label><span>计费开始</span><input name="dineInBillingStartAt" type="text" readonly /></label>
@@ -49,17 +72,22 @@
   .side-panel { position: absolute; top: 0; right: 0; width: min(520px, 100%); height: 100%; background: #fff; box-shadow: -18px 0 50px rgba(15, 23, 42, 0.16); display: flex; flex-direction: column; }
   .side-head { padding: 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; gap: 12px; }
   .side-title { font-size: 22px; font-weight: 900; color: #0f172a; }
-  .side-subtitle { margin-top: 4px; color: #64748b; font-size: 13px; }
+  .side-subtitle { margin-top: 4px; color: #64748b; font-size: 15px; line-height: 1.5; }
   .side-close { border: none; background: #f8fafc; color: #334155; width: 36px; height: 36px; border-radius: 10px; cursor: pointer; font-size: 22px; }
-  .side-form { padding: 18px 20px 28px; overflow-y: auto; display: grid; gap: 12px; }
-  .side-form label { display: grid; gap: 6px; }
-  .side-form span { font-size: 12px; font-weight: 700; color: #475569; }
-  .side-form input { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fff; }
+  .side-form { padding: 18px 20px 28px; overflow-y: auto; display: grid; gap: 16px; }
+  .side-form label { display: grid; gap: 8px; }
+  .side-form span { font-size: 14px; font-weight: 800; color: #334155; }
+  .side-form input, .side-form select { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px 14px; font-size: 16px; background: #fff; }
+  .side-card-block { display: grid; gap: 12px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; }
+  .side-card-title { font-size: 18px; font-weight: 900; color: #0f172a; }
+  .side-card-subtitle { font-size: 14px; color: #64748b; line-height: 1.5; }
   .side-actions { margin-top: 6px; display: grid; gap: 8px; }
   .side-actions-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .side-submit { border: none; background: #0f172a; color: #fff; padding: 12px 14px; border-radius: 12px; cursor: pointer; font-weight: 800; }
+  .side-submit { border: none; background: #0f172a; color: #fff; padding: 13px 16px; border-radius: 12px; cursor: pointer; font-weight: 800; font-size: 15px; }
+  .side-submit-tier { background: #1d4ed8; }
   .side-submit-alt { background: #0f766e; }
   .side-submit-danger { background: #b91c1c; }
   .side-submit-safe { background: #065f46; }
-  .side-feedback { font-size: 12px; color: #64748b; }
+  .side-feedback { font-size: 14px; color: #64748b; line-height: 1.5; }
+  .side-feedback-strong { font-size: 15px; color: #334155; }
 </style>

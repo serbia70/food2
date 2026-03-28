@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useStore } from "@nanostores/preact";
-import { cartItems, cartTotal } from "../store/cartStore";
+import { cartItems, getCartTotals, resolveCartItemUnitPrice, type SpecialPromotion } from "../store/cartStore";
 import { SHOP_EVENTS } from "../lib/events";
 
 interface ReservationModalProps {
   restaurantId?: string | number;
+  specialPromotionMap?: Record<string, SpecialPromotion>;
   onClose?: () => void;
   requiresPreOrder?: boolean;
 }
@@ -78,9 +79,9 @@ function parseLocalDateTime(dateStr: string, timeStr: string) {
   return dt;
 }
 
-export default function ReservationModal({ restaurantId, onClose, requiresPreOrder = false }: ReservationModalProps) {
+export default function ReservationModal({ restaurantId, specialPromotionMap = {}, onClose, requiresPreOrder = false }: ReservationModalProps) {
   const $items = useStore(cartItems);
-  const $total = useStore(cartTotal);
+  const $total = useMemo(() => getCartTotals($items, specialPromotionMap), [$items, specialPromotionMap]);
 
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -129,10 +130,15 @@ export default function ReservationModal({ restaurantId, onClose, requiresPreOrd
   const selectedMenuTotal = useMemo(
     () =>
       selectedMenuList.reduce(
-        (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
+        (sum, item) =>
+          sum +
+          resolveCartItemUnitPrice(
+            { id: item.product_id, price: Number(item.price || 0) },
+            specialPromotionMap,
+          ) * Number(item.quantity || 0),
         0,
       ),
-    [selectedMenuList],
+    [selectedMenuList, specialPromotionMap],
   );
 
   const getSlug = () => String(restaurantId || window.location.pathname.split("/")[1] || "").trim();
@@ -150,7 +156,7 @@ export default function ReservationModal({ restaurantId, onClose, requiresPreOrd
       itemsJson = Object.values($items).map((item: CartMenuItem) => ({
         product_id: item.id,
         name: item.name,
-        sub_name: item.subName || "",
+        sub_name: item.subName || item.sub_name || "",
         price: item.price,
         quantity: item.quantity,
       }));
@@ -159,7 +165,10 @@ export default function ReservationModal({ restaurantId, onClose, requiresPreOrd
         product_id: item.product_id,
         name: item.name,
         sub_name: item.sub_name,
-        price: item.price,
+        price: resolveCartItemUnitPrice(
+          { id: item.product_id, price: Number(item.price || 0) },
+          specialPromotionMap,
+        ),
         quantity: item.quantity,
       }));
     }
@@ -647,7 +656,7 @@ export default function ReservationModal({ restaurantId, onClose, requiresPreOrd
                                 <div>
                                   <div style={{ fontWeight: 600, color: "#2a4258", fontSize: "13px" }}>{p.name}</div>
                                   <div style={{ color: "#73879a", fontSize: "12px" }}>{p.sub_name || p.subName || "-"}</div>
-                                  <div style={{ color: "#166ca6", fontSize: "12px", fontWeight: 700 }}>{Number(p.price || 0)} RSD</div>
+                                  <div style={{ color: "#166ca6", fontSize: "12px", fontWeight: 700 }}>{resolveCartItemUnitPrice({ id: p.id, price: Number(p.price || 0) }, specialPromotionMap)} RSD</div>
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                   <button onClick={() => setMenuQty(p, qty - 1)} style={{ width: "26px", height: "26px", borderRadius: "7px", border: "1px solid #d0dce8", background: "#fff", cursor: "pointer" }}>-</button>

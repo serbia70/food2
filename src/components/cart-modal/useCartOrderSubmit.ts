@@ -1,9 +1,22 @@
-import { CART_SUPPRESS_RELOAD_MS } from "../../lib/clientConfig";
-import { saveUserInfo } from "../../lib/userStore";
-import { clearCart } from "../../store/cartStore";
+import { CART_SUPPRESS_RELOAD_MS } from "../../lib/clientConfig.ts";
+import { saveUserInfo } from "../../lib/userStore.ts";
+import { clearCart, resolveCartItemUnitPrice, type SpecialPromotion } from "../../store/cartStore.ts";
 
 type SubmitType = "dine_in" | "delivery";
 type PaymentMethod = "cash" | "wechat";
+
+type CartItemInput = {
+  id?: string | number;
+  product_id?: string | number;
+  name?: string;
+  sub_name?: string;
+  subName?: string;
+  price?: number;
+  quantity?: number;
+  img?: string;
+  image?: string;
+  [key: string]: unknown;
+};
 
 type OrderForm = {
   name: string;
@@ -18,6 +31,7 @@ type UseCartOrderSubmitOptions = {
   isAdmin: boolean;
   form: OrderForm;
   items: unknown;
+  promotionMap: Record<string, SpecialPromotion>;
   finalTotalDelivery: number;
   finalTotalDine: number;
   deliveryTimeMode: "asap" | "scheduled";
@@ -36,6 +50,7 @@ export function useCartOrderSubmit({
   isAdmin,
   form,
   items,
+  promotionMap,
   finalTotalDelivery,
   finalTotalDine,
   deliveryTimeMode,
@@ -72,6 +87,23 @@ export function useCartOrderSubmit({
     needsReview = false,
     remarks: string[] = [],
   ) => {
+    const sourceItems = Array.isArray(items) ? items : Object.values((items || {}) as Record<string, CartItemInput>);
+    const normalizedItems = sourceItems.map((item) => {
+      const nextItem = item as CartItemInput;
+      const quantity = Math.max(1, Number(nextItem.quantity || 0) || 1);
+      const unitPrice = resolveCartItemUnitPrice(
+        {
+          id: nextItem.id ?? nextItem.product_id ?? '',
+          price: Number(nextItem.price || 0),
+        },
+        promotionMap,
+      );
+      return {
+        ...nextItem,
+        price: unitPrice,
+        quantity,
+      };
+    });
     const dineInAction =
       type === "dine_in"
         ? String(new URLSearchParams(window.location.search).get("op") || "").toLowerCase()
@@ -134,7 +166,7 @@ export function useCartOrderSubmit({
 
     const orderData = {
       restaurantId,
-      items,
+      items: normalizedItems,
       total: finalPrice,
       type,
       info: fullInfo,

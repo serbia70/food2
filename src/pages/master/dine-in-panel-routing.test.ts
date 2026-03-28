@@ -43,7 +43,7 @@ test('master page source wires dine-in panel open/submit/close flow', async () =
   assert.match(page, /buildMasterShopEditPayload,/);
   assert.doesNotMatch(page, /function openShopDineInPanel\(shopId\)/);
   assert.doesNotMatch(page, /window\.submitMasterShopDineIn = async function \(form, action, submitButton\)/);
-  assert.doesNotMatch(page, /fetch\('\/api\/master\/shop-renew'/);
+  assert.doesNotMatch(page, /window\.submitMasterShopDineIn = async function \(form, action, submitButton\)/);
 });
 
 test('management table source exposes dine-in subscription action button', async () => {
@@ -103,20 +103,19 @@ test('admin page source removes top billing and status cards grid', async () => 
   assert.doesNotMatch(adminPage, /缴费提醒/);
 });
 
-test('admin renew tab source receives dine-in billing summary', async () => {
+test('admin table cards source receives dine-in billing summary', async () => {
   const adminPagePath = resolve(process.cwd(), 'src/pages/admin/[slug]/index.astro');
-  const renewPath = resolve(process.cwd(), 'src/components/admin/TabRenew.astro');
+  const tabTablesPath = resolve(process.cwd(), 'src/components/admin/TabTables.astro');
 
   const adminPage = await readFile(adminPagePath, 'utf8');
-  const renew = await readFile(renewPath, 'utf8');
+  const tabTables = await readFile(tabTablesPath, 'utf8');
 
-  assert.match(adminPage, /dineInBillingStatusLabel=\{dineInBilling\.statusLabel\}/);
-  assert.match(adminPage, /dineInBillingStartAt=\{dineInBilling\.billingStartAt\}/);
+  assert.match(adminPage, /billingPlanType=\{billingPlanType\}/);
   assert.match(adminPage, /dineInBillingExpiresAt=\{dineInBilling\.expiresAt\}/);
   assert.match(adminPage, /dineInBillingGraceUntil=\{dineInBilling\.graceUntil\}/);
-  assert.match(adminPage, /dineInStopReason=\{dineInStopReason\}/);
+  assert.match(adminPage, /dineInBillingStatusLabel=\{dineInBilling\.statusLabel\}/);
   assert.match(adminPage, /dineInToggleLabel=\{dineInToggleLabel\}/);
-  assert.match(renew, /堂食订阅/);
+  assert.match(tabTables, /堂食订阅/);
 });
 
 test('reservation visibility source falls back from new fields to legacy shop toggle', async () => {

@@ -1,6 +1,22 @@
 ---
 import { inferLegacySimpleHallNumber } from '../../lib/admin-table-ref';
-const { tableCardsData, activeDeliveryOrders, unmatchedDineInOrders = [], useSimpleHallLabel = false } = Astro.props;
+const {
+  tableCardsData,
+  activeDeliveryOrders,
+  unmatchedDineInOrders = [],
+  useSimpleHallLabel = false,
+  billingPlanType = 'subscription',
+  dineInBillingExpiresAt = '',
+  dineInBillingGraceUntil = '',
+  dineInBillingStatusLabel = '',
+  dineInToggleLabel = '',
+} = Astro.props;
+const isBusinessPlan = String(billingPlanType || 'subscription').toLowerCase() === 'business';
+const dineInPlanLabel = isBusinessPlan ? '商务版' : '会员版';
+const dineInClosed =
+  String(dineInToggleLabel || '').includes('关闭') ||
+  String(dineInBillingStatusLabel || '').includes('关闭') ||
+  String(dineInBillingStatusLabel || '').includes('停用');
 const simpleHallMaxCount = Array.isArray(tableCardsData) ? tableCardsData.length : 0;
 const belgradeTime = new Intl.DateTimeFormat('sr-RS', { timeZone: 'Europe/Belgrade', hour: '2-digit', minute: '2-digit', hour12: false });
 function formatBelgradeHHmm(v: any) {
@@ -100,16 +116,27 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
     </div>
   )}
 
+  <div style={`background:${dineInClosed ? '#f8fafc' : '#fffaf0'}; border:1px solid ${dineInClosed ? '#e2e8f0' : '#fde68a'}; border-radius:10px; margin: 6px 0 12px; padding:10px 14px; text-align:left;`}>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:8px; min-width:0; flex-wrap:wrap;">
+        <strong style={`color:${dineInClosed ? '#64748b' : '#111827'}; font-size:13px; line-height:1;`}>堂食订阅</strong>
+        <span style={`display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; line-height:1.2; background:${dineInClosed ? '#e2e8f0' : '#dcfce7'}; color:${dineInClosed ? '#475569' : '#15803d'};`}>
+          {dineInClosed ? '堂食已关闭' : dineInPlanLabel}
+        </span>
+      </div>
+      <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:flex-end; margin-left:auto; font-size:11px; line-height:1.3;">
+        <div style={`color:${dineInClosed ? '#64748b' : '#15803d'};`}>到期日期：<strong style="font-size:12px;">{dineInBillingExpiresAt || '--'}</strong></div>
+        {!!dineInBillingGraceUntil && !dineInClosed && <div style="color:#15803d;">宽限截止：<strong style="font-size:12px;">{dineInBillingGraceUntil}</strong></div>}
+      </div>
+    </div>
+  </div>
+
   {/* A. 堂食区域 */}
   <div class="section-title" style="margin: 10px 0 15px; padding-left: 10px; border-left: 4px solid #2196f3; font-weight: bold; font-size: 18px;">
     🍽️ 堂食区域 (Dine-in)
   </div>
 
   <div class="tables-grid-wide">
-    <div style="grid-column: 1 / -1; margin-bottom: 10px; text-align: right;">
-      <!-- Test button removed -->
-    </div>
-
     {tableCardsData.map((card: any) => (
       <div
         class={`table-card-wide ${card.hasOrder ? 'occupied' : 'empty'}`}
@@ -140,9 +167,6 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
               )}
               <div class="time-badge" style="font-size: 14px; color: #666; background: #eee; padding: 2px 8px; border-radius: 4px;">
                 🕒 {card.orderTime}
-                <style>
-                  /* 样式移除，移至全局或父组件 */
-                </style>
               </div>
             </div>
           ) : (

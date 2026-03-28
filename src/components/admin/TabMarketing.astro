@@ -1,7 +1,12 @@
 ---
 interface Props {
   shopSlug: string;
-  shopSettings?: any;
+  shopSettings?: {
+    points?: {
+      points_per_spend?: number;
+      points_value?: number;
+    };
+  };
 }
 
 const { shopSlug, shopSettings } = Astro.props;
@@ -60,12 +65,12 @@ const pointsValue = pointsSettings.points_value || 1;
 </div>
 
 <div id="promotion-modal" class="modal" style="display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); position: fixed; inset: 0; z-index: 1000;">
-  <div style="background: #fff; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+  <div style="background: #fff; border-radius: 12px; padding: 24px; width: min(900px, calc(100vw - 48px)); max-height: 90vh; overflow-y: auto;">
     <h3 id="promotion-modal-title" style="margin: 0 0 20px;">添加促销</h3>
-    
+
     <form id="promotion-form">
       <input type="hidden" id="promotion-id" value="" />
-      
+
       <div class="form-group" style="margin-bottom: 15px;">
         <label style="display: block; margin-bottom: 5px; font-weight: 600;">促销名称</label>
         <input type="text" id="promotion-name" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
@@ -75,17 +80,22 @@ const pointsValue = pointsSettings.points_value || 1;
         <label style="display: block; margin-bottom: 5px; font-weight: 600;">促销类型</label>
         <select id="promotion-type" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;">
           <option value="spend_discount">满减（满X减Y）</option>
-          <option value="percent_discount">折扣（X% off）</option>
-          <option value="bonus_points">赠送积分</option>
           <option value="special">今日特价</option>
         </select>
       </div>
 
       <div id="promo-special-fields" class="form-group" style="margin-bottom: 15px; display: none;">
         <label style="display: block; margin-bottom: 5px; font-weight: 600;">选择特价菜品</label>
-        <div id="promo-product-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px;">
-          <div style="color: #64748b; font-size: 13px;">加载菜品中...</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px;">
+          <div>
+            <input type="text" id="promo-product-search" placeholder="搜索菜品..." style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+          </div>
+          <div style="text-align: right;">
+            <small id="promo-selected-count" style="color: #64748b;">已选: 0</small>
+          </div>
         </div>
+        <div id="promo-selected-products" style="max-height: 150px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; margin-bottom: 10px;"></div>
+        <div id="promo-available-products" style="max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px;"></div>
         <small style="color: #64748b;">选择要设为特价的菜品（可多选）</small>
       </div>
 
@@ -102,14 +112,10 @@ const pointsValue = pointsSettings.points_value || 1;
 
       <div id="promo-discount-fields" class="form-group" style="margin-bottom: 15px;">
         <label style="display: block; margin-bottom: 5px; font-weight: 600;">减免/折扣值</label>
-        <input type="number" id="promotion-discount" min="0" step="0.1" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
-        <small style="color: #64748b;">满减填金额(RSD)，折扣填百分比(1-100)</small>
+        <input type="number" id="promotion-discount" min="0" step="1" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+        <small style="color: #64748b;">满减填写减免金额（RSD）</small>
       </div>
 
-      <div id="promo-points-fields" class="form-group" style="margin-bottom: 15px; display: none;">
-        <label style="display: block; margin-bottom: 5px; font-weight: 600;">赠送积分数量</label>
-        <input type="number" id="promotion-bonus-points" min="0" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
-      </div>
 
       <div class="form-group" style="margin-bottom: 15px;">
         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
@@ -139,6 +145,8 @@ const pointsValue = pointsSettings.points_value || 1;
 <script define:vars={{ shopSlug }}>
   let promotionsData = [];
   let productsData = [];
+  let searchTerm = '';
+  let specialSelectionState = [];
 
   function setStyles(el, styles) {
     Object.entries(styles).forEach(([key, value]) => {
@@ -156,6 +164,137 @@ const pointsValue = pointsSettings.points_value || 1;
     setStyles(div, styles);
     clearChildren(container);
     container.appendChild(div);
+  }
+
+  function syncSpecialProductUI() {
+    renderSelectedProducts();
+    renderAvailableProducts();
+  }
+
+  function addSpecialProduct(productId) {
+    const nextId = Number(productId || 0);
+    if (!nextId) return;
+    if (specialSelectionState.includes(nextId)) return;
+    specialSelectionState = [...specialSelectionState, nextId];
+    syncSpecialProductUI();
+  }
+
+  function removeSpecialProduct(productId) {
+    const nextId = Number(productId || 0);
+    specialSelectionState = specialSelectionState.filter((id) => id !== nextId);
+    syncSpecialProductUI();
+  }
+
+  function renderSelectedProducts() {
+    const container = document.getElementById('promo-selected-products');
+    if (!container) return;
+    clearChildren(container);
+
+    if (!specialSelectionState.length) {
+      renderInfo(container, '暂未选择菜品', { color: '#64748b', fontSize: '13px' });
+      return;
+    }
+
+    specialSelectionState.forEach((productId) => {
+      const product = getPromotionProductById(productId);
+      if (!product) return;
+
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.textContent = product.displayNameSecondary
+        ? `${product.displayNamePrimary} (${product.displayNameSecondary}) · ${product.price} RSD ×`
+        : `${product.displayNamePrimary} · ${product.price} RSD ×`;
+      setStyles(chip, {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        margin: '0 8px 8px 0',
+        padding: '8px 10px',
+        border: '1px solid #bfdbfe',
+        borderRadius: '999px',
+        background: '#eff6ff',
+        color: '#1d4ed8',
+        cursor: 'pointer',
+      });
+      chip.addEventListener('click', () => removeSpecialProduct(product.id));
+      container.appendChild(chip);
+    });
+  }
+
+  function renderAvailableProducts() {
+    const container = document.getElementById('promo-available-products');
+    if (!container) return;
+    clearChildren(container);
+
+    const selectedProductIds = specialSelectionState;
+    const rows = productsData.filter((p) => {
+      const primaryText = String(p.displayNamePrimary || '').toLowerCase();
+      const secondaryText = String(p.displayNameSecondary || '').toLowerCase();
+      if (!selectedProductIds.includes(p.id) && !searchTerm) return true;
+      return !selectedProductIds.includes(p.id) && (primaryText.includes(searchTerm) || secondaryText.includes(searchTerm));
+    });
+
+    if (!rows.length) {
+      renderInfo(container, '没有匹配的菜品', { color: '#64748b', fontSize: '13px' });
+      return;
+    }
+
+    rows.forEach((product) => {
+      const row = document.createElement('div');
+      setStyles(row, {
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+        gap: '10px',
+        alignItems: 'center',
+        padding: '10px 12px',
+        border: '1px solid #e5e7eb',
+        borderRadius: '8px',
+        background: '#fff',
+        marginBottom: '8px',
+      });
+
+      const names = document.createElement('div');
+      const primary = document.createElement('div');
+      primary.textContent = product.displayNamePrimary;
+      setStyles(primary, { fontWeight: '600', color: '#111827' });
+      names.appendChild(primary);
+
+      if (product.displayNameSecondary) {
+        const secondary = document.createElement('div');
+        secondary.textContent = product.displayNameSecondary;
+        setStyles(secondary, { fontSize: '12px', color: '#6b7280' });
+        names.appendChild(secondary);
+      }
+
+      const price = document.createElement('div');
+      price.textContent = `${product.price} RSD`;
+      setStyles(price, { fontSize: '13px', color: '#475569', whiteSpace: 'nowrap' });
+
+      const action = document.createElement('button');
+      action.type = 'button';
+      action.textContent = '选择';
+      setStyles(action, {
+        border: 'none',
+        borderRadius: '6px',
+        background: '#2563eb',
+        color: '#fff',
+        padding: '8px 12px',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      });
+      action.addEventListener('click', () => addSpecialProduct(product.id));
+
+      row.append(names, price, action);
+      container.appendChild(row);
+    });
+  }
+
+  function setPromotionProductSearch(nextValue) {
+    searchTerm = String(nextValue || '').trim().toLowerCase();
+  }
+
+  function hydrateSpecialSelection(selectedIds = []) {
+    specialSelectionState = Array.isArray(selectedIds) ? [...selectedIds] : [];
   }
 
   async function loadPromotions() {
@@ -179,52 +318,93 @@ const pointsValue = pointsSettings.points_value || 1;
         productsData = [];
         data.forEach(cat => {
           (cat.products || []).forEach(p => {
-            productsData.push({ id: p.id, name: p.name, price: p.price });
+            productsData.push({
+              id: Number(p.id || 0),
+              name: String(p.name || ''),
+              sub_name: String(p.sub_name || ''),
+              price: Number(p.price || 0),
+              displayNamePrimary: String(p.name || ''),
+              displayNameSecondary: String(p.sub_name || ''),
+            });
           });
         });
-        renderProductList();
+        renderPromotions();
+        const type = document.getElementById('promotion-type')?.value;
+        if (type === 'special') {
+          syncSpecialProductUI();
+        }
       }
     } catch (e) {
       console.error('Failed to load products:', e);
     }
   }
 
-  function renderProductList(selectedIds = []) {
-    const container = document.getElementById('promo-product-list');
-    if (!productsData.length) {
-      renderInfo(container, '暂无菜品', { color: '#64748b', fontSize: '13px' });
-      return;
+  function getPromotionProductById(productId) {
+    return productsData.find((product) => product.id === Number(productId)) || null;
+  }
+
+  function parsePromotionProductIds(raw) {
+    const normalizeValues = (values) => values
+      .map((value) => {
+        if (typeof value === 'object' && value !== null) {
+          return Number(value.id || value.product_id || value.value || 0);
+        }
+        return Number(value || 0);
+      })
+      .filter(Boolean);
+
+    if (Array.isArray(raw)) {
+      return normalizeValues(raw);
     }
-    const nodes = productsData.map((p) => {
-      const label = document.createElement('label');
-      setStyles(label, { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid #f3f4f6', cursor: 'pointer' });
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.name = 'promo-product';
-      input.value = String(p.id);
-      input.checked = selectedIds.includes(p.id);
-      const name = document.createElement('span');
-      name.style.flex = '1';
-      name.textContent = p.name;
-      const price = document.createElement('span');
-      setStyles(price, { color: '#64748b', fontSize: '13px' });
-      price.textContent = `${p.price} RSD`;
-      label.append(input, name, price);
-      return label;
-    });
-    clearChildren(container);
-    nodes.forEach((n) => container.appendChild(n));
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed)
+          ? normalizeValues(parsed)
+          : [];
+      } catch (e) {
+        return raw.includes(',') ? normalizeValues(raw.split(',')) : normalizeValues([raw]);
+      }
+    }
+    return [];
+  }
+
+  function getPromotionStartValue(promotion) {
+    return promotion?.starts_at || promotion?.start_at || promotion?.start_time || '';
+  }
+
+  function getPromotionEndValue(promotion) {
+    return promotion?.ends_at || promotion?.end_at || promotion?.end_time || '';
+  }
+
+  function normalizePromotionDatetimeValue(raw) {
+    const text = String(raw || '').trim();
+    if (!text) return '';
+    const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+    return normalized.slice(0, 16);
+  }
+
+  function formatPromotionDatetime(raw) {
+    const normalized = normalizePromotionDatetimeValue(raw);
+    if (!normalized) return '';
+    return normalized.replace('T', ' ');
+  }
+
+  function resetSpecialSelectionState() {
+    setPromotionProductSearch('');
+    specialSelectionState = [];
+    const searchInput = document.getElementById('promo-product-search');
+    if (searchInput && 'value' in searchInput) searchInput.value = '';
   }
 
   function getSelectedProductIds() {
-    const checkboxes = document.querySelectorAll('input[name="promo-product"]:checked');
-    return Array.from(checkboxes).map(cb => parseInt(cb.value));
+    return [...specialSelectionState];
   }
 
   function renderPromotions() {
     const container = document.getElementById('promotions-list');
     if (!promotionsData.length) {
-      renderInfo(container, '暂无促销活动的', { textAlign: 'center', color: '#64748b', padding: '40px' });
+      renderInfo(container, '暂无促销活动', { textAlign: 'center', color: '#64748b', padding: '40px' });
       return;
     }
     const nodes = promotionsData.map((p) => {
@@ -271,22 +451,24 @@ const pointsValue = pointsSettings.points_value || 1;
   function renderPromoDesc(p) {
     if (p.promo_type === 'spend_discount') {
       return `满 ${p.min_spend_rsd || 0} RSD 减 ${p.discount_amount_rsd || 0} RSD ${p.stackable ? '(可叠加)' : ''}`;
-    } else if (p.promo_type === 'percent_discount') {
-      return `${p.discount_percent || 0}% 折扣 ${p.stackable ? '(可叠加)' : ''}`;
-    } else if (p.promo_type === 'bonus_points') {
-      return `赠送 ${p.bonus_points || 0} 积分`;
     } else if (p.promo_type === 'special') {
-      let productNames = '多个菜品';
-      if (p.selected_products) {
-        try {
-          const ids = JSON.parse(p.selected_products);
-          const names = productsData.filter(prod => ids.includes(prod.id)).map(prod => prod.name);
-          if (names.length > 0) {
-            productNames = names.slice(0, 3).join(', ') + (names.length > 3 ? '...' : '');
-          }
-        } catch (e) {}
+      const ids = parsePromotionProductIds(p.selected_products);
+      let productNames = ids.length === 1 ? '单个菜品' : '多个菜品';
+      const names = productsData
+        .filter((prod) => ids.includes(prod.id))
+        .map((prod) => prod.displayNameSecondary
+          ? `${prod.displayNamePrimary} (${prod.displayNameSecondary})`
+          : prod.displayNamePrimary);
+      if (names.length > 0) {
+        productNames = names.slice(0, 3).join(', ') + (names.length > 3 ? '...' : '');
       }
-      return `今日特价: ${productNames} → ${p.special_price_rsd || 0} RSD`;
+      const timeParts = [];
+      const startText = formatPromotionDatetime(getPromotionStartValue(p));
+      const endText = formatPromotionDatetime(getPromotionEndValue(p));
+      if (startText) timeParts.push(`开始: ${startText}`);
+      if (endText) timeParts.push(`结束: ${endText}`);
+      const timeText = timeParts.length ? ` · ${timeParts.join(' · ')}` : '';
+      return `今日特价: ${productNames} → ${p.special_price_rsd || 0} RSD${timeText}`;
     }
     return '';
   }
@@ -295,6 +477,8 @@ const pointsValue = pointsSettings.points_value || 1;
     document.getElementById('promotion-modal-title').innerText = '添加促销';
     document.getElementById('promotion-form').reset();
     document.getElementById('promotion-id').value = '';
+    resetSpecialSelectionState();
+    updatePromoFields();
     document.getElementById('promotion-modal').style.display = 'flex';
     loadProducts();
   };
@@ -306,46 +490,47 @@ const pointsValue = pointsSettings.points_value || 1;
   window.editPromotion = function(id) {
     const p = promotionsData.find(x => x.id === id);
     if (!p) return;
-    
+
     document.getElementById('promotion-modal-title').innerText = '编辑促销';
     document.getElementById('promotion-id').value = p.id;
     document.getElementById('promotion-name').value = p.name;
     document.getElementById('promotion-type').value = p.promo_type;
     document.getElementById('promotion-min-spend').value = p.min_spend_rsd || '';
-    document.getElementById('promotion-discount').value = p.discount_percent || p.discount_amount_rsd || '';
-    document.getElementById('promotion-bonus-points').value = p.bonus_points || '';
+    document.getElementById('promotion-discount').value = p.discount_amount_rsd || '';
     document.getElementById('promotion-stackable').checked = p.stackable === 1;
     document.getElementById('promotion-special-price').value = p.special_price_rsd || '';
-    
-    // Parse selected products
-    let selectedIds = [];
-    if (p.selected_products) {
-      try {
-        selectedIds = JSON.parse(p.selected_products);
-      } catch (e) {}
-    }
-    renderProductList(selectedIds);
-    
-    if (p.starts_at) {
-      document.getElementById('promotion-start').value = p.starts_at.slice(0, 16);
-    }
-    if (p.ends_at) {
-      document.getElementById('promotion-end').value = p.ends_at.slice(0, 16);
-    }
-    
+
+    resetSpecialSelectionState();
+    hydrateSpecialSelection(parsePromotionProductIds(p.selected_products));
+    setPromotionProductSearch('');
+
+    document.getElementById('promotion-start').value = normalizePromotionDatetimeValue(getPromotionStartValue(p));
+    document.getElementById('promotion-end').value = normalizePromotionDatetimeValue(getPromotionEndValue(p));
+
     updatePromoFields();
     document.getElementById('promotion-modal').style.display = 'flex';
+    loadProducts();
   };
 
   document.getElementById('promotion-type').addEventListener('change', updatePromoFields);
-  
+  const promoProductSearchInput = document.getElementById('promo-product-search');
+  if (promoProductSearchInput) {
+    promoProductSearchInput.addEventListener('input', (event) => {
+      const target = event.target;
+      setPromotionProductSearch(target && 'value' in target ? target.value : '');
+      renderAvailableProducts();
+    });
+  }
+
   function updatePromoFields() {
     const type = document.getElementById('promotion-type').value;
     document.getElementById('promo-spend-fields').style.display = type === 'spend_discount' ? 'block' : 'none';
-    document.getElementById('promo-discount-fields').style.display = type === 'percent_discount' ? 'block' : (type === 'spend_discount' ? 'block' : 'none');
-    document.getElementById('promo-points-fields').style.display = type === 'bonus_points' ? 'block' : 'none';
+    document.getElementById('promo-discount-fields').style.display = type === 'spend_discount' ? 'block' : 'none';
     document.getElementById('promo-special-fields').style.display = type === 'special' ? 'block' : 'none';
     document.getElementById('promo-special-price-field').style.display = type === 'special' ? 'block' : 'none';
+    if (type === 'special') {
+      syncSpecialProductUI();
+    }
   }
 
   document.getElementById('promotion-form').addEventListener('submit', async (e) => {
@@ -362,14 +547,10 @@ const pointsValue = pointsSettings.points_value || 1;
     if (type === 'spend_discount') {
       payload.min_spend_rsd = parseInt(document.getElementById('promotion-min-spend').value) || 0;
       payload.discount_amount_rsd = parseInt(document.getElementById('promotion-discount').value) || 0;
-    } else if (type === 'percent_discount') {
-      payload.discount_percent = parseFloat(document.getElementById('promotion-discount').value) || 0;
-    } else if (type === 'bonus_points') {
-      payload.bonus_points = parseInt(document.getElementById('promotion-bonus-points').value) || 0;
     } else if (type === 'special') {
       payload.selected_products = getSelectedProductIds();
       payload.special_price_rsd = parseInt(document.getElementById('promotion-special-price').value) || 0;
-      if (!payload.selected_products || payload.selected_products.length === 0) {
+      if (!payload.selected_products.length) {
         alert('请至少选择一个菜品作为今日特价');
         return;
       }
@@ -381,8 +562,16 @@ const pointsValue = pointsSettings.points_value || 1;
 
     const startVal = document.getElementById('promotion-start').value;
     const endVal = document.getElementById('promotion-end').value;
-    if (startVal) payload.starts_at = startVal;
-    if (endVal) payload.ends_at = endVal;
+    if (startVal) {
+      payload.starts_at = startVal;
+      payload.start_at = startVal;
+      payload.start_time = startVal;
+    }
+    if (endVal) {
+      payload.ends_at = endVal;
+      payload.end_at = endVal;
+      payload.end_time = endVal;
+    }
 
     try {
       const url = id ? `/api/admin/promotions/${id}` : '/api/admin/promotions';
@@ -460,4 +649,5 @@ const pointsValue = pointsSettings.points_value || 1;
   };
 
   loadPromotions();
+  loadProducts();
 </script>

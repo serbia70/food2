@@ -31,6 +31,7 @@ type MasterDashboardSettingsInput = {
   business_delivery_commission_type?: unknown;
   business_delivery_commission_value?: unknown;
   mqtt_broker?: unknown;
+  defaultShopTier?: unknown;
 };
 
 export type MasterDashboardTab = 'overview' | 'shops' | 'settings' | 'backup';
@@ -85,6 +86,7 @@ export type MasterDashboardView = {
       defaults: {
         reservationPlan: MasterSettingsView['reservationPlan'];
         deliveryPlan: MasterSettingsView['deliveryPlan'];
+        defaultShopTier: MasterSettingsView['defaultShopTier'];
       };
       resetDefaults: {
         reservationCommissionType: string;
@@ -188,6 +190,7 @@ export function buildMasterDashboardView(input: MasterDashboardBuildInput): Mast
       defaults: {
         reservationPlan: settings.reservationPlan,
         deliveryPlan: settings.deliveryPlan,
+        defaultShopTier: settings.defaultShopTier,
       },
     }),
   );
@@ -210,6 +213,7 @@ export function buildMasterDashboardView(input: MasterDashboardBuildInput): Mast
         defaults: {
           reservationPlan: settings.reservationPlan,
           deliveryPlan: settings.deliveryPlan,
+          defaultShopTier: settings.defaultShopTier,
         },
         resetDefaults: {
           reservationCommissionType: settings.reservationPlan.commissionType,

@@ -1,10 +1,11 @@
-import { useState, useEffect } from "preact/hooks";
+import { useMemo, useState, useEffect } from "preact/hooks";
 import { useStore } from "@nanostores/preact";
 import {
   cartItems,
-  cartTotal,
   addToCart,
   clearCart,
+  getCartTotals,
+  type SpecialPromotion,
 } from "../store/cartStore";
 import {
   getUserInfo,
@@ -27,7 +28,11 @@ import UserCenterPanel from "./UserCenterPanel";
  * UserModal - 完美还原图3的个人中心界面
  * 包含：登录、历史订单卡片、数量控制、底部结算栏
  */
-export default function UserModal() {
+interface UserModalProps {
+  specialPromotionMap?: Record<string, SpecialPromotion>;
+}
+
+export default function UserModal({ specialPromotionMap = {} }: UserModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [history, setHistory] = useState<Order[]>([]);
@@ -58,7 +63,8 @@ export default function UserModal() {
   const [regName, setRegName] = useState("");
   const [regError, setRegError] = useState("");
 
-  const $total = useStore(cartTotal);
+  const $items = useStore(cartItems);
+  const $total = useMemo(() => getCartTotals($items, specialPromotionMap), [$items, specialPromotionMap]);
 
   const checkLogin = () => {
     const user = getUserInfo();

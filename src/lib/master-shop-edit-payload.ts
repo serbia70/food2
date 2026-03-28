@@ -11,13 +11,16 @@ export const MASTER_SHOP_FEE_FALLBACKS = {
 
 type MasterShopEditDefaults = {
   reservationPlan?: {
+    enabled?: unknown;
     commissionType?: unknown;
     commissionValue?: unknown;
   };
   deliveryPlan?: {
+    enabled?: unknown;
     commissionType?: unknown;
     commissionValue?: unknown;
   };
+  defaultShopTier?: unknown;
 };
 
 type MasterShopEditPayloadOptions = {
@@ -35,6 +38,18 @@ function buildName(value: unknown): string {
 }
 
 function toCommissionMode(value: unknown, fallback = 'override'): string {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (raw === 'global' || raw === 'override') return raw;
+  return fallback;
+}
+
+function toShopTier(value: unknown, fallback: 'subscription' | 'business' = 'subscription') {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (raw === 'subscription' || raw === 'business') return raw;
+  return fallback;
+}
+
+function toShopTierMode(value: unknown, fallback: 'global' | 'override' = 'global') {
   const raw = String(value ?? '').trim().toLowerCase();
   if (raw === 'global' || raw === 'override') return raw;
   return fallback;
@@ -95,6 +110,10 @@ export function buildMasterShopEditPayload(input: MasterShopEditInput, options: 
     inputCommissionMode === 'global' && (hasReservationOverride || hasDeliveryOverride) ? 'override' : inputCommissionMode;
 
   const password = buildName(input.password);
+  const defaultShopTier = toShopTier(options.defaults?.defaultShopTier, 'subscription');
+  const shopTierMode = toShopTierMode(input.shopTierMode, 'global');
+  const shopTierOverride = toShopTier(input.shopTierOverride, defaultShopTier);
+  const effectiveShopTier = shopTierMode === 'override' ? shopTierOverride : defaultShopTier;
 
   return {
     id: toNormalizedNumber(input.id, 0),
@@ -130,6 +149,14 @@ export function buildMasterShopEditPayload(input: MasterShopEditInput, options: 
     subscriptionDeliveryCommissionValue: reservationCommissionValue,
     businessDeliveryCommissionType: deliveryCommissionType,
     businessDeliveryCommissionValue: deliveryCommissionValue,
+    billingPlanType: effectiveShopTier,
+    billing_plan_type: effectiveShopTier,
+    planType: effectiveShopTier,
+    plan_type: effectiveShopTier,
+    shopTierMode,
+    shopTierOverride,
+    shop_tier_mode: shopTierMode,
+    shop_tier_override: shopTierOverride,
   };
 }
 

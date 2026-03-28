@@ -226,6 +226,8 @@ test('shop edit payload keeps legacy manage contract fields for update_shop', ()
     deliveryCommissionType: 'percentage',
     deliveryCommissionValue: '5',
     commissionMode: 'override',
+    shopTierMode: 'override',
+    shopTierOverride: 'business',
   });
 
   assert.equal(payload.newPassword, 'next-pass');
@@ -234,4 +236,44 @@ test('shop edit payload keeps legacy manage contract fields for update_shop', ()
   assert.equal(payload.enableDineIn, true);
   assert.equal(payload.commissionType, 'percentage');
   assert.equal(payload.commissionValue, 5);
+  assert.equal(payload.shopTierMode, 'override');
+  assert.equal(payload.shopTierOverride, 'business');
+  assert.equal(payload.shop_tier_mode, 'override');
+  assert.equal(payload.shop_tier_override, 'business');
+  assert.equal(payload.billingPlanType, 'business');
+  assert.equal(payload.billing_plan_type, 'business');
+  assert.equal(payload.planType, 'business');
+  assert.equal(payload.plan_type, 'business');
+});
+
+test('shop edit payload should fallback invalid tier inputs to defaults', () => {
+  const payload = buildMasterShopEditPayload(
+    {
+      id: '13',
+      name: 'Tier Fallback Shop',
+      slug: 'tier-fallback-shop',
+      shopTierMode: 'weird',
+      shopTierOverride: 'vip',
+      reservationEnabled: '1',
+      reservationCommissionType: 'percentage',
+      reservationCommissionValue: '3',
+      deliveryEnabled: '1',
+      deliveryCommissionType: 'percentage',
+      deliveryCommissionValue: '5',
+    },
+    {
+      defaults: {
+        defaultShopTier: 'business',
+      },
+    },
+  );
+
+  assert.equal(payload.shopTierMode, 'global');
+  assert.equal(payload.shopTierOverride, 'business');
+  assert.equal(payload.shop_tier_mode, 'global');
+  assert.equal(payload.shop_tier_override, 'business');
+  assert.equal(payload.billingPlanType, 'business');
+  assert.equal(payload.billing_plan_type, 'business');
+  assert.equal(payload.planType, 'business');
+  assert.equal(payload.plan_type, 'business');
 });

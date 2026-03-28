@@ -37,6 +37,62 @@ test('从 settings 中提取预订与外卖默认配置', () => {
   assert.equal(view.businessCommissionValue, 5);
 });
 
+test('从 settings 中提取默认店铺版本', () => {
+  const view = buildMasterSettingsView({
+    reservation_enabled: 1,
+    reservation_commission_type: 'percentage',
+    reservation_commission_value: 0,
+    delivery_enabled: 0,
+    delivery_commission_type: 'per_order',
+    delivery_commission_value: 5,
+    subscription_delivery_commission_type: 'percentage',
+    subscription_delivery_commission_value: 3,
+    business_delivery_commission_type: 'per_order',
+    business_delivery_commission_value: 35,
+    default_shop_tier: 'business',
+  });
+
+  assert.equal(view.defaultShopTier, 'business');
+  assert.equal(view.defaultShopTierText, '商务版');
+});
+
+test('默认店铺版本为 subscription（非法值）', () => {
+  const view = buildMasterSettingsView({
+    reservation_enabled: 1,
+    reservation_commission_type: 'percentage',
+    reservation_commission_value: 0,
+    delivery_enabled: 0,
+    delivery_commission_type: 'per_order',
+    delivery_commission_value: 5,
+    subscription_delivery_commission_type: 'percentage',
+    subscription_delivery_commission_value: 3,
+    business_delivery_commission_type: 'per_order',
+    business_delivery_commission_value: 35,
+    default_shop_tier: 'invalid',
+  });
+
+  assert.equal(view.defaultShopTier, 'subscription');
+  assert.equal(view.defaultShopTierText, '会员版');
+});
+
+test('默认店铺版本默认为 subscription（缺失字段）', () => {
+  const view = buildMasterSettingsView({
+    reservation_enabled: 1,
+    reservation_commission_type: 'percentage',
+    reservation_commission_value: 0,
+    delivery_enabled: 0,
+    delivery_commission_type: 'per_order',
+    delivery_commission_value: 5,
+    subscription_delivery_commission_type: 'percentage',
+    subscription_delivery_commission_value: 3,
+    business_delivery_commission_type: 'per_order',
+    business_delivery_commission_value: 35,
+  });
+
+  assert.equal(view.defaultShopTier, 'subscription');
+  assert.equal(view.defaultShopTierText, '会员版');
+});
+
 test('缺失设置字段时回退默认值', () => {
   const view = buildMasterSettingsView({});
 

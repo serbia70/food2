@@ -1,12 +1,12 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import MenuList from '../../components/MenuList';
-import Sidebar from '../../components/Sidebar';
+import ShopMenuShell from '../../components/shop/ShopMenuShell.tsx';
 import CartModal from '../../components/CartModal';
 import UserModal from '../../components/UserModal';
 import ReservationModal from '../../components/ReservationModal';
 import ShopChatModal from '../../components/ShopChatModal';
 import TablePageEntryIsland from '../../components/shop/TablePageEntryIsland.tsx';
+import { normalizeSpecialPromotions, normalizeSpendDiscountPromotions } from '../../store/cartStore';
 import { API_BASE_URL } from '../../config';
 import { classifyShopResponseStatus } from '../../lib/shop-status';
 import { shouldRetryStream } from '../../lib/stream-retry';
@@ -78,6 +78,10 @@ if (menuRes.ok) {
   }
 }
 
+const promotionsData = Array.isArray(shop?.promotions) ? shop.promotions : [];
+const specialPromotionMap = normalizeSpecialPromotions(promotionsData);
+const spendDiscountPromotion = normalizeSpendDiscountPromotions(promotionsData);
+
 const normalizeMenuImageUrl = (raw: any): string => {
   if (typeof raw !== 'string' || raw.trim() === '') return raw;
   const img = raw.trim();
@@ -90,10 +94,10 @@ const activeMenu = (Array.isArray(rawMenu) ? rawMenu : [])
   .map((cat: any) => ({
     id: `cat_${cat?.id}`,
     name: cat?.name || '未分类',
-    subName: cat?.sub_name || '',
+    subName: cat?.sub_name || cat?.subName || '',
     products: (cat?.products || []).map((p: any) => ({
       ...p,
-      subName: p?.sub_name || '',
+      subName: p?.sub_name || p?.subName || '',
       img: normalizeMenuImageUrl(p?.img) || '/favicon.svg',
     })),
   }))
@@ -667,20 +671,23 @@ const enableReservation = reservationEnabled;
         </div>
 
         <div class="app-container">
-          <Sidebar categories={activeMenu} client:load={true} />
-          <MenuList
+          <ShopMenuShell
             categories={activeMenu}
+            specialPromotionMap={specialPromotionMap}
+            spendDiscountPromotion={spendDiscountPromotion}
             footerPhone={footerPhone}
             footerCopyright={footerCopyright}
             footerText={footerText}
             menuLayout={menuLayout}
-            client:load={true}
+            client:load
           />
         </div>
 
         <CartModal
           restaurantId={slug}
           shopSettings={settings}
+          specialPromotionMap={specialPromotionMap}
+          spendDiscountPromotion={spendDiscountPromotion}
           isDeliveryLocked={isDeliveryLocked}
           isTableLocked={isTableLocked}
           enableDelivery={enableDelivery}
@@ -692,11 +699,11 @@ const enableReservation = reservationEnabled;
           client:load
         />
         <ShopChatModal client:load />
-        <UserModal client:load />
+        <UserModal specialPromotionMap={specialPromotionMap} client:load />
       </>
     )}
 
-    {enableReservation && <ReservationModal restaurantId={slug} requiresPreOrder={false} client:load />}
+    {enableReservation && <ReservationModal restaurantId={slug} specialPromotionMap={specialPromotionMap} requiresPreOrder={false} client:load />}
     
     <script src="/vendor/mqttws31.min.js" is:inline></script>
     <script define:vars={{ slug, shopId, mqttSecret, mqttBroker }} is:inline>

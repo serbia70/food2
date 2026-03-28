@@ -15,6 +15,7 @@ export function buildMasterPricingSettingsPayload(input: MasterPricingSettingsIn
   const deliveryEnabled = toNormalizedBoolean(input.deliveryEnabled, true);
   const deliveryCommissionType = toType(input.deliveryCommissionType, 'percentage');
   const deliveryCommissionValue = toNormalizedNumber(input.deliveryCommissionValue, 5);
+  const defaultShopTier = toDefaultShopTier(input.defaultShopTier);
 
   return {
     reservation_enabled: reservationEnabled ? 1 : 0,
@@ -32,5 +33,12 @@ export function buildMasterPricingSettingsPayload(input: MasterPricingSettingsIn
     businessDeliveryCommissionValue: deliveryCommissionValue,
     reservationEnabled,
     deliveryEnabled,
+    default_shop_tier: defaultShopTier,
   };
+}
+
+function toDefaultShopTier(value: unknown): 'subscription' | 'business' {
+  const raw = String(value ?? '').trim();
+  if (raw === 'subscription' || raw === 'business') return raw;
+  return 'subscription';
 }

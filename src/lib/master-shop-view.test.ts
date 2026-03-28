@@ -28,17 +28,17 @@ test('将店铺账单与到期状态映射为表格视图字段', () => {
   assert.equal(view.balanceRsd, 1800);
 });
 
-test('即将到期店铺应映射为 expiring 行样式', () => {
-  const soon = new Date();
-  soon.setDate(soon.getDate() + 3);
-
-  const view = buildMasterShopView({
-    name: 'Soon Expire',
-    slug: 'soon-expire',
-    status: 'active',
-    expire_date: soon.toISOString(),
-    billing_status: 'active',
-  });
+test('即将到期店铺应按 referenceDate 映射为 expiring 行样式', () => {
+  const view = buildMasterShopView(
+    {
+      name: 'Soon Expire',
+      slug: 'soon-expire',
+      status: 'active',
+      expire_date: '2027-03-04T00:00:00.000Z',
+      billing_status: 'active',
+    },
+    '2027-03-01T00:00:00.000Z',
+  );
 
   assert.equal(view.expiryLabel, '即将到期');
   assert.equal(view.rowTone, 'expiring');
@@ -55,6 +55,22 @@ test('缺失数字字段时回退为 0 且 slug 仍可复制使用', () => {
   assert.equal(view.monthCommissionRsd, 0);
   assert.equal(view.copyStorefrontPath, '/minimal-shop');
   assert.equal(view.copyAdminPath, '/admin/minimal-shop');
+});
+
+test('referenceDate 非法时到期标签应回退为未设置', () => {
+  const view = buildMasterShopView(
+    {
+      name: 'Broken Date Shop',
+      slug: 'broken-date-shop',
+      status: 'active',
+      expire_date: '2027-03-04T00:00:00.000Z',
+      billing_status: 'active',
+    },
+    { referenceDate: 'bad-date' },
+  );
+
+  assert.equal(view.expiryLabel, '未设置');
+  assert.equal(view.expirySeverity, 0);
 });
 
 test('导出筛选与排序所需的严重级别和排序值', () => {
@@ -535,4 +551,83 @@ test('店铺视图应优先读取 businessFeeRsd 覆盖旧外卖提成', () => {
   assert.equal(view.deliveryPlan.displayText, '5%');
   assert.equal(view.deliveryPlan.source, 'new');
   assert.equal(view.deliveryPlan.sourceLabel, '店铺覆盖');
+});
+
+test('buildMasterShopView 应解析店铺版本和来源', () => {
+  const view = buildMasterShopView(
+    {
+      id: 9,
+      name: 'Demo',
+      slug: 'demo',
+      shop_tier_mode: 'override',
+      shop_tier_override: 'business',
+    },
+    { defaults: { defaultShopTier: 'subscription' } },
+  );
+
+  assert.equal(view.shopTier.effectiveTier, 'business');
+  assert.equal(view.shopTier.displayText, '商务版');
+  assert.equal(view.shopTier.sourceLabel, '店铺覆盖');
+  assert.equal(view.shopTier.source, 'override');
+  assert.equal(view.shopTier.features.marketing, true);
+  assert.equal(view.shopTier.features.vip, true);
+  assert.equal(view.shopTier.features.advancedAnalytics, true);
+});
+
+test('buildMasterShopView 应使用全局默认版本', () => {
+  const view = buildMasterShopView(
+    {
+      id: 10,
+      name: 'Global Default Shop',
+      slug: 'global-default',
+      shop_tier_mode: 'global',
+    },
+    { defaults: { defaultShopTier: 'business' } },
+  );
+
+  assert.equal(view.shopTier.effectiveTier, 'business');
+  assert.equal(view.shopTier.displayText, '商务版');
+  assert.equal(view.shopTier.sourceLabel, '来自全局');
+  assert.equal(view.shopTier.source, 'global');
+  assert.equal(view.shopTier.features.marketing, true);
+  assert.equal(view.shopTier.features.vip, true);
+  assert.equal(view.shopTier.features.advancedAnalytics, true);
+});
+
+test('buildMasterShopView 应在 tier 字段缺失时回退到 billing_plan_type', () => {
+  const view = buildMasterShopView(
+    {
+      id: 10,
+      name: 'Billing Fallback Shop',
+      slug: 'billing-fallback',
+      billing_plan_type: 'business',
+    },
+    { defaults: { defaultShopTier: 'subscription' } },
+  );
+
+  assert.equal(view.shopTier.effectiveTier, 'business');
+  assert.equal(view.shopTier.displayText, '商务版');
+  assert.equal(view.shopTier.sourceLabel, '店铺覆盖');
+  assert.equal(view.shopTier.source, 'override');
+});
+
+test('buildMasterShopView 应在无效输入时回退到默认版本', () => {
+  const view = buildMasterShopView(
+    {
+      id: 11,
+      name: 'Invalid Shop',
+      slug: 'invalid',
+      shop_tier_mode: 'override',
+      shop_tier_override: 'vip',
+    },
+    { defaults: { defaultShopTier: 'weird' } },
+  );
+
+  assert.equal(view.shopTier.effectiveTier, 'subscription');
+  assert.equal(view.shopTier.displayText, '会员版');
+  assert.equal(view.shopTier.sourceLabel, '来自全局');
+  assert.equal(view.shopTier.source, 'global');
+  assert.equal(view.shopTier.features.marketing, false);
+  assert.equal(view.shopTier.features.vip, false);
+  assert.equal(view.shopTier.features.advancedAnalytics, true);
 });

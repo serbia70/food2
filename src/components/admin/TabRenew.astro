@@ -3,31 +3,18 @@ const {
   lastMonthCommission,
   thisMonthCommission,
   debtAmount = 0,
-  isLastMonthPaid,
-  showPayWarning,
-  lastMonthName,
   billingAlertLevel = 'normal',
   billingBalanceRSD = 0,
-  billingStatus = 'active',
   billingPlanType = 'subscription',
-  pendingPlanType = '',
-  upgradeChargeRSD = 0,
   walletCopy = '预订 / 外卖余额',
   walletHint = '仅用于预订 / 外卖技术服务费，不包含堂食年费',
   balanceReminderText = '',
   balanceReminderLevel = 'normal',
   reservationPlan = { displayText: '' },
   deliveryPlan = { displayText: '' },
-  dineInBillingStatusLabel = '',
-  dineInBillingStartAt = '',
-  dineInBillingExpiresAt = '',
-  dineInBillingGraceUntil = '',
-  dineInStopReason = '',
-  dineInToggleLabel = '',
 } = Astro.props;
 
 const isSubscriptionPlan = String(billingPlanType || 'subscription').toLowerCase() === 'subscription';
-const isBusinessPlan = String(billingPlanType || 'subscription').toLowerCase() === 'business';
 
 const billingColor =
   balanceReminderLevel === 'overdue' ? '#742a2a' :
@@ -40,11 +27,11 @@ const billingBg =
   balanceReminderLevel === 'warning' ? '#fffaf0' : '#f0fff4';
 
 const alertText =
-  isSubscriptionPlan || isBusinessPlan
-    ? billingAlertLevel === 'overdue' ? '欠费宽限中，请尽快充值' :
-      billingAlertLevel === 'critical' ? '余额不足，请立即充值' :
-      billingAlertLevel === 'warning' ? '余额较低，建议尽快充值' : '余额充足'
-    : '状态异常，请联系平台';
+  billingAlertLevel === 'overdue' ? '欠费宽限中，请尽快充值' :
+    billingAlertLevel === 'critical' ? '余额不足，请立即充值' :
+    billingAlertLevel === 'warning' ? '余额较低，建议尽快充值' : '余额充足';
+const walletLabel = String(walletCopy || '预订 / 外卖余额').replace(/[：:].*$/, '').trim();
+const walletAmountColor = billingBalanceRSD < 1000 ? '#dc2626' : '#2f855a';
 ---
 <div id="tab-renew" class="tab-content">
   <div class="settings-card" style="text-align:center; max-width:800px; margin:0 auto;">
@@ -52,28 +39,18 @@ const alertText =
 
     {/* 1. 订阅钱包卡片 */}
     <div style={`background:${billingBg}; border:2px solid ${billingColor}; border-radius:12px; margin-bottom:20px; padding:20px;`}>
-      <h4 style={`margin:0 0 10px; color:${billingColor}; font-size:14px;`}>💳 {walletCopy}</h4>
-      <div style="display:flex; justify-content:center; align-items:baseline; gap:6px; margin-bottom:8px;">
-        <span style={`font-size:32px; font-weight:800; color:${billingColor};`}>{billingBalanceRSD}</span>
-        <span style="font-size:14px; color:#4a5568;">RSD</span>
+      <div style="margin:0 0 10px; color:#111827; font-size:24px; font-weight:800; line-height:1.2;">
+        💳 {walletLabel}：<span style={`color:${walletAmountColor};`}>{billingBalanceRSD} RSD</span>
       </div>
-      <p style={`margin:0; font-size:14px; color:${billingColor}; font-weight:700;`}>{balanceReminderText || alertText}</p>
+      {(balanceReminderLevel !== 'normal' || balanceReminderText) && (
+        <p style={`margin:0; font-size:14px; color:${billingColor}; font-weight:700;`}>{balanceReminderText || alertText}</p>
+      )}
 
-      <div style="margin-top:15px; padding-top:15px; border-top:1px solid rgba(0,0,0,0.05); font-size:12px; color:#64748b; display:flex; justify-content:space-around; gap:12px; flex-wrap:wrap;">
-        <div>预订：<strong>{reservationPlan.displayText || '未设置'}</strong></div>
-        <div>外卖：<strong>{deliveryPlan.displayText || '未设置'}</strong></div>
+      <div style="margin-top:15px; padding-top:15px; border-top:1px solid rgba(0,0,0,0.05); font-size:14px; color:#64748b; display:flex; justify-content:space-around; gap:12px; flex-wrap:wrap;">
+        <div>预订：<strong style="color:#dc2626;">{reservationPlan.displayText || '未设置'}</strong></div>
+        <div>外卖：<strong style="color:#dc2626;">{deliveryPlan.displayText || '未设置'}</strong></div>
       </div>
-      <div style="margin-top:10px; font-size:12px; color:#475569; text-align:left;">{walletHint}</div>
-    </div>
-
-    <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; margin-bottom:20px; padding:16px; text-align:left;">
-      <h4 style="margin:0 0 10px; color:#9a3412; font-size:14px;">🍽️ 堂食订阅</h4>
-      <div style="font-size:13px; color:#7c2d12; font-weight:700; margin-bottom:6px;">{dineInBillingStatusLabel || '--'}</div>
-      <div style="font-size:12px; color:#9a3412; margin-top:4px;">计费开始：{dineInBillingStartAt || '--'}</div>
-      <div style="font-size:12px; color:#9a3412; margin-top:4px;">到期日期：{dineInBillingExpiresAt || '--'}</div>
-      <div style="font-size:12px; color:#b45309; margin-top:4px;">宽限截止：{dineInBillingGraceUntil || '--'}</div>
-      <div style="font-size:12px; color:#475569; margin-top:4px;">{dineInStopReason || '--'}</div>
-      <div style="font-size:12px; color:#475569; margin-top:4px;">{dineInToggleLabel || '--'}</div>
+      <div style="margin-top:10px; font-size:14px; color:#475569; text-align:left;">{walletHint}</div>
     </div>
 
     {/* 2. 佣金统计卡片 */}

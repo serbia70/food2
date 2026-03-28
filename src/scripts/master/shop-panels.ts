@@ -12,6 +12,10 @@ type MasterShopView = {
   dineInBillingStartAt?: string;
   dineInExpiresAt?: string;
   dineInGraceUntil?: string;
+  shopTier?: {
+    effectiveTier?: 'subscription' | 'business';
+    source?: 'global' | 'override';
+  };
   reservationPlan: {
     enabled: boolean;
     source?: string;
@@ -68,6 +72,20 @@ type SubmitShopPanelActionOptions = {
   onError?: () => void;
 };
 
+function toDebugErrorMessage(data: unknown, fallback: string, status: number) {
+  const errorValue = data && typeof data === 'object' && 'error' in data ? data.error : null;
+  if (typeof errorValue === 'string' && errorValue.trim()) {
+    return `${errorValue.trim()} (HTTP ${status})`;
+  }
+  if (data && typeof data === 'object') {
+    const serialized = JSON.stringify(data);
+    if (serialized && serialized !== '{}') {
+      return `${fallback} (HTTP ${status}) ${serialized}`;
+    }
+  }
+  return `${fallback} (HTTP ${status})`;
+}
+
 function findMasterShopById(shopViews: MasterShopView[], shopId: unknown) {
   const numericId = Number(shopId || 0);
   return shopViews.find((shop) => Number(shop.id || 0) === numericId) || null;
@@ -121,8 +139,7 @@ export function initMasterShopPanels({
         return false;
       }
       if (!res.ok || (data && typeof data === 'object' && 'success' in data && data.success === false)) {
-        const requestError = data && typeof data === 'object' && 'error' in data ? data.error : null;
-        feedback.textContent = typeof requestError === 'string' && requestError ? requestError : errorText;
+        feedback.textContent = toDebugErrorMessage(data, errorText, res.status);
         onError?.();
         return false;
       }
@@ -194,6 +211,14 @@ export function initMasterShopPanels({
     form.elements.dineInExpiresAt.value = String(shop.dineInExpiresAt || '--');
     form.elements.dineInGraceUntil.value = String(shop.dineInGraceUntil || '--');
     form.elements.enableDineIn.value = shop.enableDineIn ? '已启用' : '已停用';
+    form.elements.shopTierMode.value = shop.shopTier?.source === 'override' ? 'override' : 'global';
+    form.elements.shopTierOverride.value = shop.shopTier?.effectiveTier || 'subscription';
+    form.elements.shopTierModeSelect.value = form.elements.shopTierMode.value;
+    form.elements.shopTierOverrideSelect.value = form.elements.shopTierOverride.value;
+    const defaultTierText = panel.querySelector('[data-shop-tier-default-text]');
+    if (defaultTierText instanceof HTMLElement) {
+      defaultTierText.textContent = String(shopEditPanelDefaults.defaults?.defaultShopTier === 'business' ? '商务版' : '会员版');
+    }
     form.elements.expiresAt.value = '';
 
     if (feedback instanceof HTMLElement) {
@@ -212,7 +237,7 @@ export function initMasterShopPanels({
       defaults: shopEditPanelDefaults.defaults,
     });
 
-    const updated = await submitShopPanelAction({
+    await submitShopPanelAction({
       submitBtn,
       feedback,
       loadingText: '保存中...',
@@ -221,24 +246,6 @@ export function initMasterShopPanels({
       payload,
       errorText: '保存失败，请检查后端支持范围',
       networkErrorText: '保存失败，请稍后重试',
-      onSuccess: () => {
-        feedback.textContent = '店铺基础信息已保存，正在同步套餐...';
-      },
-    });
-    if (!updated) return;
-
-    await submitShopPanelAction({
-      submitBtn,
-      feedback,
-      loadingText: '保存中...',
-      endpoint: '/api/master/shop-plan',
-      method: 'POST',
-      payload: {
-        id: payload.id,
-        planType: payload.enableReservation ? 'subscription' : 'none',
-      },
-      errorText: '套餐同步失败，请检查后端支持范围',
-      networkErrorText: '套餐同步失败，请稍后重试',
       onSuccess: () => {
         const panel = document.getElementById('master-shop-edit-panel');
         if (panel instanceof HTMLElement) panel.hidden = true;
@@ -280,7 +287,75 @@ export function initMasterShopPanels({
     });
   }
 
+  async function submitMasterShopTier(form: HTMLFormElement, submitButton: HTMLButtonElement) {
+    const selectedTierMode = String(form.elements.shopTierModeSelect.value || 'global');
+    const selectedTierOverride = String(form.elements.shopTierOverrideSelect.value || 'subscription');
+    form.elements.shopTierMode.value = selectedTierOverride === 'business' ? 'override' : selectedTierMode;
+    form.elements.shopTierOverride.value = selectedTierOverride;
+    const feedback = document.getElementById('master-shop-dinein-feedback');
+    const submitBtn = submitButton instanceof HTMLButtonElement ? submitButton : null;
+    if (!(form instanceof HTMLFormElement) || !(feedback instanceof HTMLElement) || !submitBtn) return false;
+
+    const formData = new FormData(form);
+    const shopId = Number(formData.get('shopId') || 0);
+    if (!shopId) {
+      feedback.textContent = '缺少店铺参数';
+      return false;
+    }
+
+    const shop = findMasterShopById(shopViews, shopId);
+    if (!shop) {
+      feedback.textContent = '店铺不存在';
+      return false;
+    }
+
+    const payload = buildMasterShopEditPayload({
+      id: shopId,
+      name: shop.name || '',
+      slug: shop.slug || '',
+      password: '',
+      status: shop.rawStatus || 'active',
+      enableDelivery: shop.enableDelivery ? '1' : '0',
+      enableDineIn: shop.enableDineIn ? '1' : '0',
+      enableReservation: shop.enableReservation ? '1' : '0',
+      reservationEnabled: shop.reservationPlan.enabled ? '1' : '0',
+      reservationCommissionType: shop.reservationPlan.commissionType || 'percentage',
+      reservationCommissionValue: String(shop.reservationPlan.commissionValue || 0),
+      deliveryEnabled: shop.deliveryPlan.enabled ? '1' : '0',
+      deliveryCommissionType: shop.deliveryPlan.commissionType || 'percentage',
+      deliveryCommissionValue: String(shop.deliveryPlan.commissionValue || 0),
+      commissionMode:
+        shop.reservationPlan.source === 'default' && shop.deliveryPlan.source === 'default' ? 'global' : 'override',
+      shopTierMode: form.elements.shopTierMode.value,
+      shopTierOverride: form.elements.shopTierOverride.value,
+    }, {
+      defaults: shopEditPanelDefaults.defaults,
+    });
+    const selectedTier = String(payload.billing_plan_type || payload.billingPlanType || 'subscription');
+    payload.subscription_enabled = selectedTier === 'subscription' ? 1 : 0;
+    payload.business_enabled = selectedTier === 'business' ? 1 : 0;
+
+    await submitShopPanelAction({
+      submitBtn,
+      feedback,
+      loadingText: '保存版本中...',
+      endpoint: `/api/master/shops/${encodeURIComponent(String(shopId))}`,
+      method: 'PUT',
+      payload,
+      errorText: '保存版本失败',
+      networkErrorText: '保存版本失败，请稍后重试',
+      onSuccess: () => {
+        feedback.textContent = '版本设置已保存，页面将刷新';
+        window.location.reload();
+      },
+    });
+
+    return false;
+  }
+
   async function submitMasterShopDineIn(form: HTMLFormElement, action: string, submitButton: HTMLButtonElement) {
+    form.elements.shopTierMode.value = String(form.elements.shopTierModeSelect.value || 'global');
+    form.elements.shopTierOverride.value = String(form.elements.shopTierOverrideSelect.value || 'subscription');
     const feedback = document.getElementById('master-shop-dinein-feedback');
     const submitBtn = submitButton instanceof HTMLButtonElement ? submitButton : null;
     if (!(form instanceof HTMLFormElement) || !(feedback instanceof HTMLElement) || !submitBtn) return false;
@@ -314,6 +389,35 @@ export function initMasterShopPanels({
         : payload.action === 'extend_one_year'
           ? addYearsToDateOnly(currentExpireDate, 1)
           : currentExpireDate;
+    const updatePayload = buildMasterShopEditPayload({
+      id: payload.shopId,
+      name: shop.name || '',
+      slug: shop.slug || '',
+      password: '',
+      status: shop.rawStatus || 'active',
+      enableDelivery: shop.enableDelivery ? '1' : '0',
+      enableDineIn: payload.action === 'manual_stop' ? '0' : '1',
+      enableReservation: shop.enableReservation ? '1' : '0',
+      reservationEnabled: shop.reservationPlan.enabled ? '1' : '0',
+      reservationCommissionType: shop.reservationPlan.commissionType || 'percentage',
+      reservationCommissionValue: String(shop.reservationPlan.commissionValue || 0),
+      deliveryEnabled: shop.deliveryPlan.enabled ? '1' : '0',
+      deliveryCommissionType: shop.deliveryPlan.commissionType || 'percentage',
+      deliveryCommissionValue: String(shop.deliveryPlan.commissionValue || 0),
+      commissionMode:
+        shop.reservationPlan.source === 'default' && shop.deliveryPlan.source === 'default' ? 'global' : 'override',
+    }, {
+      defaults: shopEditPanelDefaults.defaults,
+    });
+    const renewPayload = {
+      ...updatePayload,
+      shopId: payload.shopId,
+      action: payload.action,
+      expiresAt: expireDate,
+      expireDate,
+      expire_date: expireDate,
+      dine_in_expires_at: expireDate,
+    };
     const originalText = submitBtn.textContent || '提交';
 
     await submitShopPanelAction({
@@ -322,12 +426,7 @@ export function initMasterShopPanels({
       loadingText: '提交中...',
       endpoint: `/api/master/shops/${encodeURIComponent(String(payload.shopId))}`,
       method: 'PUT',
-      payload: {
-        id: payload.shopId,
-        expireDate,
-        enableDineIn: payload.action !== 'manual_stop',
-        billingPlanType: shop.billingPlanType || 'subscription',
-      },
+      payload: renewPayload,
       errorText: '堂食订阅操作失败',
       networkErrorText: '堂食订阅操作失败，请稍后重试',
       onSuccess: () => {
@@ -388,5 +487,6 @@ export function initMasterShopPanels({
       return false;
     },
     submitMasterShopDineIn,
+    submitMasterShopTier,
   };
 }

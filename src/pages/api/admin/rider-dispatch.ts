@@ -36,6 +36,10 @@ interface DispatchProxyPayload {
   } | DispatchOrderSnapshot;
 }
 
+function isDispatchOrderSnapshot(value: unknown): value is DispatchOrderSnapshot {
+  return !!value && typeof value === 'object' && 'id' in value;
+}
+
 interface TelegramDispatchAttempt {
   riderId: string;
   riderName: string;
@@ -54,21 +58,26 @@ interface TelegramDispatchSummary {
   attempts: TelegramDispatchAttempt[];
 }
 
-function extractDispatchOrder(payload: DispatchProxyPayload, orderId: string): DispatchOrderSnapshot | null {
-  if (payload.order && typeof payload.order === 'object') return payload.order;
-  if (Array.isArray(payload.orders)) {
-    const matched = payload.orders.find((item) => String(item?.id || '').trim() === orderId);
+function extractDispatchOrder(payload: DispatchProxyPayload | DispatchOrderSnapshot[] | unknown, orderId: string): DispatchOrderSnapshot | null {
+  if (Array.isArray(payload)) {
+    const matched = payload.find((item) => String(item?.id || '').trim() === orderId);
+    return matched && isDispatchOrderSnapshot(matched) ? matched : null;
+  }
+  if (!payload || typeof payload !== 'object') return null;
+  if (isDispatchOrderSnapshot((payload as DispatchProxyPayload).order)) return (payload as DispatchProxyPayload).order;
+  if (Array.isArray((payload as DispatchProxyPayload).orders)) {
+    const matched = (payload as DispatchProxyPayload).orders?.find((item) => String(item?.id || '').trim() === orderId);
     if (matched) return matched;
   }
-  if (payload.data && typeof payload.data === 'object' && 'order' in payload.data && payload.data.order) {
-    return payload.data.order;
+  if ((payload as DispatchProxyPayload).data && typeof (payload as DispatchProxyPayload).data === 'object' && 'order' in (payload as DispatchProxyPayload).data! && isDispatchOrderSnapshot((payload as { data?: { order?: DispatchOrderSnapshot } }).data?.order)) {
+    return (payload as { data?: { order?: DispatchOrderSnapshot } }).data?.order || null;
   }
-  if (payload.data && typeof payload.data === 'object' && 'orders' in payload.data && Array.isArray(payload.data.orders)) {
-    const matched = payload.data.orders.find((item) => String(item?.id || '').trim() === orderId);
+  if ((payload as DispatchProxyPayload).data && typeof (payload as DispatchProxyPayload).data === 'object' && 'orders' in (payload as DispatchProxyPayload).data! && Array.isArray((payload as { data?: { orders?: DispatchOrderSnapshot[] } }).data?.orders)) {
+    const matched = (payload as { data?: { orders?: DispatchOrderSnapshot[] } }).data?.orders?.find((item) => String(item?.id || '').trim() === orderId);
     if (matched) return matched;
   }
-  if (payload.data && typeof payload.data === 'object' && 'id' in payload.data) {
-    return payload.data as DispatchOrderSnapshot;
+  if (isDispatchOrderSnapshot((payload as DispatchProxyPayload).data)) {
+    return (payload as DispatchProxyPayload).data as DispatchOrderSnapshot;
   }
   return null;
 }

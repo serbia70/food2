@@ -141,6 +141,7 @@ test('缺失设置字段时回退默认值', () => {
     mqttBroker: '',
     telegramWebhookSecret: '',
     telegramChatId: '',
+    telegramBotToken: '',
   });
   assert.deepEqual(view.categories, {
     categoriesJson: '[]',
@@ -178,6 +179,7 @@ test('从 settings 中提取第二波全局设置字段', () => {
     mqtt_broker: 'mqtt.serbia70.com',
     telegram_webhook_secret: 'secret-123',
     telegram_chat_id: '99887766',
+    telegram_bot_token: 'bot-token-123',
     categories: [{ id: 'hero', name: '推荐' }],
     backup_time: '03:00',
     backup_retention: 14,
@@ -217,6 +219,7 @@ test('从 settings 中提取第二波全局设置字段', () => {
     mqttBroker: 'mqtt.serbia70.com',
     telegramWebhookSecret: 'secret-123',
     telegramChatId: '99887766',
+    telegramBotToken: 'bot-token-123',
   });
   assert.deepEqual(view.categories, {
     categoriesJson: JSON.stringify([{ id: 'hero', name: '推荐' }], null, 2),

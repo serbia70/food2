@@ -40,6 +40,7 @@ export type MasterSettingsView = {
     mqttBroker: string;
     telegramWebhookSecret: string;
     telegramChatId: string;
+    telegramBotToken: string;
   };
   categories: {
     categoriesJson: string;
@@ -183,6 +184,7 @@ export function buildMasterSettingsView(settings: MasterSettingsInput): MasterSe
       mqttBroker: toStringValue(settings?.mqtt_broker ?? settings?.mqttBroker),
       telegramWebhookSecret: toStringValue(settings?.telegram_webhook_secret ?? settings?.telegramWebhookSecret),
       telegramChatId: toStringValue(settings?.telegram_chat_id ?? settings?.telegramChatId),
+      telegramBotToken: toStringValue(settings?.telegram_bot_token ?? settings?.telegramBotToken),
     },
     categories: {
       categoriesJson: toJsonString(settings?.categories, '[]'),

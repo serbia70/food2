@@ -63,6 +63,7 @@ export function initMasterSettingsForms({
           mqttBroker: String(formData.get('mqttBroker') || '').trim(),
           telegramWebhookSecret: String(formData.get('telegramWebhookSecret') || '').trim(),
           telegramChatId: String(formData.get('telegramChatId') || '').trim(),
+          telegramBotToken: String(formData.get('telegramBotToken') || '').trim(),
         };
       },
     });

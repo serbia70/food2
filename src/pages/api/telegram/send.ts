@@ -39,7 +39,14 @@ async function loadTelegramBotToken(shopSlug: string): Promise<string> {
   const shop = await shopRes.json().catch(() => ({}));
   const settings = parseShopSettings(asRecord(shop).settings);
   const telegram = asRecord(settings.telegram);
-  return String(telegram.token || '').trim();
+  const shopToken = String(telegram.token || '').trim();
+  if (shopToken) return shopToken;
+
+  const masterRes = await fetch(`${API_BASE_URL}/api/master/settings`);
+  if (!masterRes.ok) throw new Error(`master_settings_http_${masterRes.status}`);
+  const masterData = await masterRes.json().catch(() => ({}));
+  const masterSettings = asRecord(asRecord(masterData).settings);
+  return String(masterSettings.telegram_bot_token || masterSettings.telegramBotToken || '').trim();
 }
 
 export const POST: APIRoute = async ({ request }) => {

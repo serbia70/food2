@@ -1,4 +1,11 @@
 ---
+import {
+  formatPickupEtaLabel,
+  getAdminDispatchStatusCopy,
+  getReminderBadgeCopy,
+  isAwaitingCourierOrder,
+} from '../../lib/rider-dispatch.ts';
+
 const { orders, useSimpleHallLabel = false } = Astro.props;
 const sortedOrders = [...orders].sort((a: any, b: any) => Number(b.id || 0) - Number(a.id || 0));
 const firstActiveOrder = sortedOrders
@@ -88,7 +95,7 @@ function formatTableLabel(tableInfo: any) {
       } catch {}
 
       return (
-        <div class={`order-card ${isNewest ? 'new-order-highlight' : ''}`} data-order-time={oTime} data-oid={o.id} style={isCancelled ? 'opacity:0.6; filter:grayscale(0.8); background:#f5f5f5;' : ''}>
+        <div class={`order-card ${isNewest ? 'new-order-highlight' : ''}`} data-order-time={oTime} data-oid={o.id} data-rider-remind-count={Number(o.rider_remind_count || 0)} style={isCancelled ? 'opacity:0.6; filter:grayscale(0.8); background:#f5f5f5;' : ''}>
           <div class="order-header">
             <span class={`order-type-tag ${o.order_type === 'delivery' ? 'delivery' : 'dine'}`}>
               {o.order_type === 'delivery' ? '外卖' : '堂食'}
@@ -119,15 +126,7 @@ function formatTableLabel(tableInfo: any) {
           <div class="order-footer">
             <div class="footer-left" style="display:flex; gap:5px; align-items:center;">
               <span class={`status-tag status-${o.status || 'pending'}`}>
-                {o.status === 'confirmed'
-                  ? '已接单'
-                  : o.status === 'delivering'
-                    ? '配送中'
-                    : o.status === 'completed'
-                      ? '已完成'
-                      : o.status === 'cancelled'
-                        ? '已取消'
-                        : '待处理'}
+                {getAdminDispatchStatusCopy(o.status)}
               </span>
               {o.user_phone && (
                 <button
@@ -136,6 +135,24 @@ function formatTableLabel(tableInfo: any) {
                   title="发消息"
                   style="height:24px; width:24px; font-size:12px; background:#0891b2; color:#fff; border:none; border-radius:4px; cursor:pointer;"
                 >💬</button>
+              )}
+              {isAwaitingCourierOrder(o) && (
+                <button
+                  class="btn-action"
+                  data-admin-action="remind-riders"
+                  data-order-id={o.id}
+                  title="再次提醒"
+                  style="height:24px; min-width:60px; font-size:12px;"
+                >再次提醒</button>
+              )}
+              {isAwaitingCourierOrder(o) && (
+                <button
+                  class="btn-action"
+                  data-admin-action="contact-riders"
+                  data-order-id={o.id}
+                  title="联系骑手"
+                  style="height:24px; min-width:60px; font-size:12px;"
+                >联系骑手</button>
               )}
               <button class="btn-action" data-admin-action="print-order" data-order-id={o.id} title="打印" style="height:24px; width:24px; font-size:12px;">🖨️</button>
             </div>
@@ -146,10 +163,20 @@ function formatTableLabel(tableInfo: any) {
               <span class="order-amount">{o.total_amount} RSD</span>
             </div>
 
-            <span class="hidden-data" data-oid={o.id} data-order-id={o.id} data-order-no={o.order_no} data-items={o.items_json} data-remarks={o.remarks_json} data-total={o.total_amount} data-table={o.table_info} data-status={o.status}></span>
+            <span class="hidden-data" data-oid={o.id} data-order-id={o.id} data-order-no={o.order_no} data-items={o.items_json} data-remarks={o.remarks_json} data-total={o.total_amount} data-table={o.table_info} data-status={o.status} data-rider-remind-count={Number(o.rider_remind_count || 0)}></span>
           </div>
 
           {o.order_type === 'delivery' && <div class="order-address-row">地址: {o.table_info}</div>}
+          {isAwaitingCourierOrder(o) && formatPickupEtaLabel(o.pickup_eta_minutes) && (
+            <div class="order-address-row" style="margin-top:6px; color:#7c3aed; font-weight:700;">
+              {formatPickupEtaLabel(o.pickup_eta_minutes)}
+            </div>
+          )}
+          {isAwaitingCourierOrder(o) && (
+            <div class="order-address-row" style="margin-top:4px; color:#6b7280;">
+              {getReminderBadgeCopy(o.rider_remind_count)}
+            </div>
+          )}
           {o.order_type === 'delivery' && o.scheduled_for && (
             <div class="order-address-row" style="margin-top:4px; color:#1565c0;">
               预约送达: {formatScheduledLabel(o.scheduled_for)}

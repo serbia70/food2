@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const shopPagePath = new URL('./[slug]/index.astro', import.meta.url);
+const shopPagePath = new URL('../pages/[slug]/index.astro', import.meta.url);
 
 test('shop page normalizes promotions once and passes specialPromotionMap into menu and checkout surfaces', async () => {
   const file = await readFile(shopPagePath, 'utf8');

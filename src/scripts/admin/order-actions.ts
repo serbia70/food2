@@ -1,121 +1,178 @@
 
-import { getAdminRuntimeState, registerAdminGlobal, showAdminToast } from './globals';
+import { registerAdminGlobal, showAdminToast } from './globals';
+import { fetchAvailableRiders, publishRiderDispatch, remindRiders } from './orders';
+
+const DELIVERY_ETA_OPTIONS = [10, 15, 20, 30, 45];
 
 // ================== Delivery Modal Logic ==================
 
 export function openDeliveryModal(orderId: string) {
-  const modal = document.getElementById("delivery-modal");
-  const listEl = document.getElementById("driver-select-list");
+  const modal = document.getElementById('delivery-modal');
+  const listEl = document.getElementById('driver-select-list');
   if (!modal || !listEl) return;
 
-  // Store current order ID on the modal for confirmation
   modal.dataset.orderId = orderId;
-
-  const drivers = getAdminRuntimeState().currentSettings?.drivers || [];
+  modal.dataset.etaMinutes = '';
   listEl.replaceChildren();
-  
-  if (drivers.length === 0) {
-    const empty = document.createElement('div');
-    empty.style.color = '#999';
-    empty.style.textAlign = 'center';
-    empty.style.padding = '10px';
-    empty.textContent = '暂无保存的骑手，请手动输入或在设置中添加';
-    listEl.appendChild(empty);
-  } else {
-    drivers.forEach((d: any, idx: number) => {
-      const option = document.createElement('div');
-      option.className = 'driver-option';
-      option.style.padding = '10px';
-      option.style.borderBottom = '1px solid #eee';
-      option.style.cursor = 'pointer';
-      option.style.display = 'flex';
-      option.style.justifyContent = 'space-between';
-      option.style.alignItems = 'center';
-      option.addEventListener('click', () => {
-        const radios = document.querySelectorAll('input[name="driver-radio"]');
-        if (radios[idx]) (radios[idx] as HTMLInputElement).checked = true;
+
+  DELIVERY_ETA_OPTIONS.forEach((minutes, index) => {
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.className = 'driver-option';
+    option.dataset.etaMinutes = String(minutes);
+    option.textContent = `${minutes} 分钟`;
+    option.style.width = '100%';
+    option.style.padding = '10px';
+    option.style.border = '1px solid #eee';
+    option.style.borderRadius = '6px';
+    option.style.cursor = 'pointer';
+    option.style.background = '#fff';
+    option.style.marginBottom = '8px';
+    option.addEventListener('click', () => {
+      modal.dataset.etaMinutes = String(minutes);
+      listEl.querySelectorAll('[data-eta-minutes]').forEach((node) => {
+        const item = node as HTMLElement;
+        item.style.background = '#fff';
+        item.style.borderColor = '#eee';
       });
-
-      const textWrap = document.createElement('div');
-      const name = document.createElement('div');
-      name.style.fontWeight = 'bold';
-      name.textContent = String(d?.name || '');
-      const phone = document.createElement('div');
-      phone.style.fontSize = '12px';
-      phone.style.color = '#666';
-      phone.textContent = String(d?.phone || '');
-      textWrap.append(name, phone);
-
-      const radio = document.createElement('input');
-      radio.type = 'radio';
-      radio.name = 'driver-radio';
-      radio.value = String(idx);
-
-      option.append(textWrap, radio);
-      listEl.appendChild(option);
+      option.style.background = '#eef2ff';
+      option.style.borderColor = '#6366f1';
     });
-  }
 
-  // Clear manual inputs
-  const nameInput = document.getElementById("temp-driver-name") as HTMLInputElement;
-  const phoneInput = document.getElementById("temp-driver-phone") as HTMLInputElement;
-  if (nameInput) nameInput.value = "";
-  if (phoneInput) phoneInput.value = "";
+    listEl.appendChild(option);
+    if (index === 1) option.click();
+  });
 
-  modal.style.display = "flex";
+  modal.style.display = 'flex';
 }
 
 export function closeDeliveryModal() {
-  const modal = document.getElementById("delivery-modal");
+  const modal = document.getElementById('delivery-modal');
   if (modal) {
-    modal.style.display = "none";
+    modal.style.display = 'none';
     delete modal.dataset.orderId;
+    delete modal.dataset.etaMinutes;
   }
 }
 
 // Expose helper for onclick selection
 registerAdminGlobal('selectDriver', (idx: number) => {
-    const radios = document.querySelectorAll('input[name="driver-radio"]');
-    if(radios[idx]) (radios[idx] as HTMLInputElement).checked = true;
+  const modal = document.getElementById('delivery-modal');
+  const listEl = document.getElementById('driver-select-list');
+  if (!modal || !listEl) return;
+
+  const options = listEl.querySelectorAll('[data-eta-minutes]');
+  const target = options[idx] as HTMLElement | undefined;
+  if (!target) return;
+  target.click();
 });
 
 export async function confirmDelivery() {
-    const modal = document.getElementById("delivery-modal");
-    if (!modal || !modal.dataset.orderId) return;
-    
-    const orderId = modal.dataset.orderId;
-    
-    // Check selection
-    let driverName = "";
-    let driverPhone = "";
-    
-    const checked = document.querySelector('input[name="driver-radio"]:checked') as HTMLInputElement;
-    if (checked) {
-        const idx = parseInt(checked.value);
-        const drivers = getAdminRuntimeState().currentSettings?.drivers || [];
-        if (drivers[idx]) {
-            driverName = drivers[idx].name;
-            driverPhone = drivers[idx].phone;
-        }
-    }
-    
-    // Check manual input (overrides selection)
-    const nameInput = document.getElementById("temp-driver-name") as HTMLInputElement;
-    const phoneInput = document.getElementById("temp-driver-phone") as HTMLInputElement;
-    
-    if (nameInput && nameInput.value.trim()) {
-        driverName = nameInput.value.trim();
-        driverPhone = phoneInput?.value.trim() || "";
-    }
-    
-    if (!driverName) {
-        showAdminToast("请选择骑手或输入姓名");
-        return;
-    }
-    
-    await updateOrderStatus(orderId, 'delivering', { name: driverName, phone: driverPhone });
+  const modal = document.getElementById('delivery-modal');
+  if (!modal || !modal.dataset.orderId) return;
+
+  const etaMinutes = Number(modal.dataset.etaMinutes || 0);
+  if (!etaMinutes) {
+    showAdminToast('请选择预计取餐时间');
+    return;
+  }
+
+  try {
+    await publishRiderDispatch(modal.dataset.orderId, etaMinutes);
     closeDeliveryModal();
+  } catch (error: any) {
+    showAdminToast(error?.message || '发布失败');
+  }
 }
+
+function getReminderCountFromDataset(orderId: string): number {
+  const candidates = [
+    document.querySelector(`.order-card[data-oid="${orderId}"]`) as HTMLElement | null,
+    document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null,
+    document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null,
+  ];
+
+  for (const node of candidates) {
+    const raw = String(node?.dataset?.riderRemindCount || '').trim();
+    if (!raw) continue;
+    const count = Number(raw);
+    if (Number.isFinite(count) && count >= 0) return Math.floor(count);
+  }
+
+  return 0;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  return fallback;
+}
+
+export async function remindAwaitingOrder(orderId: string) {
+  if (!orderId) return;
+  const rider_remind_count = getReminderCountFromDataset(orderId);
+
+  try {
+    await remindRiders(orderId, { rider_remind_count });
+  } catch (error: unknown) {
+    showAdminToast(getErrorMessage(error, '提醒失败'));
+  }
+}
+
+export async function contactRidersForOrder(orderId: string) {
+  if (!orderId) return;
+
+  try {
+    const riders = await fetchAvailableRiders();
+    const hasRiders = riders.length > 0;
+    const selection = prompt(hasRiders
+      ? '输入 1 再次提醒骑手；输入 2 联系在线骑手。'
+      : '当前无可联系骑手。输入 1 再次提醒骑手。');
+    if (!selection) return;
+
+    if (selection.trim() === '1') {
+      await remindAwaitingOrder(orderId);
+      return;
+    }
+
+    if (!hasRiders) {
+      showAdminToast('当前无可联系骑手，仅支持再次提醒');
+      return;
+    }
+
+    if (selection.trim() !== '2') {
+      showAdminToast('请输入 1 或 2');
+      return;
+    }
+
+    const lines = riders.map((rider, idx) => `${idx + 1}. ${rider.name} (${rider.phone})`);
+    const selected = prompt(`可联系骑手：\n${lines.join('\n')}\n\n输入序号可拨号联系，取消则不操作。`);
+    if (!selected) return;
+
+    const selectedIdx = Number(selected) - 1;
+    const target = riders[selectedIdx];
+    if (!target) {
+      showAdminToast('序号无效');
+      return;
+    }
+
+    window.location.href = `tel:${target.phone}`;
+  } catch (error: unknown) {
+    showAdminToast(getErrorMessage(error, '联系骑手失败'));
+  }
+}
+
+registerAdminGlobal('contact-riders', async (el: HTMLElement) => {
+  const orderId = String(el?.dataset?.orderId || '').trim();
+  await contactRidersForOrder(orderId);
+}, false);
+
+registerAdminGlobal('remind-riders', async (el: HTMLElement) => {
+  const orderId = String(el?.dataset?.orderId || '').trim();
+  await remindAwaitingOrder(orderId);
+}, false);
 
 export async function updateOrderStatus(orderId: string | number, status: string, driverInfo: any = null) {
   try {

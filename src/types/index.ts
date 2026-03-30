@@ -55,6 +55,7 @@ export interface Order {
   status:
     | "pending"
     | "confirmed"
+    | "awaiting_courier"
     | "delivering"
     | "completed"
     | "cancelled"
@@ -75,6 +76,12 @@ export interface Order {
   paid_at?: string;
   courier_name?: string;
   courier_phone?: string;
+  pickup_eta_minutes?: number;
+  pickup_ready_at?: string;
+  rider_broadcasted_at?: string;
+  rider_remind_count?: number;
+  rider_last_reminded_at?: string;
+  rider_contact_attempted_at?: string;
   modification_count?: number;
   delivery_fee_status?: "pending" | "paid";
   allow_add?: number; // 0 or 1
@@ -99,7 +106,9 @@ export interface Rider {
   phone: string;
   password?: string;
   status: "offline" | "available" | "busy";
-  created_at: string;
+  telegram_chat_id?: string;
+  telegram_username?: string;
+  created_at?: string;
 }
 
 export interface Product {

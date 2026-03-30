@@ -142,6 +142,14 @@ const orders = rawOrders.map((o: any) => ({
   table_info: String(o?.table_info || ''),
   user_phone: String(o?.user_phone || ''),
   scheduled_for: String(o?.scheduled_for || ''),
+  pickup_eta_minutes: Number(o?.pickup_eta_minutes || 0),
+  pickup_ready_at: String(o?.pickup_ready_at || ''),
+  rider_broadcasted_at: String(o?.rider_broadcasted_at || ''),
+  rider_remind_count: Number(o?.rider_remind_count || 0),
+  rider_last_reminded_at: String(o?.rider_last_reminded_at || ''),
+  rider_contact_attempted_at: String(o?.rider_contact_attempted_at || ''),
+  courier_name: String(o?.courier_name || ''),
+  courier_phone: String(o?.courier_phone || ''),
   created_at: String(o?.created_at || ''),
   is_deleted: Number(o?.is_deleted || 0),
 }));
@@ -159,7 +167,7 @@ const unmatchedDineInOrders = orders
 const activeDeliveryOrders = orders.filter(
   (o: any) =>
     o.order_type === 'delivery' &&
-    (o.status === 'pending' || o.status === 'confirmed' || o.status === 'delivering') &&
+    (o.status === 'pending' || o.status === 'confirmed' || o.status === 'awaiting_courier' || o.status === 'delivering') &&
     o.is_deleted !== 1,
 );
 

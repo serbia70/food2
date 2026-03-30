@@ -39,10 +39,78 @@ import Layout from '../../layouts/Layout.astro';
     .links a { color: #2196f3; text-decoration: none; }
   </style>
 
-  <script is:inline>
+  <script>
+    import { isValidRiderSession, normalizeRiderSession } from '../../lib/rider-session';
+
+    function parseRiderAuthResponse(payload) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      return {
+        success: source.success === true,
+        error: typeof source.error === 'string' ? source.error : '',
+        rider: source.rider && typeof source.rider === 'object' ? source.rider : null,
+      };
+    }
+
+    function getStorage(kind) {
+      try {
+        return kind === 'local' ? window.localStorage : window.sessionStorage;
+      } catch {
+        return null;
+      }
+    }
+
+    function safeGetStorage(kind, key) {
+      const storage = getStorage(kind);
+      if (!storage) return null;
+      try {
+        return storage.getItem(key);
+      } catch {
+        return null;
+      }
+    }
+
+    function safeSetStorage(kind, key, value) {
+      const storage = getStorage(kind);
+      if (!storage) return;
+      try {
+        storage.setItem(key, value);
+      } catch {}
+    }
+
+    function safeRemoveStorage(kind, key) {
+      const storage = getStorage(kind);
+      if (!storage) return;
+      try {
+        storage.removeItem(key);
+      } catch {}
+    }
+
+    const savedSession = safeGetStorage('local', 'rider_session');
+    if (savedSession) {
+      try {
+        const parsed = JSON.parse(savedSession);
+        if (isValidRiderSession(parsed)) {
+          location.href = '/rider/dashboard';
+        } else {
+          safeRemoveStorage('local', 'rider_session');
+        }
+      } catch {
+        safeRemoveStorage('local', 'rider_session');
+      }
+    }
+
+    const regPhone = safeGetStorage('session', 'rider_register_phone');
+    if (regPhone) {
+      const phoneNode = document.getElementById('phone');
+      if (phoneNode instanceof HTMLInputElement) phoneNode.value = regPhone;
+      safeRemoveStorage('session', 'rider_register_phone');
+    }
+
     async function login() {
-      const phone = document.getElementById('phone').value.trim();
-      const password = document.getElementById('password').value.trim();
+      const phoneNode = document.getElementById('phone');
+      const passwordNode = document.getElementById('password');
+      const phone = phoneNode instanceof HTMLInputElement ? phoneNode.value.trim() : '';
+      const password = passwordNode instanceof HTMLInputElement ? passwordNode.value.trim() : '';
 
       if (!phone || !password) return alert('Please fill all fields');
 
@@ -52,17 +120,26 @@ import Layout from '../../layouts/Layout.astro';
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ action: 'login', phone, password })
         });
-        const data = await res.json();
-        
+        const payload = await res.json().catch(() => ({}));
+        const data = parseRiderAuthResponse(payload);
+
         if (data.success) {
-          localStorage.setItem('rider_token', JSON.stringify(data.rider));
+          const session = normalizeRiderSession(data.rider || {});
+          if (!isValidRiderSession(session)) {
+            safeRemoveStorage('local', 'rider_session');
+            alert('登录成功但骑手资料不完整');
+            return;
+          }
+          safeSetStorage('local', 'rider_session', JSON.stringify(session));
           location.href = '/rider/dashboard';
         } else {
-          alert('Login failed: ' + data.error);
+          alert('Login failed: ' + (data.error || 'unknown'));
         }
-      } catch(e) {
-        alert('Network error');
+      } catch (e) {
+        alert('Network error: ' + (e instanceof Error ? e.message : 'unknown'));
       }
     }
+
+    window.login = login;
   </script>
 </Layout>

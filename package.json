@@ -24,6 +24,7 @@
   "devDependencies": {
     "@astrojs/cloudflare": "^12.6.12",
     "@types/jsonwebtoken": "^9.0.10",
+    "sharp": "^0.34.5",
     "wrangler": "^4.64.0"
   }
 }

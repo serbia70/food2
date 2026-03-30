@@ -45,10 +45,27 @@ import Layout from '../../layouts/Layout.astro';
   </style>
 
   <script is:inline>
+    function parseRiderAuthResponse(payload) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      return {
+        success: source.success === true,
+        error: typeof source.error === 'string' ? source.error : '',
+      };
+    }
+
+    function safeSetSessionStorage(key, value) {
+      try {
+        window.sessionStorage.setItem(key, value);
+      } catch {}
+    }
+
     async function register() {
-      const name = document.getElementById('name').value.trim();
-      const phone = document.getElementById('phone').value.trim();
-      const password = document.getElementById('password').value.trim();
+      const nameNode = document.getElementById('name');
+      const phoneNode = document.getElementById('phone');
+      const passwordNode = document.getElementById('password');
+      const name = nameNode instanceof HTMLInputElement ? nameNode.value.trim() : '';
+      const phone = phoneNode instanceof HTMLInputElement ? phoneNode.value.trim() : '';
+      const password = passwordNode instanceof HTMLInputElement ? passwordNode.value.trim() : '';
 
       if (!name || !phone || !password) return alert('Please fill all fields');
 
@@ -58,17 +75,19 @@ import Layout from '../../layouts/Layout.astro';
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ action: 'register', name, phone, password })
         });
-        const data = await res.json();
-        
+        const payload = await res.json().catch(() => ({}));
+        const data = parseRiderAuthResponse(payload);
+
         if (data.success) {
+          safeSetSessionStorage('rider_register_phone', phone);
           alert('Registration successful! Please login.');
           location.href = '/rider/login';
         } else {
-          alert('Registration failed: ' + data.error);
+          alert('Registration failed: ' + (data.error || 'unknown'));
         }
-      } catch(e) {
+      } catch (e) {
         console.error('Register error:', e);
-        alert('Network error: ' + e.message);
+        alert('Network error: ' + (e instanceof Error ? e.message : 'unknown'));
       }
     }
   </script>

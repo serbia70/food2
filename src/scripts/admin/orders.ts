@@ -47,6 +47,12 @@ export async function archiveOldOrders() {
   }
 }
 
+import {
+  buildContactableRiderRows,
+  buildDispatchPublishPayload,
+  buildReminderPayload,
+} from '../../lib/rider-dispatch.ts';
+
 export async function deleteArchivedOrders() {
   const restaurantId = window.location.pathname.split("/")[2];
   const password = prompt("Dangerous operation: permanently delete archived orders.\nInput admin password to continue:");
@@ -69,6 +75,92 @@ export async function deleteArchivedOrders() {
   } catch (error: any) {
     alert("Delete failed: " + (error?.message || error));
   }
+}
+
+export async function publishRiderDispatch(orderId: string, etaMinutes: number) {
+  const payload = {
+    orderId,
+    action: 'publish',
+    ...buildDispatchPublishPayload(etaMinutes, new Date().toISOString()),
+  };
+
+  const res = await fetch('/api/admin/rider-dispatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.error || 'dispatch publish failed');
+  }
+
+  const tg = data?.telegram_dispatch;
+  if (tg && typeof tg === 'object') {
+    const deliveredCount = Number(tg.deliveredCount || 0);
+    const availableRiderCount = Number(tg.availableRiderCount || 0);
+    const telegramBoundCount = Number(tg.telegramBoundCount || 0);
+    const failedCount = Number(tg.failedCount || 0);
+    const skippedReason = String(tg.skippedReason || '').trim();
+
+    if (deliveredCount > 0) {
+      const suffix = failedCount > 0 ? `，另有 ${failedCount} 人发送失败` : '';
+      if (window.showToast) window.showToast(`已通知 ${deliveredCount} 位骑手${suffix}`);
+    } else if (skippedReason === 'no_available_riders') {
+      throw new Error('当前没有 available 骑手，未发送通知');
+    } else if (skippedReason === 'no_telegram_bound_riders') {
+      throw new Error(`当前有 ${availableRiderCount} 位 available 骑手，但 0 位绑定 Telegram，未发送通知`);
+    } else if (skippedReason === 'missing_restaurant_id') {
+      throw new Error('订单缺少店铺标识，无法生成骑手接单链接');
+    } else if (skippedReason === 'missing_order_snapshot') {
+      throw new Error('派单已提交，但上游未返回订单快照，无法确认通知结果');
+    } else if (telegramBoundCount > 0) {
+      const attempts = Array.isArray(tg.attempts) ? tg.attempts : [];
+      const firstError = attempts.find((item: any) => !item?.delivered && item?.error)?.error;
+      throw new Error(`已找到 ${telegramBoundCount} 位已绑定 Telegram 的骑手，但发送失败${firstError ? `：${firstError}` : ''}`);
+    } else {
+      throw new Error('未找到可通知的骑手');
+    }
+  } else {
+    if (window.showToast) window.showToast('已通知骑手');
+  }
+
+  if (window.refreshOrderList) window.refreshOrderList();
+  else location.reload();
+}
+
+export async function remindRiders(orderId: string, order: { rider_remind_count?: number | null } = {}) {
+  const payload = {
+    orderId,
+    action: 'remind',
+    ...buildReminderPayload(order, new Date().toISOString()),
+  };
+
+  const res = await fetch('/api/admin/rider-dispatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.error || 'remind failed');
+  }
+
+  if (window.showToast) window.showToast('已再次提醒骑手');
+  if (window.refreshOrderList) window.refreshOrderList();
+  else location.reload();
+}
+
+export async function fetchAvailableRiders() {
+  const res = await fetch('/api/rider/status?action=list_available');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.error || 'load riders failed');
+  }
+
+  const rows = Array.isArray(data?.riders) ? data.riders : [];
+  return buildContactableRiderRows(rows);
 }
 
 if (typeof window !== "undefined") {

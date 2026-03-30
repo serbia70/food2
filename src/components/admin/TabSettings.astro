@@ -25,16 +25,16 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
         <label>所在城市</label>
         <select id="shop-city">
           <option value="">请选择城市</option>
-          {Object.keys(cities || {}).map(c => <option value={c} selected={shop.city === c}>{c}</option>)}
+          {Object.keys(cities || {}).map(c => <option value={c} selected={(settings?.city || shop.city) === c}>{c}</option>)}
         </select>
       </div>
       <div class="form-group">
         <label>配送区域 (可填多个，用逗号隔开)</label>
-        <input id="shop-zone" value={shop.zone || ''} placeholder="例如: New Belgrade, Zemun" />
+        <input id="shop-zone" value={settings?.zone || shop.zone || ''} placeholder="例如: New Belgrade, Zemun" />
       </div>
       <div class="form-group">
         <label>详细地址</label>
-        <input id="shop-address" value={shop.address || ''} placeholder="街道名称和门牌号" />
+        <input id="shop-address" value={settings?.address || shop.address || ''} placeholder="街道名称和门牌号" />
       </div>
       <div class="form-group">
         <label>地图链接 (Google/Apple)</label>
@@ -65,6 +65,7 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
           <small id="rate-msg" style="color:#666;"></small>
         </div>
       </div>
+      <button type="button" class="btn-save" data-admin-action="save-payment-settings">保存汇率与支付</button>
     </div>
 
     <div class="settings-card">
@@ -80,7 +81,7 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
         <label>店铺 Logo</label>
         <div style="display:flex; gap:10px; align-items: center;">
           <div style="width: 60px; height: 60px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
-            <img id="shop-logo-preview" src={shop.logo || 'https://dummyimage.com/100x100/eee/999?text=Logo'} style="width:100%; height:100%; object-fit:cover;" />
+            <img id="shop-logo-preview" src={settings?.logo || shop.logo || 'https://dummyimage.com/100x100/eee/999?text=Logo'} style="width:100%; height:100%; object-fit:cover;" />
           </div>
           <div style="flex: 1;">
             <input type="file" id="shop-logo-input" accept="image/*" style="display: none;" />
@@ -95,7 +96,7 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
           <select id="shop-category-input" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:4px;">
             {/* @ts-ignore */}
             {shopCategories.map((c: any) => (
-              <option value={c.id} selected={shop?.category === c.id}>{c.icon} {c.name}</option>
+              <option value={c.id} selected={(settings?.category || shop?.category) === c.id}>{c.icon} {c.name}</option>
             ))}
           </select>
           <button type="button" class="btn-blue" data-admin-action="update-shop-category">修改</button>
@@ -103,7 +104,7 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
       </div>
       <div class="form-group">
         <label>联系电话</label>
-        <input name="contact_phone" value={settings?.contact?.phone || ''} placeholder="061..." />
+        <input name="contact_phone" value={settings?.contact?.phone || shop?.contact?.phone || ''} placeholder="061..." />
       </div>
       <div class="form-group" style="display:flex; align-items:center; gap:10px; border-top:1px solid #eee; padding-top:15px; margin-top:10px;">
         <input type="checkbox" name="menu_text_mode" id="menu-text-mode" checked={settings.menu_text_mode || false} style="width:auto;" />
@@ -112,16 +113,17 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
           <small style="color:#666; font-size:12px;">适用于没有图片素材的店铺。开启后，客户端和后台都将隐藏图片区域，排版更紧凑。</small>
         </div>
       </div>
+      <button type="button" class="btn-save" data-admin-action="save-shop-basics">保存店铺基本信息</button>
     </div>
 
     <div class="settings-card">
       <h3>🖨️ 打印机配置</h3>
       <div style="background:#f8f9fa; padding:15px; border-radius:6px; font-size:13px; color:#555;">
         <p><strong>Broker:</strong> {brokerIp}</p>
-        <p><strong>Topic:</strong> <code style="background:#eee; padding:2px 5px; color:#d63384;">restaurant/{shop?.slug || 'default'}/{shop?.mqtt_secret || 'default'}/order</code></p>
+        <p><strong>Topic:</strong> <code style="background:#eee; padding:2px 5px; color:#d63384;">restaurant/{shop?.slug || 'default'}/{settings?.mqtt_secret || shop?.mqtt_secret || 'default'}/order</code></p>
 
         <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
-          <input type="text" id="mqttSecretInput" value={shop?.mqtt_secret || ''} placeholder="设置新的 Secret" style="padding:5px; border:1px solid #ddd; border-radius:4px;" />
+          <input type="text" id="mqttSecretInput" value={settings?.mqtt_secret || shop?.mqtt_secret || ''} placeholder="设置新的 Secret" style="padding:5px; border:1px solid #ddd; border-radius:4px;" />
           <button type="button" data-admin-action="update-mqtt-secret" style="padding:5px 10px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer;">修改 Secret</button>
         </div>
       </div>
@@ -136,6 +138,7 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
       <small style="color:#666; display:block; margin-top:5px;">
         开启后，点击"结账"按钮会自动打印客户小票。关闭后仅更新订单状态，不打印。
       </small>
+      <button type="button" class="btn-save" data-admin-action="save-print-settings">保存打印设置</button>
     </div>
 
     <div class="settings-card" style="border-left: 3px solid #2196f3;">
@@ -198,6 +201,7 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
         <label>Chat ID</label>
         <input name="tg_chat_id" value={settings.telegram?.chat_id || ''} placeholder="-100xxxxxx" />
       </div>
+      <button type="button" class="btn-save" data-admin-action="save-telegram-settings">保存 Telegram 设置</button>
     </div>
 
     <div class="settings-card">
@@ -205,8 +209,8 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
       <div class="form-group">
         <label>配送方式</label>
         <select id="delivery-type" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
-          <option value="merchant" selected={!shop.delivery_type || shop.delivery_type === 'merchant'}>🏪 商家配送</option>
-          <option value="platform" selected={shop.delivery_type === 'platform'}>🚀 平台配送</option>
+          <option value="merchant" selected={!(settings?.delivery_type || shop.delivery_type) || (settings?.delivery_type || shop.delivery_type) === 'merchant'}>🏪 商家配送</option>
+          <option value="platform" selected={(settings?.delivery_type || shop.delivery_type) === 'platform'}>🚀 平台配送</option>
         </select>
         <small style="color:#666; display:block; margin-top:5px;">商家配送：店铺自行安排配送人员。平台配送：由平台统一派单配送。</small>
       </div>
@@ -227,21 +231,17 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
 
     <div class="settings-card">
       <h3>🛵 骑手管理</h3>
-      <div id="drivers-list" style="margin-bottom:15px;">
-        {/* 初始渲染由 JS 完成，或者这里直接渲染 */}
-        {(settings.drivers || []).map((d: any, idx: number) => (
-          <div class="driver-row" style="display:flex; justify-content:space-between; align-items:center; padding:8px; background:#f9f9f9; margin-bottom:5px; border-radius:4px;">
-            <span>{d.name} ({d.phone})</span>
-            <button type="button" class="btn-xs btn-red" data-admin-action="remove-driver" data-driver-index={idx}>删除</button>
-          </div>
-        ))}
+      <div style="background:#f8f9fa; padding:12px; border-radius:6px; margin-bottom:12px; font-size:13px; color:#555;">
+        这里现在直接读取派单使用的真实骑手数据源。只有 <strong>状态为 available</strong> 且 <strong>已绑定 Telegram</strong> 的骑手，才能收到送餐通知。<br />
+        <span style="color:#d32f2f; font-weight:700;">显示“Telegram: 未绑定” = 一定收不到通知。</span><br />
+        <span style="color:#e65100;">这里不会显示 offline / busy 骑手；若列表为空，先去骑手端把状态切到 available。</span>
       </div>
+      <div id="drivers-dispatch-summary" style="margin-bottom:12px;"></div>
+      <div id="drivers-list" style="margin-bottom:15px;"></div>
       <div style="display:flex; gap:10px;">
-        <input id="new-driver-name" placeholder="姓名" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:4px;" />
-        <input id="new-driver-phone" placeholder="电话" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:4px;" />
-        <button type="button" class="btn-blue" data-admin-action="add-driver">➕ 添加</button>
+        <button type="button" class="btn-blue" data-admin-action="load-drivers" style="flex:1;">🔄 刷新骑手状态</button>
+        <a href="/rider/register" class="btn-blue" style="flex:1; text-align:center; text-decoration:none; line-height:36px;">➕ 注册新骑手</a>
       </div>
-      <input type="hidden" name="drivers_json" id="drivers-json" value={JSON.stringify(settings.drivers || [])} />
     </div>
 
     <div class="settings-card">
@@ -253,6 +253,7 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
           <input name="close" type="time" value={settings.hours?.close || ''} />
         </div>
       </div>
+      <button type="button" class="btn-save" data-admin-action="save-hours-settings">保存营业时间</button>
     </div>
 
     <div class="settings-card" style="border-left: 3px solid #ff5722;">
@@ -269,8 +270,7 @@ const { shop, settings, shopCategories, brokerIp, cities } = props;
         <input type="checkbox" name="holiday_enabled" id="holiday-enabled" checked={settings.holidays?.enabled || false} style="width:auto;" />
         <label for="holiday-enabled" style="margin:0;">启用节假日设置</label>
       </div>
+      <button type="button" class="btn-save" data-admin-action="save-holiday-settings">保存节假日设置</button>
     </div>
-
-    <button type="submit" class="btn-save">💾 保存所有设置</button>
   </form>
 </div>

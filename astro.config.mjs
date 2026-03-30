@@ -6,6 +6,11 @@ import cloudflare from "@astrojs/cloudflare";
 export default defineConfig({
   integrations: [preact()],
   adapter: cloudflare(),
+  image: {
+    service: {
+      entrypoint: "astro/assets/services/noop",
+    },
+  },
   output: "server",
   distDir: "dist",
   build: {
@@ -15,6 +20,9 @@ export default defineConfig({
     port: 3000,
   },
   vite: {
+    ssr: {
+      external: ["node:crypto"],
+    },
     build: {
       target: ["es2015", "ios12"],
       cssTarget: "chrome61",

@@ -13,7 +13,7 @@ import {
   clearCart,
 } from '../store/cartStore.ts';
 
-const shopPagePath = new URL('./[slug]/index.astro', import.meta.url);
+const shopPagePath = new URL('../../pages/[slug]/index.astro', import.meta.url);
 const menuListPath = new URL('../components/MenuList.tsx', import.meta.url);
 const cartModalPath = new URL('../components/CartModal.tsx', import.meta.url);
 const reservationModalPath = new URL('../components/ReservationModal.tsx', import.meta.url);

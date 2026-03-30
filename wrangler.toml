@@ -1,6 +1,7 @@
 name = "meituan-astro"
 pages_build_output_dir = "./dist"
 compatibility_date = "2026-03-12"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 PUBLIC_API_URL = "https://food2api.serbia70.com"

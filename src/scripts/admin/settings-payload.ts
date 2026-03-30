@@ -3,8 +3,20 @@ export type DeliveryType = 'merchant' | 'platform';
 export type BuildSettingsPayloadOptions = {
   deliveryType?: DeliveryType;
   driversJson?: string;
+  city?: string;
+  zone?: string;
+  address?: string;
+  mapUrl?: string;
+  contactPhone?: string;
+  wechatQr?: string;
+  menuTextMode?: boolean;
+  telegramToken?: string;
+  telegramChatId?: string;
+  shopName?: string;
+  shopCategory?: string;
+  shopLogo?: string;
+  mqttSecret?: string;
 };
-
 function toNumber(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -13,7 +25,7 @@ function toNumber(v: unknown): number {
 export function buildAdminSettingsPayload(formData: FormData, options: BuildSettingsPayloadOptions = {}) {
   const deliveryType = options.deliveryType === 'platform' ? 'platform' : 'merchant';
 
-  let drivers: any[] = [];
+  let drivers: unknown[] = [];
   try {
     drivers = JSON.parse(String(options.driversJson || '[]'));
     if (!Array.isArray(drivers)) drivers = [];
@@ -22,6 +34,25 @@ export function buildAdminSettingsPayload(formData: FormData, options: BuildSett
   }
 
   return {
+    name: String(options.shopName || '').trim(),
+    category: String(options.shopCategory || '').trim(),
+    logo: String(options.shopLogo || '').trim(),
+    city: String(options.city || '').trim(),
+    zone: String(options.zone || '').trim(),
+    address: String(options.address || '').trim(),
+    mqtt_secret: String(options.mqttSecret || '').trim(),
+    menu_text_mode: options.menuTextMode === true,
+    currency: {
+      wechat_qr: String(options.wechatQr || '').trim(),
+    },
+    contact: {
+      phone: String(options.contactPhone || '').trim(),
+      map_url: String(options.mapUrl || '').trim(),
+    },
+    telegram: {
+      token: String(options.telegramToken || '').trim(),
+      chat_id: String(options.telegramChatId || '').trim(),
+    },
     hours: { open: formData.get('open'), close: formData.get('close') },
     holidays: {
       enabled: formData.get('holiday_enabled') === 'on',
@@ -34,9 +65,7 @@ export function buildAdminSettingsPayload(formData: FormData, options: BuildSett
       fee: toNumber(formData.get('fee')),
       free_threshold: toNumber(formData.get('free_threshold')),
     },
-    print: {
-      print_on_checkout: formData.get('print_on_checkout') === 'on',
-    },
+    print_on_checkout: formData.get('print_on_checkout') === 'on',
     drivers,
   };
 }

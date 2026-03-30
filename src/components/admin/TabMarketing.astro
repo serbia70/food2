@@ -11,7 +11,7 @@ interface Props {
 
 const { shopSlug, shopSettings } = Astro.props;
 
-const pointsSettings = shopSettings?.points || {};
+const pointsSettings = (shopSettings && shopSettings.points) || {};
 const pointsPerSpend = pointsSettings.points_per_spend || 20;
 const pointsValue = pointsSettings.points_value || 1;
 ---
@@ -329,7 +329,8 @@ const pointsValue = pointsSettings.points_value || 1;
           });
         });
         renderPromotions();
-        const type = document.getElementById('promotion-type')?.value;
+        const promotionTypeNode = document.getElementById('promotion-type');
+        const type = promotionTypeNode && 'value' in promotionTypeNode ? promotionTypeNode.value : '';
         if (type === 'special') {
           syncSpecialProductUI();
         }
@@ -370,11 +371,13 @@ const pointsValue = pointsSettings.points_value || 1;
   }
 
   function getPromotionStartValue(promotion) {
-    return promotion?.starts_at || promotion?.start_at || promotion?.start_time || '';
+    const safePromotion = promotion || {};
+    return safePromotion.starts_at || safePromotion.start_at || safePromotion.start_time || '';
   }
 
   function getPromotionEndValue(promotion) {
-    return promotion?.ends_at || promotion?.end_at || promotion?.end_time || '';
+    const safePromotion = promotion || {};
+    return safePromotion.ends_at || safePromotion.end_at || safePromotion.end_time || '';
   }
 
   function normalizePromotionDatetimeValue(raw) {

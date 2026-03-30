@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { POST } from './reservation.ts';
+import { POST } from '../../pages/api/reservation.ts';
 
 const originalFetch = globalThis.fetch;
 

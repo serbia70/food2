@@ -4,6 +4,8 @@ import { loadStats } from './stats';
 import { showCommissionRecords } from './billing-ui';
 import { markPaid, openDeliveryModal, closeDeliveryModal, confirmDelivery } from './order-actions';
 import { handlePrintOrder } from './table-actions';
+import { loadOrderStats, archiveOldOrders, deleteArchivedOrders } from './orders';
+import { showAdminToast } from './globals';
 import { openEditModal, saveEditProd, localizeImages, moveCategory, delCategory, moveProduct, delProd, addProd } from './products';
 import { getAdminHandlers } from './globals';
 import { invokeAdminAction } from './action-registry';
@@ -20,6 +22,8 @@ import {
   confirmCheckout as confirmCheckoutUI,
   handlePrintTable as handlePrintTableUI,
   openRejectModal,
+  approveTableReviews,
+  rejectTableReviews,
 } from './table-management';
 
 export function bindAdminClickDelegation(options: {
@@ -71,12 +75,17 @@ export function bindAdminClickDelegation(options: {
     else if (action === 'reload-page') location.reload();
     else if (action === 'load-reservations') loadReservations();
     else if (action === 'load-stats') loadStats();
+    else if (action === 'load-order-stats') void loadOrderStats();
+    else if (action === 'archive-old-orders') void archiveOldOrders();
+    else if (action === 'delete-archived-orders') void deleteArchivedOrders();
     else if (action === 'table-checkout') (window as any).handleTableCheckout?.(table || '');
     else if (action === 'table-print') void handlePrintTableUI(table || '');
     else if (action === 'table-order') handleTableOrderForTable(table || '');
     else if (action === 'table-details') handleTableDetailsForTable(table || '');
     else if (action === 'table-modify') handleModifyTable(table || '');
     else if (action === 'table-remarks') handleTableRemarksForTable(table || '');
+    else if (action === 'approve-table-reviews') void approveTableReviews(table || '');
+    else if (action === 'reject-table-reviews') void rejectTableReviews(table || '');
     else if (action === 'order-remarks') handleTableRemarksForTable(null as any, id || null);
     else if (action === 'edit-order') handleEditOrder(el);
     else if (action === 'close-remarks-modal') closeRemarksModalUI();
@@ -93,6 +102,38 @@ export function bindAdminClickDelegation(options: {
     else if (action === 'show-commission-records') void showCommissionRecords();
     else if (action === 'print-order') void handlePrintOrder(id || '');
     else if (action === 'print-current-order') void handlePrintOrder(String(getCurrentOrderId() || ''));
+    else if (action === 'update-password') {
+      const form = document.getElementById('password-form') as HTMLFormElement | null;
+      const input = form?.querySelector('input[name="new_password"]') as HTMLInputElement | null;
+      const newPassword = String(input?.value || '').trim();
+      if (!newPassword) return alert('请输入新密码');
+      fetch('/api/admin/settings/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_password: newPassword }),
+      })
+        .then((res) => res.json().catch(() => ({})).then((data) => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+          if (ok && data?.success !== false) {
+            if (form) form.reset();
+            showAdminToast('密码已更新');
+          } else {
+            alert('更新失败: ' + (data?.error || 'unknown error'));
+          }
+        })
+        .catch(() => {
+          alert('网络错误');
+        });
+    }
+    else if (action === 'system-control') {
+      const command = String(el.dataset.command || '').trim();
+      if (command === 'reboot' || command === 'shutdown') {
+        showAdminToast('该系统控制按钮尚未接入');
+      }
+    }
+    else if (action === 'upgrade-business') {
+      showAdminToast('升级入口暂未接入');
+    }
     else if (action === 'open-edit-product') openEditModal(e, parseInt(id || '0', 10), parseInt(el.dataset.categoryId || '0', 10));
     else if (action === 'save-edit-product') saveEditProd();
     else if (action === 'close-edit-modal') {
@@ -124,46 +165,10 @@ export function bindAdminClickDelegation(options: {
     else if (action === 'add-item-to-order') (window as any).addManualItem?.();
     else if (action === 'change-item-qty') (window as any).changeItemQty?.(el.dataset.key, parseInt(el.dataset.delta || '0'));
     else if (action === 'remove-order-item') (window as any).removeOrderItem?.(el.dataset.key);
-    else if (action === 'add-driver') {
-      const nameEl = document.getElementById('new-driver-name') as HTMLInputElement;
-      const phoneEl = document.getElementById('new-driver-phone') as HTMLInputElement;
-      const jsonEl = document.getElementById('drivers-json') as HTMLInputElement;
-      const listEl = document.getElementById('drivers-list');
-      const name = nameEl?.value.trim();
-      const phone = phoneEl?.value.trim();
-      if (!name || !phone) return alert('请填写姓名和电话');
-      let drivers = [];
-      try { drivers = JSON.parse(jsonEl?.value || '[]'); } catch {}
-      drivers.push({ name, phone });
-      if (jsonEl) jsonEl.value = JSON.stringify(drivers);
-      if (nameEl) nameEl.value = '';
-      if (phoneEl) phoneEl.value = '';
-      if (listEl) {
-        const div = document.createElement('div');
-        div.className = 'driver-row';
-        div.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:8px; background:#f9f9f9; margin-bottom:5px; border-radius:4px;';
-        const label = document.createElement('span');
-        label.textContent = `${name} (${phone})`;
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'btn-xs btn-red';
-        button.dataset.adminAction = 'remove-driver';
-        button.dataset.driverIndex = String(drivers.length - 1);
-        button.textContent = '删除';
-        div.append(label, button);
-        listEl.appendChild(div);
-      }
-    } else if (action === 'remove-driver') {
-      const idx = parseInt(el.dataset.driverIndex || '0');
-      const jsonEl = document.getElementById('drivers-json') as HTMLInputElement;
-      let drivers = [];
-      try { drivers = JSON.parse(jsonEl?.value || '[]'); } catch {}
-      drivers.splice(idx, 1);
-      if (jsonEl) jsonEl.value = JSON.stringify(drivers);
-      el.closest('.driver-row')?.remove();
+    else if (action === 'load-drivers') {
+      await invokeAdminAction(getAdminHandlers(), action, el, e);
     } else if (action === 'save-delivery-type') {
-      const form = document.getElementById('settings-form') as HTMLFormElement;
-      if (form) form.requestSubmit();
+      await invokeAdminAction(getAdminHandlers(), action, el, e);
     } else if (action === 'save-order-edit') (window as any).saveOrderEdit?.();
     else if (action === 'close-order-edit-modal') (window as any).closeOrderEditModal?.();
     else if (action === 'open-add-customer') (window as any).openAddCustomerModal?.();

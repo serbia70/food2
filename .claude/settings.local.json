@@ -121,7 +121,17 @@
       "Bash(cp \"D:/ai/food/.worktrees/food/foos2Go/data/meituan.db-wal\" \"D:/ai/food-data/foos2Go-local/meituan.db-wal\")",
       "Bash(cmd /c \"D:\\\\ai\\\\food\\\\.worktrees\\\\260311\\\\food2astro\\\\上传3.bat\")",
       "Bash(node -e \":*)",
-      "Bash(printf \"\\\\n---\\\\n\")"
+      "Bash(printf \"\\\\n---\\\\n\")",
+      "Bash(tasklist //FI \"PID eq 12560\" //FO LIST)",
+      "Bash(tasklist //FI \"PID eq 11648\" //FO LIST)",
+      "Bash(wmic process:*)",
+      "Bash(tasklist //FI \"PID eq 9896\" //FO LIST)",
+      "Bash(tasklist //FI \"PID eq 9420\" //FO LIST)",
+      "Bash(taskkill:*)",
+      "Bash(tasklist //FI \"PID eq 5804\" //FO LIST)",
+      "Bash(tasklist //FI \"PID eq 11476\" //FO LIST)",
+      "Bash(printenv TELEGRAM_BIND_SECRET)",
+      "Bash(printenv TELEGRAM_BOT_NAME)"
     ]
   }
 }

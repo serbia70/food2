@@ -131,7 +131,9 @@
       "Bash(tasklist //FI \"PID eq 5804\" //FO LIST)",
       "Bash(tasklist //FI \"PID eq 11476\" //FO LIST)",
       "Bash(printenv TELEGRAM_BIND_SECRET)",
-      "Bash(printenv TELEGRAM_BOT_NAME)"
+      "Bash(printenv TELEGRAM_BOT_NAME)",
+      "Bash(cmd.exe /c \"D:\\\\ai\\\\food\\\\.worktrees\\\\260311\\\\food2astro\\\\上传3.bat\")",
+      "Bash(cmd.exe /c type \"D:\\\\ai\\\\food\\\\.worktrees\\\\260311\\\\food2astro\\\\上传3.bat\")"
     ]
   }
 }

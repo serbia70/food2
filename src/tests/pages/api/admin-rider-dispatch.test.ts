@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+process.env.TELEGRAM_CALLBACK_SECRET = 'test-telegram-callback-secret';
+
 const originalFetch = globalThis.fetch;
 
 async function loadRoute() {
@@ -23,6 +25,7 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
         {
           id: 447,
           shop_id: 21,
+          shop_slug: 'demo-shop',
           status: 'pending',
           order_type: 'delivery',
           total_amount: 905,
@@ -36,7 +39,8 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
       });
     }
 
-    if (url.endsWith('/api/order/update_status')) {
+    if (url.endsWith('/api/admin/orders/447/status')) {
+      assert.equal(init?.method, 'PUT');
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -44,7 +48,25 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
     }
 
     if (url.includes('/api/rider/status?action=list_available')) {
-      return new Response(JSON.stringify({ riders: [] }), {
+      return new Response(JSON.stringify({ riders: [
+        { id: 7, name: '骑手A', phone: '0613083899', telegram_chat_id: 'chat-7' },
+      ] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.endsWith('/api/telegram/send')) {
+      assert.equal(init?.method, 'POST');
+      const body = JSON.parse(String(init?.body || '{}')) as Record<string, any>;
+      assert.equal(body.shop_slug, 'demo-shop');
+      assert.equal(body.chat_id, 'chat-7');
+      assert.equal(body.text, '店铺有新单\n约 15 分钟后可取\n地址：hui, 0613083888, ruma1\n金额：905 RSD\n联系电话：0613083888');
+      assert.equal(body.reply_markup?.inline_keyboard?.[0]?.[1]?.url, 'https://food2.serbia70.com/rider/dashboard?orderId=447&restaurantId=demo-shop');
+      assert.equal(body.reply_markup?.inline_keyboard?.[0]?.[2]?.url, 'tel:0613083888');
+      assert.equal(typeof body.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data, 'string');
+      assert.ok(body.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data.length > 10);
+      return new Response(JSON.stringify({ success: true, ok: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -85,5 +107,6 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
   assert.equal(body.success, true);
   assert.equal(body.order.id, 447);
   assert.equal(body.order.status, 'awaiting_courier');
-  assert.ok(calls.some((call) => call.url.endsWith('/api/order/update_status')));
+  assert.ok(calls.some((call) => call.url.includes('/api/admin/orders/447/status')));
+  assert.ok(calls.some((call) => call.url.endsWith('/api/telegram/send')));
 });

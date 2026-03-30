@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
-import { API_BASE_URL } from '../../../config';
-import { buildAdminAuthHeader } from '../../../lib/admin-api-route';
+import { API_BASE_URL } from '../../../config.ts';
+import { buildAdminAuthHeader } from '../../../lib/admin-api-route.ts';
 import { buildTelegramClaimCallback, buildTelegramDeepLink, buildTelegramDispatchMessage } from '../../../lib/telegram-dispatch.ts';
 
 export const prerender = false;
@@ -202,6 +202,7 @@ async function notifyTelegramRecipients(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          shop_slug: String(order.shop_slug || order.restaurant_slug || '').trim(),
           chat_id: rider.telegram_chat_id,
           ...message,
         }),

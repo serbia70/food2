@@ -111,3 +111,73 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
   assert.ok(calls.some((call) => call.url.includes('/api/admin/orders/447/status')));
   assert.ok(calls.some((call) => call.url === 'http://localhost:3030/api/telegram/send'));
 });
+
+test('POST rider-dispatch 在上游订单更新 404 时返回明确阶段错误', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+
+    if (url === 'http://localhost:3030/api/admin/orders') {
+      return new Response(JSON.stringify([
+        {
+          id: 460,
+          shop_id: 21,
+          shop_slug: 'demo-shop',
+          status: 'pending',
+          order_type: 'delivery',
+          total_amount: 905,
+          table_info: 'hui, 0613083888, ruma1',
+          pickup_eta_minutes: 0,
+          user_phone: '0613083888',
+        },
+      ]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'http://localhost:3030/api/admin/orders/460/status') {
+      assert.equal(init?.method, 'PUT');
+      return new Response('Not Found', {
+        status: 404,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/admin/rider-dispatch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: 'admin_token=test-token',
+      },
+      body: JSON.stringify({
+        orderId: '460',
+        action: 'publish',
+        status: 'awaiting_courier',
+        pickup_eta_minutes: 15,
+        pickup_ready_at: '2026-03-30T21:31:49.189Z',
+        rider_broadcasted_at: '2026-03-30T21:16:49.189Z',
+        rider_last_reminded_at: '',
+        rider_remind_count: 0,
+      }),
+    }),
+    cookies: {
+      get(name: string) {
+        if (name === 'admin_token') return { value: 'test-token' };
+        return undefined;
+      },
+    },
+  } as any);
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), {
+    success: false,
+    error: 'order_update_failed',
+    upstream_status: 404,
+    upstream_body: 'Not Found',
+  });
+});

@@ -291,9 +291,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
 
     if (!orderRes.ok || orderPayload.success === false) {
-      return new Response(orderText || JSON.stringify(orderPayload), {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'order_fetch_failed',
+        upstream_status: orderRes.status,
+        upstream_body: orderText || JSON.stringify(orderPayload),
+      }), {
         status: orderRes.status,
-        headers: { 'Content-Type': orderRes.headers.get('content-type') || 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
       });
     }
 
@@ -344,9 +349,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
 
     if (!updateRes.ok || updateJson.success === false) {
-      return new Response(updateText || JSON.stringify(updateJson), {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'order_update_failed',
+        upstream_status: updateRes.status,
+        upstream_body: updateText || JSON.stringify(updateJson),
+      }), {
         status: updateRes.status,
-        headers: { 'Content-Type': updateRes.headers.get('content-type') || 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
       });
     }
 

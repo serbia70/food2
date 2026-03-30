@@ -18,7 +18,7 @@ export const MQTT_USERNAME = '';
 export const MQTT_PASSWORD = '';
 
 export const APP_NAME = 'MeituanGo';
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = String(Date.now());
 
 export function formatPrice(amount: number): string {
   return `RSD ${amount.toLocaleString()}`;

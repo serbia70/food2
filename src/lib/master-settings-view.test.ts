@@ -139,6 +139,8 @@ test('缺失设置字段时回退默认值', () => {
   });
   assert.deepEqual(view.server, {
     mqttBroker: '',
+    telegramWebhookSecret: '',
+    telegramChatId: '',
   });
   assert.deepEqual(view.categories, {
     categoriesJson: '[]',
@@ -174,6 +176,8 @@ test('从 settings 中提取第二波全局设置字段', () => {
     r2_public_domain: 'https://img.example.com',
     upload_strict_r2: true,
     mqtt_broker: 'mqtt.serbia70.com',
+    telegram_webhook_secret: 'secret-123',
+    telegram_chat_id: '99887766',
     categories: [{ id: 'hero', name: '推荐' }],
     backup_time: '03:00',
     backup_retention: 14,
@@ -211,6 +215,8 @@ test('从 settings 中提取第二波全局设置字段', () => {
   });
   assert.deepEqual(view.server, {
     mqttBroker: 'mqtt.serbia70.com',
+    telegramWebhookSecret: 'secret-123',
+    telegramChatId: '99887766',
   });
   assert.deepEqual(view.categories, {
     categoriesJson: JSON.stringify([{ id: 'hero', name: '推荐' }], null, 2),

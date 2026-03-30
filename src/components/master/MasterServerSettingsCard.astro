@@ -7,8 +7,8 @@ const { settings } = Astro.props as { settings: MasterSettingsView['server'] };
 <section class="settings-card settings-card-server">
   <div class="settings-head">
     <div>
-      <div class="settings-title">MQTT 服务器配置</div>
-      <div class="settings-subtitle">修改后会影响商家打印与消息链路，建议只在明确切换环境时操作。</div>
+      <div class="settings-title">MQTT / Telegram 配置</div>
+      <div class="settings-subtitle">修改后会影响商家打印、消息链路和 Telegram 绑定回调，请仅填写已确认生效的配置。</div>
     </div>
   </div>
 
@@ -18,9 +18,19 @@ const { settings } = Astro.props as { settings: MasterSettingsView['server'] };
       <input name="mqttBroker" type="text" value={settings.mqttBroker} placeholder="例如：mqtt.serbia70.com" />
     </label>
 
+    <label class="settings-span-2">
+      <span>Telegram Webhook Secret</span>
+      <input name="telegramWebhookSecret" type="text" value={settings.telegramWebhookSecret} placeholder="例如：telegram-webhook-secret" />
+    </label>
+
+    <label class="settings-span-2">
+      <span>Telegram Chat ID</span>
+      <input name="telegramChatId" type="text" value={settings.telegramChatId} placeholder="例如：123456789 或 -1001234567890" />
+    </label>
+
     <div class="settings-actions">
-      <button type="submit" class="settings-submit">保存 MQTT 配置</button>
-      <div id="master-server-settings-feedback" class="settings-feedback">修改后请同步确认客户端和打印机配置是否仍然可用。</div>
+      <button type="submit" class="settings-submit">保存 MQTT / Telegram 配置</button>
+      <div id="master-server-settings-feedback" class="settings-feedback">修改后请同步确认客户端、打印机和 Telegram 机器人回调配置是否仍然可用。</div>
     </div>
   </form>
 </section>

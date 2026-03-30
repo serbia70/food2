@@ -55,12 +55,14 @@ export function initMasterSettingsForms({
     await submitSettingsAction(form, {
       endpoint: '/api/master/settings',
       feedbackId: 'master-server-settings-feedback',
-      loadingText: '保存 MQTT 配置中...',
-      successText: 'MQTT 配置已保存',
+      loadingText: '保存 MQTT / Telegram 配置中...',
+      successText: 'MQTT / Telegram 配置已保存',
       buildPayload(currentForm) {
         const formData = new FormData(currentForm);
         return {
           mqttBroker: String(formData.get('mqttBroker') || '').trim(),
+          telegramWebhookSecret: String(formData.get('telegramWebhookSecret') || '').trim(),
+          telegramChatId: String(formData.get('telegramChatId') || '').trim(),
         };
       },
     });

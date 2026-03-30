@@ -314,7 +314,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     const updatePayload = action === 'publish'
       ? {
-          id: orderId,
           status: parsedBody.status,
           pickup_eta_minutes: parsedBody.pickup_eta_minutes,
           pickup_ready_at: parsedBody.pickup_ready_at,
@@ -323,16 +322,17 @@ export const POST: APIRoute = async ({ request, cookies }) => {
           rider_last_reminded_at: parsedBody.rider_last_reminded_at,
         }
       : {
-          id: orderId,
+          status: String(order.status || '').trim(),
           rider_remind_count: parsedBody.rider_remind_count,
           rider_last_reminded_at: parsedBody.rider_last_reminded_at,
         };
 
-    const updateRes = await fetch(`${new URL(request.url).origin}/api/order/update_status`, {
-      method: 'POST',
+    const updateRes = await fetch(`${new URL(request.url).origin}/api/admin/orders/${encodeURIComponent(orderId)}/status`, {
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         ...authHeaders,
+        cookie: request.headers.get('cookie') || '',
       },
       body: JSON.stringify(updatePayload),
     });

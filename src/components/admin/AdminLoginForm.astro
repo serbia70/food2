@@ -1,4 +1,6 @@
 ---
+import { APP_VERSION } from '../../config';
+
 const {
   title,
   subtitle,
@@ -56,11 +58,11 @@ const safeSlug = String(slug || '');
     </form>
   </div>
 
-  <script define:vars={{ swScope }}>
+  <script define:vars={{ swScope, appVersion: APP_VERSION }}>
     var ios12 = /iP(?:hone|ad|od).*OS 12_/.test(navigator.userAgent) || /CPU OS 12_/.test(navigator.userAgent);
     if (!ios12 && swScope && 'serviceWorker' in navigator) {
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('/admin-sw.js', { scope: swScope }).catch(function () {});
+        navigator.serviceWorker.register('/admin-sw.js?v=' + encodeURIComponent(appVersion), { scope: swScope }).catch(function () {});
       });
     }
 

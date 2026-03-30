@@ -1,6 +1,8 @@
+const swUrl = new URL(self.location.href);
 const scopePath = new URL(self.registration.scope).pathname.replace(/\/$/, '');
+const cacheVersion = swUrl.searchParams.get('v') || '1';
 const CACHE_PREFIX = `meituango-admin-${scopePath}-v`;
-const CACHE_NAME = `${CACHE_PREFIX}1`;
+const CACHE_NAME = `${CACHE_PREFIX}${cacheVersion}`;
 const APP_SHELL = [
   scopePath,
   `${scopePath}/`,

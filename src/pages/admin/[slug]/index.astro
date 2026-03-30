@@ -1,6 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
-import { API_BASE_URL } from '../../../config';
+import { API_BASE_URL, APP_VERSION } from '../../../config';
 import { isHallLikeZoneName, isPlaceholderZoneName } from '../../../lib/table-config';
 import { orderMatchesAnyConfiguredTable } from '../../../lib/admin-table-ref';
 import { asObject, parseMaybeJSON, normalizeJSONString, normalizeRemarkJSONString, resolveTableConfig, buildTableCards, isActiveDineInOrder } from '../../../lib/admin-dashboard-utils';
@@ -207,7 +207,7 @@ const cities = {
 <Layout
   title={`后台管理 - ${shop.name}`}
   manifest={`/admin/${safeSlug}/manifest.webmanifest`}
-  serviceWorker="/admin-sw.js"
+  serviceWorker={`/admin-sw.js?v=${encodeURIComponent(APP_VERSION)}`}
   serviceWorkerScope={`/admin/${safeSlug}`}
   themeColor="#0b3b60"
 >

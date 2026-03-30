@@ -20,7 +20,7 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
     const url = String(input);
     calls.push({ url, init });
 
-    if (url.endsWith('/api/admin/orders')) {
+    if (url === 'http://localhost:3030/api/admin/orders') {
       return new Response(JSON.stringify([
         {
           id: 447,
@@ -39,7 +39,7 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
       });
     }
 
-    if (url.endsWith('/api/admin/orders/447/status')) {
+    if (url === 'http://localhost:3030/api/admin/orders/447/status') {
       assert.equal(init?.method, 'PUT');
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -47,18 +47,18 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
       });
     }
 
-    if (url.includes('/api/rider/status?action=list_available')) {
+    if (url === 'http://localhost:3030/api/admin/riders') {
+      assert.equal((init?.headers as Record<string, string> | undefined)?.Authorization, 'Bearer test-token');
       return new Response(JSON.stringify({ riders: [
-        { id: 7, name: '骑手A', phone: '0613083899', telegram_chat_id: 'chat-7' },
+        { id: 7, name: '骑手A', phone: '0613083899', status: 'available', telegram_chat_id: 'chat-7' },
       ] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    if (url === 'https://food2.serbia70.com/api/telegram/send') {
+    if (url === 'http://localhost:3030/api/telegram/send') {
       assert.equal(init?.method, 'POST');
-      assert.equal((init?.headers as Record<string, string> | undefined)?.cookie, 'admin_token=test-token');
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, any>;
       assert.equal(body.shop_slug, 'demo-shop');
       assert.equal(body.chat_id, 'chat-7');
@@ -109,5 +109,5 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
   assert.equal(body.order.id, 447);
   assert.equal(body.order.status, 'awaiting_courier');
   assert.ok(calls.some((call) => call.url.includes('/api/admin/orders/447/status')));
-  assert.ok(calls.some((call) => call.url === 'https://food2.serbia70.com/api/telegram/send'));
+  assert.ok(calls.some((call) => call.url === 'http://localhost:3030/api/telegram/send'));
 });

@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
-import { buildAdminAuthHeader } from '../../../lib/admin-api-route.ts';
+import { buildAdminAuthHeader, proxyAdminRequest } from '../../../lib/admin-api-route.ts';
 import { buildTelegramClaimCallback, buildTelegramDeepLink, buildTelegramDispatchMessage } from '../../../lib/telegram-dispatch.ts';
 
 export const prerender = false;
@@ -83,14 +83,11 @@ function extractDispatchOrder(payload: DispatchProxyPayload | DispatchOrderSnaps
 }
 
 async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies']) {
-  const authHeaders = buildAdminAuthHeader(request, cookies);
-  const localUrl = new URL('/api/rider/status?action=list_available', request.url);
-  const res = await fetch(localUrl, {
+  const res = await proxyAdminRequest({
+    request,
+    cookies,
+    url: `${API_BASE_URL}/api/admin/riders`,
     method: 'GET',
-    headers: {
-      ...authHeaders,
-      cookie: request.headers.get('cookie') || '',
-    },
   });
 
   const text = await res.text();
@@ -278,12 +275,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const authHeaders = buildAdminAuthHeader(request, cookies);
 
   if (action === 'publish' || action === 'remind') {
-    const orderRes = await fetch(`${new URL(request.url).origin}/api/admin/orders`, {
+    const orderRes = await proxyAdminRequest({
+      request,
+      cookies,
+      url: `${API_BASE_URL}/api/admin/orders`,
       method: 'GET',
-      headers: {
-        ...authHeaders,
-        cookie: request.headers.get('cookie') || '',
-      },
     });
     const orderText = await orderRes.text();
 
@@ -328,12 +324,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
           rider_last_reminded_at: parsedBody.rider_last_reminded_at,
         };
 
-    const updateRes = await fetch(`${new URL(request.url).origin}/api/admin/orders/${encodeURIComponent(orderId)}/status`, {
+    const updateRes = await proxyAdminRequest({
+      request,
+      cookies,
+      url: `${API_BASE_URL}/api/admin/orders/${encodeURIComponent(orderId)}/status`,
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        ...authHeaders,
-        cookie: request.headers.get('cookie') || '',
       },
       body: JSON.stringify(updatePayload),
     });

@@ -10,9 +10,9 @@ test('build + parse rider telegram bind token round-trips', () => {
     { riderId: 7, riderPhone: '0613083899', expiresAt: '2026-03-30T10:05:00.000Z' },
     'secret',
   );
+  assert.ok(token.length <= 64);
   assert.deepEqual(parseRiderTelegramBindToken(token, 'secret'), {
     riderId: 7,
-    riderPhone: '0613083899',
     expiresAt: '2026-03-30T10:05:00.000Z',
   });
 });
@@ -28,11 +28,15 @@ test('build throws on invalid rider id', () => {
   ), /invalid_bind_rider_id/);
 });
 
-test('build throws on empty rider phone', () => {
-  assert.throws(() => buildRiderTelegramBindToken(
+test('build ignores rider phone and only encodes rider id + expiresAt', () => {
+  const token = buildRiderTelegramBindToken(
     { riderId: 7, riderPhone: '', expiresAt: '2026-03-30T10:05:00.000Z' },
     'secret',
-  ), /invalid_bind_rider_phone/);
+  );
+  assert.deepEqual(parseRiderTelegramBindToken(token, 'secret'), {
+    riderId: 7,
+    expiresAt: '2026-03-30T10:05:00.000Z',
+  });
 });
 
 test('build throws on invalid expiresAt', () => {

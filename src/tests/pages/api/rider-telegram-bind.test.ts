@@ -30,7 +30,9 @@ test('POST rider telegram bind 在 process.env 已配置时返回 bind_url', asy
     };
 
     assert.equal(payload.success, true);
-    assert.ok(String(payload.bind_url || '').startsWith('https://t.me/food_test_bot?start=bind_'));
+    const bindUrl = String(payload.bind_url || '');
+    assert.ok(bindUrl.startsWith('https://t.me/food_test_bot?start=bind_'));
+    assert.ok(bindUrl.length <= 110);
     assert.ok(String(payload.expires_at || '').length > 0);
   } finally {
     if (prevSecret === undefined) delete process.env.TELEGRAM_BIND_SECRET;

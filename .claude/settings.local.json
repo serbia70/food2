@@ -133,7 +133,9 @@
       "Bash(printenv TELEGRAM_BIND_SECRET)",
       "Bash(printenv TELEGRAM_BOT_NAME)",
       "Bash(cmd.exe /c \"D:\\\\ai\\\\food\\\\.worktrees\\\\260311\\\\food2astro\\\\上传3.bat\")",
-      "Bash(cmd.exe /c type \"D:\\\\ai\\\\food\\\\.worktrees\\\\260311\\\\food2astro\\\\上传3.bat\")"
+      "Bash(cmd.exe /c type \"D:\\\\ai\\\\food\\\\.worktrees\\\\260311\\\\food2astro\\\\上传3.bat\")",
+      "Bash(\"D:/ai/food/.worktrees/260311/food2astro/上传3.bat\")",
+      "Bash(printf 'fix: deploy admin auth cookie fallback:*)"
     ]
   }
 }

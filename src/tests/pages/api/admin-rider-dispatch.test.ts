@@ -56,8 +56,9 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
       });
     }
 
-    if (url.endsWith('/api/telegram/send')) {
+    if (url === 'https://food2.serbia70.com/api/telegram/send') {
       assert.equal(init?.method, 'POST');
+      assert.equal((init?.headers as Record<string, string> | undefined)?.cookie, 'admin_token=test-token');
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, any>;
       assert.equal(body.shop_slug, 'demo-shop');
       assert.equal(body.chat_id, 'chat-7');
@@ -108,5 +109,5 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
   assert.equal(body.order.id, 447);
   assert.equal(body.order.status, 'awaiting_courier');
   assert.ok(calls.some((call) => call.url.includes('/api/admin/orders/447/status')));
-  assert.ok(calls.some((call) => call.url.endsWith('/api/telegram/send')));
+  assert.ok(calls.some((call) => call.url === 'https://food2.serbia70.com/api/telegram/send'));
 });

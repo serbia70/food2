@@ -96,7 +96,8 @@ test('POST telegram send 在店铺未配置 token 时回退读取 master setting
       });
     }
 
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://food2.serbia70.com/api/master/init') {
+      assert.equal((init?.headers as Record<string, string> | undefined)?.cookie, 'admin_token=test-token');
       return new Response(JSON.stringify({
         success: true,
         settings: {
@@ -138,7 +139,7 @@ test('POST telegram send 在店铺未配置 token 时回退读取 master setting
     ok: true,
     result: { message_id: 100 },
   });
-  assert.ok(calls.includes('http://localhost:3030/api/master/settings'));
+  assert.ok(calls.includes('https://food2.serbia70.com/api/master/init'));
   assert.ok(calls.includes('https://api.telegram.org/botmaster-bot-token/sendMessage'));
 });
 
@@ -155,7 +156,7 @@ test('POST telegram send 在店铺和 master 都缺少 token 时返回 400', asy
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://food2.serbia70.com/api/master/init') {
       return new Response(JSON.stringify({ success: true, settings: {} }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

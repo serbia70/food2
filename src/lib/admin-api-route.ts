@@ -1,11 +1,25 @@
 import type { AstroCookies } from 'astro';
 import { proxyFetch } from './api-proxy.ts';
 
+function readTokenFromRawCookieHeader(request: Request): string {
+  const rawCookie = request.headers.get('cookie') || '';
+  if (!rawCookie) return '';
+
+  for (const chunk of rawCookie.split(';')) {
+    const [rawKey, ...rest] = chunk.split('=');
+    if (String(rawKey || '').trim() !== 'admin_token') continue;
+    const value = rest.join('=').trim();
+    return value || '';
+  }
+
+  return '';
+}
+
 export function readAdminAuth(request: Request, cookies: AstroCookies): string {
   const headerAuth = request.headers.get('authorization') || '';
   if (headerAuth) return headerAuth;
 
-  const cookieToken = cookies.get('admin_token')?.value || '';
+  const cookieToken = cookies.get('admin_token')?.value || readTokenFromRawCookieHeader(request);
   return cookieToken ? `Bearer ${cookieToken}` : '';
 }
 

@@ -56,6 +56,15 @@ test('readAdminAuth: 无 header + 无 cookie 时返回空字符串', () => {
   assert.equal(readAdminAuth(request, cookies as any), '');
 });
 
+test('readAdminAuth: Astro cookies 取不到时回退读取原始 Cookie 头', () => {
+  const request = new Request('http://localhost/admin', {
+    headers: { cookie: 'foo=1; admin_token=raw-cookie-token; bar=2' },
+  });
+  const cookies = makeCookies({});
+
+  assert.equal(readAdminAuth(request, cookies as any), 'Bearer raw-cookie-token');
+});
+
 test('buildAdminAuthHeader: 无 auth 时返回空对象', () => {
   const request = new Request('http://localhost/admin');
   const cookies = makeCookies({});

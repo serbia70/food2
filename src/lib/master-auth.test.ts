@@ -4,6 +4,10 @@ import assert from 'node:assert/strict';
 import { MASTER_TOKEN } from '../config.ts';
 import { resolveMasterAuth } from './master-auth.ts';
 
+test('resolveMasterAuth 仅暴露 request/cookies 两个入参', () => {
+  assert.equal(resolveMasterAuth.length, 2);
+});
+
 test('优先使用请求头中的 master authorization', () => {
   const request = new Request('http://localhost/master', {
     headers: { Authorization: 'Bearer header-token' },
@@ -13,7 +17,7 @@ test('优先使用请求头中的 master authorization', () => {
     get() {
       return { value: 'cookie-token' };
     },
-  }, 'fallback-token');
+  });
 
   assert.equal(auth, 'Bearer header-token');
 });
@@ -25,23 +29,17 @@ test('请求头缺失时回退到 master_token cookie', () => {
     get(key: string) {
       return key === 'master_token' ? { value: 'cookie-token' } : undefined;
     },
-  }, 'fallback-token');
+  });
 
   assert.equal(auth, 'Bearer cookie-token');
 });
 
-test('请求头和 cookie 都缺失时回退到默认 token', () => {
+test('请求头和 cookie 都缺失时返回空字符串', () => {
   const request = new Request('http://localhost/master');
-  const auth = resolveMasterAuth(request, undefined, 'fallback-token');
-  assert.equal(auth, 'Bearer fallback-token');
+  const auth = resolveMasterAuth(request);
+  assert.equal(auth, '');
 });
 
 test('master token 缺失时不应存在可用默认值', () => {
   assert.equal(MASTER_TOKEN, '');
-});
-
-test('严格模式下没有 header 和 cookie 时不应回退默认 token', () => {
-  const request = new Request('http://localhost/master');
-  const auth = resolveMasterAuth(request, undefined, 'master-token', { allowFallbackToken: false });
-  assert.equal(auth, '');
 });

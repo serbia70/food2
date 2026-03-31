@@ -6,7 +6,7 @@ import { buildUserApiUrl } from './user-api-route.ts';
 test('login 路由应转发到 user login 接口', () => {
   assert.equal(
     buildUserApiUrl('https://api.serbia70.com', 'login'),
-    'https://api.serbia70.com/api/user/history',
+    'https://api.serbia70.com/api/user/login',
   );
 });
 

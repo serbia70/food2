@@ -13,15 +13,18 @@ import MasterBackupSettingsCard from '../../components/master/MasterBackupSettin
 import MasterCodeBackupCard from '../../components/master/MasterCodeBackupCard.astro';
 import MasterDataBackupCard from '../../components/master/MasterDataBackupCard.astro';
 import MasterDangerConfirm from '../../components/master/MasterDangerConfirm.astro';
+import MasterRiderStatusPanel from '../../components/master/MasterRiderStatusPanel.astro';
 import MasterShopEditPanel from '../../components/master/MasterShopEditPanel.astro';
 import MasterShopManagementTable from '../../components/master/MasterShopManagementTable.astro';
 import MasterShopTopupPanel from '../../components/master/MasterShopTopupPanel.astro';
 import MasterShopDineInPanel from '../../components/master/MasterShopDineInPanel.astro';
 import MasterWechatSettingsCard from '../../components/master/MasterWechatSettingsCard.astro';
-import { MASTER_TOKEN } from '../../config';
 import { normalizeMasterTab } from '../../lib/master-active-tab';
 import { resolveMasterAuth } from '../../lib/master-auth';
 import { buildMasterDashboardView } from '../../lib/master-dashboard-view';
+import { loadMasterDispatchData } from '../../lib/master-dispatch-loader';
+import { loadMasterRiderStatusData } from '../../lib/master-rider-status-loader';
+import { buildMasterRiderStatusView } from '../../lib/master-rider-status-view';
 
 export const prerender = false;
 
@@ -49,15 +52,55 @@ type ShopSummary = {
   total_order_count?: number;
 };
 
+type MasterDispatchPayload = {
+  awaiting: Array<{
+    id?: number;
+    order_no?: string;
+    shop_id?: number;
+    shop_name?: string;
+    status?: string;
+    dispatch_status?: string;
+    dispatch_round?: number;
+    current_pool_index?: number;
+    last_dispatched_rider_id?: number;
+    next_escalate_at?: string;
+  }>;
+  delivering: Array<{
+    id?: number;
+    order_no?: string;
+    shop_id?: number;
+    shop_name?: string;
+    status?: string;
+    dispatch_status?: string;
+    dispatch_round?: number;
+    current_pool_index?: number;
+    last_dispatched_rider_id?: number;
+    next_escalate_at?: string;
+  }>;
+  pools: Array<{
+    shop_id?: number;
+    shop_name?: string;
+    pool_count?: number;
+    available_count?: number;
+    busy_count?: number;
+    offline_count?: number;
+  }>;
+};
+
 let shops: ShopSummary[] = [];
 let loadError = '';
 let masterSettings: Record<string, unknown> = {};
+let masterDispatch: MasterDispatchPayload = { awaiting: [], delivering: [], pools: [] };
+let dispatchLoadError = '';
+let masterRiders = buildMasterRiderStatusView({ summary: {}, groups: { available: [], busy: [], offline: [] } });
+let ridersLoadError = '';
 
 const MASTER_INIT_PROXY_PATH = '/api/master/init';
+const MASTER_DISPATCH_PROXY_PATH = '/api/master/dispatch';
 const MASTER_INIT_COOKIE_HEADER = 'cookie';
 
 try {
-  const auth = resolveMasterAuth(Astro.request, Astro.cookies, MASTER_TOKEN, { allowFallbackToken: false });
+  const auth = resolveMasterAuth(Astro.request, Astro.cookies);
   const cookie = Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER) || '';
   const initUrl = new URL(MASTER_INIT_PROXY_PATH, Astro.url);
   const res = await fetch(initUrl, {
@@ -69,9 +112,11 @@ try {
   });
   if (res.ok) {
     const data = await res.json().catch(() => ({}));
-    const dataShops = data && data.shops;
+    const isOkEnvelope = data && typeof data === 'object' && 'ok' in data && data.ok === true;
+    const initData = isOkEnvelope && 'data' in data && data.data && typeof data.data === 'object' ? data.data : null;
+    const dataShops = initData && initData.shops;
     shops = Array.isArray(dataShops) ? dataShops : [];
-    const dataSettings = data && data.settings;
+    const dataSettings = initData && initData.settings;
     masterSettings = dataSettings && typeof dataSettings === 'object' ? dataSettings : {};
   } else {
     loadError = `加载失败 (${res.status})`;
@@ -85,6 +130,29 @@ const hasMasterCookie = Boolean(masterCookie && masterCookie.value);
 const isUnauthorized = loadError === '加载失败 (401)';
 const activeTab = normalizeMasterTab(Astro.url.searchParams.get('tab'));
 const canLoadProtectedMasterActions = hasMasterCookie && !isUnauthorized;
+
+if (!isUnauthorized && activeTab === 'dispatch') {
+  const auth = resolveMasterAuth(Astro.request, Astro.cookies);
+  const cookie = Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER) || '';
+  const dispatchData = await loadMasterDispatchData({
+    requestUrl: Astro.url,
+    authHeader: auth,
+    cookieHeader: cookie,
+    shopRows: shops,
+  });
+  masterDispatch = dispatchData.payload;
+  dispatchLoadError = dispatchData.error;
+}
+
+if (!isUnauthorized && activeTab === 'riders') {
+  const auth = resolveMasterAuth(Astro.request, Astro.cookies);
+  const riderStatusData = await loadMasterRiderStatusData({
+    authHeader: auth,
+    shopRows: shops,
+  });
+  masterRiders = buildMasterRiderStatusView(riderStatusData.payload);
+  ridersLoadError = riderStatusData.error;
+}
 
 const dashboardView = buildMasterDashboardView({
   shops,
@@ -272,6 +340,48 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
         display: grid;
         gap: 18px;
       }
+
+      .dispatch-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 18px;
+      }
+
+      .dispatch-card {
+        background: rgba(255,255,255,.92);
+        border: 1px solid #dbe4ee;
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+      }
+
+      .dispatch-card h3 {
+        margin: 0 0 14px;
+        font-size: 18px;
+      }
+
+      .dispatch-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .dispatch-item {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 12px;
+        background: #f8fafc;
+      }
+
+      .dispatch-item strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .dispatch-meta {
+        font-size: 13px;
+        color: #475569;
+        line-height: 1.6;
+      }
     </style>
     <script define:vars={{ shopViewsData, shopEditPanelData, shopTopupPanelData, shopDineInPanelData, canLoadProtectedMasterActions }} is:inline>
       window.__masterRuntime = {
@@ -302,6 +412,8 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
       import { initMasterPricingActions } from '../../scripts/master/pricing-actions';
       import { createMasterRuntimeHelpers } from '../../scripts/master/runtime-helpers';
       import { initMasterRuntimeActions } from '../../scripts/master/runtime-actions';
+      import { initMasterDispatchActions } from '../../scripts/master/dispatch-actions';
+      import { initMasterRiderStatusActions } from '../../scripts/master/rider-status-actions';
 
       const runtimeHelpers = createMasterRuntimeHelpers({
         logoutPath: '/api/master/logout',
@@ -357,6 +469,13 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
         shopEditPanelDefaults,
         handleMasterUnauthorized: masterRequestGuards.handleMasterUnauthorized,
       });
+
+      const dispatchActionBindings = initMasterDispatchActions({
+        ...masterRequestGuards,
+        shopAdminBindings,
+        runtimeActionBindings,
+      });
+
       Object.assign(window, {
         openMasterShopEdit: shopPanelBindings.openMasterShopEdit,
         openMasterShopTopup: shopPanelBindings.openMasterShopTopup,
@@ -387,16 +506,19 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
         resetMasterShopFeeDefaults: runtimeActionBindings.resetMasterShopFeeDefaults,
         reloadPage: runtimeActionBindings.reloadPage,
         logoutMaster: runtimeActionBindings.logoutMaster,
+        masterDispatchRepublish: dispatchActionBindings.masterDispatchRepublish,
       });
 
       document.addEventListener('click', (event) => {
         backupActionBindings.handleDocumentClick(event);
         shopPanelBindings.handleDocumentClick(event);
+        dispatchActionBindings.handleDocumentClick(event);
       });
 
       document.addEventListener('DOMContentLoaded', () => {
         shopTableBindings.handleDomContentLoaded();
         backupActionBindings.handleDomContentLoaded();
+        initMasterRiderStatusActions(document);
       });
     </script>
     <style is:inline>
@@ -479,6 +601,8 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
         <a class:list={["tab-btn", activeTab === 'shops' && 'active']} href="/master?tab=shops">店铺管理</a>
         <a class:list={["tab-btn", activeTab === 'overview' && 'active']} href="/master?tab=overview">经营总览</a>
         <a class:list={["tab-btn", activeTab === 'settings' && 'active']} href="/master?tab=settings">全局设置</a>
+        <a class:list={["tab-btn", activeTab === 'dispatch' && 'active']} href="/master?tab=dispatch">调度总览</a>
+        <a class:list={["tab-btn", activeTab === 'riders' && 'active']} href="/master?tab=riders">骑手状态</a>
         <a class:list={["tab-btn", activeTab === 'backup' && 'active']} href="/master?tab=backup">备份管理</a>
       </section>
 
@@ -524,6 +648,98 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
         <MasterPaymentSettingsCard settings={dashboardView.settings.wechat} />
         <MasterStorageSettingsCard settings={dashboardView.settings.storage} />
         <MasterSecurityCard />
+      </div>
+
+      <div class="master-stack" data-master-panel="dispatch" hidden={activeTab !== 'dispatch' || !shouldShowMasterContent}>
+        {dispatchLoadError ? (
+          <div class="notice notice-error">{dispatchLoadError}</div>
+        ) : (
+          <div class="dispatch-grid">
+            <section class="dispatch-card">
+              <h3>待接单（{masterDispatch.awaiting.length}）</h3>
+              {masterDispatch.awaiting.length > 0 ? (
+                <div class="dispatch-list">
+                  {masterDispatch.awaiting.map((order) => (
+                    <div class="dispatch-item">
+                      <strong>{order.shop_name || `店铺 #${order.shop_id || 0}`}</strong>
+                      <div class="dispatch-meta">订单 #{order.order_no || order.id || '-'}</div>
+                      <div class="dispatch-meta">调度状态：{order.dispatch_status || 'idle'}</div>
+                      <div class="dispatch-meta">轮次：{order.dispatch_round || 0}</div>
+                      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                        <button
+                          class="ghost-btn"
+                          type="button"
+                          data-master-dispatch-action="impersonate"
+                          data-master-dispatch-shop-id={String(order.shop_id || 0)}
+                        >处理调度</button>
+                        <button
+                          class="ghost-btn"
+                          type="button"
+                          data-master-dispatch-action="assign"
+                          data-master-dispatch-order-id={String(order.id || '')}
+                          data-master-dispatch-shop-id={String(order.shop_id || 0)}
+                        >指派骑手</button>
+                        <button
+                          class="ghost-btn"
+                          type="button"
+                          data-master-dispatch-action="remind"
+                          data-master-dispatch-order-id={String(order.id || '')}
+                          data-master-dispatch-shop-id={String(order.shop_id || 0)}
+                        >再次催单</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div class="notice">当前无待接单订单</div>
+              )}
+            </section>
+
+            <section class="dispatch-card">
+              <h3>配送中（{masterDispatch.delivering.length}）</h3>
+              {masterDispatch.delivering.length > 0 ? (
+                <div class="dispatch-list">
+                  {masterDispatch.delivering.map((order) => (
+                    <div class="dispatch-item">
+                      <strong>{order.shop_name || `店铺 #${order.shop_id || 0}`}</strong>
+                      <div class="dispatch-meta">订单 #{order.order_no || order.id || '-'}</div>
+                      <div class="dispatch-meta">最近骑手：{order.last_dispatched_rider_id || '-'}</div>
+                      <div class="dispatch-meta">状态：{order.status || 'delivering'}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div class="notice">当前无配送中订单</div>
+              )}
+            </section>
+
+            <section class="dispatch-card">
+              <h3>骑手池（{masterDispatch.pools.length}）</h3>
+              {masterDispatch.pools.length > 0 ? (
+                <div class="dispatch-list">
+                  {masterDispatch.pools.map((pool) => (
+                    <div class="dispatch-item">
+                      <strong>{pool.shop_name || `店铺 #${pool.shop_id || 0}`}</strong>
+                      <div class="dispatch-meta">总人数：{pool.pool_count || 0}</div>
+                      <div class="dispatch-meta">可接单：{pool.available_count || 0}</div>
+                      <div class="dispatch-meta">忙碌：{pool.busy_count || 0}，离线：{pool.offline_count || 0}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div class="notice">当前未拿到骑手池统计</div>
+              )}
+            </section>
+          </div>
+        )}
+      </div>
+
+      <div class="master-stack" data-master-panel="riders" hidden={activeTab !== 'riders' || !shouldShowMasterContent}>
+        {ridersLoadError ? (
+          <div class="notice notice-error">{ridersLoadError}</div>
+        ) : (
+          <MasterRiderStatusPanel view={masterRiders} />
+        )}
       </div>
 
       <div class="settings-grid" data-master-panel="backup" hidden={activeTab !== 'backup' || !shouldShowMasterContent}>

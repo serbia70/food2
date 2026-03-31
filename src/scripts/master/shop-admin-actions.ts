@@ -22,10 +22,12 @@ export function initMasterShopAdminActions({
           await handleMasterUnauthorized();
           return;
         }
-        const impersonateSuccess = data && typeof data === 'object' && 'success' in data ? data.success : false;
-        const impersonateSlug = data && typeof data === 'object' && 'slug' in data ? data.slug : '';
-        if (!res.ok || !impersonateSuccess || typeof impersonateSlug !== 'string' || !impersonateSlug) {
-          const impersonateError = data && typeof data === 'object' && 'error' in data ? data.error : null;
+        const isOkEnvelope = data && typeof data === 'object' && 'ok' in data && data.ok === true;
+        const impersonateData = isOkEnvelope && 'data' in data && data.data && typeof data.data === 'object' ? data.data : null;
+        const impersonateSlug = impersonateData && 'slug' in impersonateData ? impersonateData.slug : '';
+        if (!res.ok || typeof impersonateSlug !== 'string' || !impersonateSlug) {
+          const apiError = data && typeof data === 'object' && 'error' in data ? data.error : null;
+          const impersonateError = apiError && typeof apiError === 'object' && 'message' in apiError ? apiError.message : null;
           alert(typeof impersonateError === 'string' && impersonateError ? impersonateError : '进入店铺后台失败');
           return;
         }
@@ -73,9 +75,20 @@ export function initMasterShopAdminActions({
           await handleMasterUnauthorized();
           throw new Error('需要重新登录');
         }
-        if (!res.ok || (data && typeof data === 'object' && 'success' in data && data.success === false)) {
-          const deleteError = data && typeof data === 'object' && 'error' in data ? data.error : null;
-          throw new Error(typeof deleteError === 'string' && deleteError ? deleteError : '删除店铺失败');
+        const isCanonicalErrorEnvelope = data && typeof data === 'object' && 'ok' in data && data.ok === false;
+        const deleteError = isCanonicalErrorEnvelope && 'error' in (data as Record<string, unknown>)
+          ? (data as { error?: unknown }).error
+          : null;
+        const deleteErrorCode = deleteError && typeof deleteError === 'object' && 'code' in (deleteError as Record<string, unknown>)
+          ? (deleteError as { code?: unknown }).code
+          : null;
+        const deleteErrorMessage = deleteError && typeof deleteError === 'object' && 'message' in (deleteError as Record<string, unknown>)
+          ? (deleteError as { message?: unknown }).message
+          : null;
+        const isCanonicalError = typeof deleteErrorCode === 'string' && deleteErrorCode
+          && typeof deleteErrorMessage === 'string' && deleteErrorMessage;
+        if (!res.ok || isCanonicalErrorEnvelope) {
+          throw new Error(isCanonicalError ? deleteErrorMessage : '删除店铺失败');
         }
 
         alert('店铺已删除，页面将刷新');

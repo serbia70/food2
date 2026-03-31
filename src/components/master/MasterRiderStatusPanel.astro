@@ -1,0 +1,130 @@
+---
+import MasterRiderStatusCard from './MasterRiderStatusCard.astro';
+import type { MasterRiderStatusView } from '../../lib/master-rider-status-view.ts';
+
+const { view } = Astro.props as { view: MasterRiderStatusView };
+
+const SUMMARY_ITEMS = [
+  { key: 'total', label: '平台骑手总人数', value: view.summary.totalRiders },
+  { key: 'available', label: '空闲人数', value: view.summary.availableRiders },
+  { key: 'busy', label: '送餐中人数', value: view.summary.busyRiders },
+  { key: 'offline', label: '下班人数', value: view.summary.offlineRiders },
+  { key: 'active-order', label: '进行中订单', value: view.summary.activeOrderCount },
+  { key: 'cod-order', label: '代收订单', value: view.summary.codOrderCount },
+  { key: 'delivery-fee', label: '配送费总额', value: view.summary.deliveryFeeTotal },
+  { key: 'cod-amount', label: '代收总额', value: view.summary.codAmountTotal },
+] as const;
+
+const RIDER_GROUPS = [
+  { key: 'available', label: '空闲', rows: view.groups.available },
+  { key: 'busy', label: '送餐中', rows: view.groups.busy },
+  { key: 'offline', label: '下班', rows: view.groups.offline },
+] as const;
+---
+
+<section class="master-rider-status-panel" data-master-riders-panel>
+  <div class="master-rider-status-summary">
+    {SUMMARY_ITEMS.map((item) => (
+      <div data-master-rider-summary-item={item.key}>
+        <span class="master-rider-summary-label">{item.label}</span>
+        <span class="master-rider-summary-value">{item.value}</span>
+      </div>
+    ))}
+  </div>
+
+  <div class="master-rider-status-groups">
+    {RIDER_GROUPS.map((group) => (
+      <section class="master-rider-status-group" data-master-rider-group={group.key}>
+        <h3>{group.label}</h3>
+        {group.rows.length > 0 ? (
+          <div data-master-rider-group-list>
+            {group.rows.map((rider) => (
+              <MasterRiderStatusCard rider={rider} groupKey={group.key} groupLabel={group.label} />
+            ))}
+          </div>
+        ) : (
+          <div class="notice" data-master-rider-group-empty>当前无{group.label}骑手</div>
+        )}
+      </section>
+    ))}
+  </div>
+</section>
+
+<style>
+  .master-rider-status-panel {
+    display: grid;
+    gap: 18px;
+  }
+
+  .master-rider-status-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+
+  [data-master-rider-summary-item] {
+    background: #ffffff;
+    border: 1px solid #dbe4ee;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    display: grid;
+    gap: 8px;
+    color: #0f172a;
+  }
+
+  .master-rider-summary-label {
+    color: #64748b;
+    font-size: 13px;
+  }
+
+  .master-rider-summary-value {
+    color: #0f172a;
+    font-size: 28px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .master-rider-status-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
+  }
+
+  .master-rider-status-group {
+    background: rgba(255,255,255,.92);
+    border: 1px solid #dbe4ee;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    display: grid;
+    gap: 14px;
+    align-content: start;
+  }
+
+  .master-rider-status-group h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #0f172a;
+  }
+
+  [data-master-rider-group-list] {
+    display: grid;
+    gap: 12px;
+  }
+
+  .notice {
+    border: 1px dashed #cbd5e1;
+    background: rgba(248,250,252,.95);
+    border-radius: 14px;
+    padding: 16px;
+    text-align: center;
+    color: #64748b;
+  }
+
+  @media (max-width: 640px) {
+    .master-rider-status-summary {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+</style>

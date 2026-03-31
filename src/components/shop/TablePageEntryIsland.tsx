@@ -1,5 +1,5 @@
 import { useEffect } from 'preact/hooks';
-import { initTablePage } from '../../scripts/shop/table-page';
+import { initTablePage } from '../../scripts/shop/table-page.ts';
 
 type Props = {
   slug: string;

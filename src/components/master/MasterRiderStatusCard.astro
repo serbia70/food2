@@ -1,0 +1,176 @@
+---
+import type { MasterRiderStatusCardView, MasterRiderStatusLabel, MasterRiderStatusValue } from '../../lib/master-rider-status-view.ts';
+
+type RiderGroupKey = MasterRiderStatusValue;
+type RiderGroupLabel = MasterRiderStatusLabel;
+
+const { rider, groupKey, groupLabel } = Astro.props as {
+  rider: MasterRiderStatusCardView;
+  groupKey: RiderGroupKey;
+  groupLabel: RiderGroupLabel;
+};
+
+const BADGE_ITEMS = [
+  { key: 'status', label: rider.statusLabel },
+  { key: 'active-order', label: `进行中 ${rider.activeOrderCount}` },
+  { key: 'cod-order', label: `代收订单 ${rider.codOrderCount}` },
+  { key: 'cod-amount', label: `代收总额 ${rider.codAmountTotal}` },
+  { key: 'delivery-fee', label: `配送费总额 ${rider.deliveryFeeTotal}` },
+] as const;
+
+const ORDER_METRIC_ITEMS = [
+  { key: 'order-amount', label: '订单金额', value: (order: MasterRiderStatusCardView['orders'][number]) => order.orderAmount },
+  { key: 'delivery-fee', label: '配送费', value: (order: MasterRiderStatusCardView['orders'][number]) => order.deliveryFee },
+  { key: 'cash-to-collect', label: '代收金额', value: (order: MasterRiderStatusCardView['orders'][number]) => order.cashToCollect },
+] as const;
+
+const ordersId = `master-rider-orders-${groupKey}-${rider.id || rider.phone || rider.name}`;
+---
+
+<article class="rider-card" data-master-rider-card data-master-rider-id={rider.id} data-master-rider-group={groupKey} data-master-rider-group-label={groupLabel}>
+  <details class="rider-card-details" data-master-rider-details open>
+    <summary class="rider-card-head" data-master-rider-toggle aria-controls={ordersId} aria-expanded="true">
+      <div>
+        <div class="rider-name">{rider.name}</div>
+        <div class="rider-phone">{rider.phone}</div>
+      </div>
+      <div class="rider-badges">
+        {BADGE_ITEMS.map((item) => <span data-master-rider-badge={item.key}>{item.label}</span>)}
+      </div>
+    </summary>
+
+    <div id={ordersId} class="rider-orders" data-master-rider-orders data-master-rider-default-open="1">
+      {rider.orders.length > 0 ? rider.orders.map((order) => (
+        <div class="rider-order-row" data-master-rider-order-row data-master-rider-order-id={order.id}>
+          <strong>订单 #{order.orderNo}</strong>
+          <div>{order.shopName}</div>
+          <div>{order.status}</div>
+          <div>{order.cashTagLabel}</div>
+          {ORDER_METRIC_ITEMS.map((item) => (
+            <div data-master-rider-order-metric={item.key}>{item.label} {item.value(order)}</div>
+          ))}
+        </div>
+      )) : <div class="rider-empty" data-master-rider-order-empty>当前无进行中订单</div>}
+      <div class="rider-order-legend" data-master-rider-order-legend>代收 / 非代收</div>
+    </div>
+  </details>
+</article>
+
+<style>
+  .rider-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #f8fafc;
+    overflow: hidden;
+  }
+
+  .rider-card-details {
+    margin: 0;
+  }
+
+  .rider-card-head {
+    list-style: none;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px;
+    cursor: pointer;
+  }
+
+  .rider-card-head::-webkit-details-marker {
+    display: none;
+  }
+
+  .rider-name {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .rider-phone {
+    margin-top: 6px;
+    font-size: 13px;
+    color: #64748b;
+  }
+
+  .rider-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    max-width: 60%;
+  }
+
+  [data-master-rider-badge] {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: #334155;
+    white-space: nowrap;
+  }
+
+  .rider-orders {
+    border-top: 1px solid #e2e8f0;
+    padding: 0 16px 16px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .rider-order-row {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 14px;
+    display: grid;
+    gap: 6px;
+    color: #475569;
+    font-size: 13px;
+  }
+
+  .rider-order-row strong {
+    color: #0f172a;
+    font-size: 15px;
+  }
+
+  [data-master-rider-order-metric] {
+    display: grid;
+    grid-template-columns: 88px 1fr;
+    gap: 8px;
+    color: #334155;
+  }
+
+  .rider-empty,
+  .rider-order-legend {
+    color: #64748b;
+    font-size: 13px;
+  }
+
+  .rider-empty {
+    padding-top: 16px;
+  }
+
+  .rider-order-legend {
+    padding-top: 4px;
+  }
+
+  @media (max-width: 720px) {
+    .rider-card-head {
+      flex-direction: column;
+    }
+
+    .rider-badges {
+      justify-content: flex-start;
+      max-width: none;
+    }
+
+    [data-master-rider-order-metric] {
+      grid-template-columns: 1fr;
+      gap: 2px;
+    }
+  }
+</style>

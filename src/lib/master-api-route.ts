@@ -1,25 +1,24 @@
 import type { AstroCookies } from 'astro';
+import { createApiError } from '../domain/api/api-envelope.ts';
+import { buildProxyFailureResponse, buildProxyJsonResponse } from '../infra/http/proxy-response.ts';
 import { resolveMasterAuth } from './master-auth.ts';
 
 export async function proxyMasterRequest(options: {
   request: Request;
   cookies: AstroCookies;
   upstreamUrl: string;
-  fallbackToken?: string;
-  allowFallbackToken: boolean;
   method?: string;
   headers?: Record<string, string>;
   body?: BodyInit | null;
 }): Promise<Response> {
   try {
-    const auth = resolveMasterAuth(options.request, options.cookies as any, options.fallbackToken, {
-      allowFallbackToken: options.allowFallbackToken === true,
-    });
+    const auth = resolveMasterAuth(options.request, options.cookies as any);
 
     if (!auth) {
-      return new Response(JSON.stringify({ success: false, error: 'unauthorized' }), {
+      return buildProxyFailureResponse({
         status: 401,
-        headers: { 'Content-Type': 'application/json' },
+        code: 'unauthorized',
+        message: 'Unauthorized',
       });
     }
 
@@ -37,17 +36,12 @@ export async function proxyMasterRequest(options: {
     };
 
     const res = await fetch(upstreamUrl, init);
-    const text = await res.text();
-    return new Response(text, {
-      status: res.status,
-      headers: {
-        'Content-Type': res.headers.get('content-type') || 'application/json',
-      },
-    });
-  } catch (e: any) {
-    return new Response(JSON.stringify({ success: false, error: e?.message || 'proxy failed' }), {
+    return buildProxyJsonResponse(res);
+  } catch {
+    return buildProxyFailureResponse({
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      code: 'proxy_failed',
+      message: 'Proxy failed',
     });
   }
 }

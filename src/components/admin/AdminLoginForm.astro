@@ -90,8 +90,13 @@ const safeSlug = String(slug || '');
         .then(function (result) {
           var res = result.res;
           var data = result.data;
-          if (!res.ok || !(data && data.success)) {
-            throw new Error((data && data.error) ? data.error : '登录失败');
+          var isOkEnvelope = data && typeof data === 'object' && 'ok' in data && data.ok === true;
+          var sessionData = isOkEnvelope && 'data' in data && data.data && typeof data.data === 'object' ? data.data : null;
+          var errorMessage = data && typeof data === 'object' && 'error' in data && data.error && typeof data.error === 'object' && 'message' in data.error && typeof data.error.message === 'string'
+            ? data.error.message
+            : '登录失败';
+          if (!res.ok || !sessionData) {
+            throw new Error(errorMessage);
           }
           window.location.href = '/admin/' + slug;
         })

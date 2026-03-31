@@ -29,10 +29,10 @@ const { categories, products, shop } = Astro.props;
           <div class="prod-row">
             <div class="prod-img">
               <img
-                src={p.img || 'https://dummyimage.com/100x100/eee/999?text=No+Img'}
-                data-fallback-src="https://dummyimage.com/100x100/eee/999?text=Error"
+                src={p.img || ''}
+                data-fallback-src=""
                 loading="lazy"
-                onerror="this.onerror=null;this.src=this.dataset.fallbackSrc||'/favicon.svg';"
+                onerror="this.onerror=null;this.style.display='none';"
               />
             </div>
             <div class="prod-info">

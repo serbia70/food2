@@ -4,6 +4,20 @@ export type FetchJSONResult<T = unknown> = {
   data: T | null;
 };
 
+function unwrapCanonicalData<T>(value: unknown): T | null {
+  if (
+    value
+    && typeof value === 'object'
+    && 'ok' in value
+    && (value as { ok?: unknown }).ok === true
+    && 'data' in value
+  ) {
+    return ((value as { data?: T | null }).data ?? null) as T | null;
+  }
+
+  return (value as T | null) ?? null;
+}
+
 export async function fetchJSON<T = unknown>(url: string, init: RequestInit = {}): Promise<FetchJSONResult<T>> {
   try {
     const mergedInit: RequestInit = {
@@ -19,7 +33,8 @@ export async function fetchJSON<T = unknown>(url: string, init: RequestInit = {}
     const text = await res.text();
     let data: T | null = null;
     try {
-      data = text ? (JSON.parse(text) as T) : null;
+      const parsed = text ? JSON.parse(text) : null;
+      data = unwrapCanonicalData<T>(parsed);
     } catch {
       data = null;
     }

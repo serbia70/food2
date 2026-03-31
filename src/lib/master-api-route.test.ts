@@ -11,16 +11,18 @@ test('proxyMasterRequest: returns 401 unauthorized when no auth', async () => {
     request: req,
     cookies,
     upstreamUrl: 'https://upstream.example.test/api/master/init',
-    fallbackToken: '',
-    allowFallbackToken: false,
     method: 'GET',
   });
 
   assert.equal(res.status, 401);
   assert.ok((res.headers.get('content-type') || '').includes('application/json'));
-  const body = await res.json();
-  assert.equal(body.success, false);
-  assert.equal(body.error, 'unauthorized');
+  assert.deepEqual(await res.json(), {
+    ok: false,
+    error: {
+      code: 'unauthorized',
+      message: 'Unauthorized',
+    },
+  });
 });
 
 test('proxyMasterRequest: forwards to upstream and preserves status + content-type (text body)', async () => {
@@ -31,19 +33,16 @@ test('proxyMasterRequest: forwards to upstream and preserves status + content-ty
 
   const fetchOrig = globalThis.fetch;
   try {
-    // @ts-ignore
-    globalThis.fetch = async (url: any, init?: any) => {
+    globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
       assert.equal(String(url), 'https://upstream.example.test/api/master/init');
-      assert.equal((init?.headers || {}).Authorization, 'Bearer header-token');
+      assert.equal((init?.headers as Record<string, string> | undefined)?.Authorization, 'Bearer header-token');
       return new Response('OK', { status: 200, headers: { 'Content-Type': 'text/plain' } });
-    };
+    }) as typeof fetch;
 
     const res = await proxyMasterRequest({
       request: req,
       cookies,
       upstreamUrl: 'https://upstream.example.test/api/master/init',
-      fallbackToken: '',
-      allowFallbackToken: false,
       method: 'GET',
     });
 
@@ -53,48 +52,4 @@ test('proxyMasterRequest: forwards to upstream and preserves status + content-ty
   } finally {
     globalThis.fetch = fetchOrig;
   }
-});
-
-test('proxyMasterRequest: does not allow fallback token when allowFallbackToken is omitted', async () => {
-  const req = new Request('http://local/api/master/init');
-  const cookies: any = { get: (_k: string) => undefined };
-
-  const fetchOrig = globalThis.fetch;
-  try {
-    let calls = 0;
-    // @ts-ignore
-    globalThis.fetch = async (_url: any, _init?: any) => {
-      calls++;
-      return new Response('OK', { status: 200, headers: { 'Content-Type': 'text/plain' } });
-    };
-
-    const res = await proxyMasterRequest({
-      request: req,
-      cookies,
-      upstreamUrl: 'https://upstream.example.test/api/master/init',
-      fallbackToken: 'fallback-token',
-      method: 'GET',
-    } as any);
-
-    assert.equal(calls, 0, 'expected fetch not to be called');
-    assert.equal(res.status, 401);
-  } finally {
-    globalThis.fetch = fetchOrig;
-  }
-});
-
-test('proxyMasterRequest: should NOT allow fallback token unless explicitly enabled', async () => {
-  const req = new Request('http://local/api/master/init');
-  const cookies: any = { get: (_k: string) => undefined };
-
-  const res = await proxyMasterRequest({
-    request: req,
-    cookies,
-    upstreamUrl: 'https://upstream.example.test/api/master/init',
-    fallbackToken: 'fallback-token',
-    allowFallbackToken: false,
-    method: 'GET',
-  });
-
-  assert.equal(res.status, 401);
 });

@@ -17,6 +17,11 @@ interface DispatchOrderSnapshot {
   total_amount?: number | string | null;
   pickup_eta_minutes?: number | string | null;
   user_phone?: string | null;
+  status?: string | null;
+  pickup_ready_at?: string | null;
+  rider_broadcasted_at?: string | null;
+  rider_remind_count?: number | string | null;
+  rider_last_reminded_at?: string | null;
 }
 
 interface TelegramRiderRow {
@@ -80,6 +85,40 @@ function extractDispatchOrder(payload: DispatchProxyPayload | DispatchOrderSnaps
     return (payload as DispatchProxyPayload).data as DispatchOrderSnapshot;
   }
   return null;
+}
+
+function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: string): DispatchOrderSnapshot | null {
+  const directOrder = extractDispatchOrder(payload, orderId);
+  if (directOrder) return directOrder;
+
+  const shopSlug = String(payload.shop_slug || payload.restaurant_slug || '').trim();
+  const shopId = String(payload.shop_id || payload.restaurant_id || '').trim();
+  const shopName = String(payload.shop_name || payload.restaurant_name || '').trim();
+  const tableInfo = String(payload.table_info || '').trim();
+  const totalAmount = String(payload.total_amount || '').trim();
+  const userPhone = String(payload.user_phone || '').trim();
+  const status = String(payload.status || '').trim();
+  const hasSnapshotFields = !!(shopSlug || shopId || shopName || tableInfo || totalAmount || userPhone);
+  if (!hasSnapshotFields) return null;
+
+  return {
+    id: orderId,
+    shop_slug: shopSlug || undefined,
+    restaurant_slug: String(payload.restaurant_slug || '').trim() || undefined,
+    shop_id: shopId || undefined,
+    restaurant_id: String(payload.restaurant_id || '').trim() || undefined,
+    shop_name: shopName || undefined,
+    restaurant_name: String(payload.restaurant_name || '').trim() || undefined,
+    table_info: tableInfo || undefined,
+    total_amount: totalAmount || undefined,
+    user_phone: userPhone || undefined,
+    status: status || undefined,
+    pickup_eta_minutes: payload.pickup_eta_minutes != null ? String(payload.pickup_eta_minutes) : undefined,
+    pickup_ready_at: String(payload.pickup_ready_at || '').trim() || undefined,
+    rider_broadcasted_at: String(payload.rider_broadcasted_at || '').trim() || undefined,
+    rider_remind_count: payload.rider_remind_count != null ? String(payload.rider_remind_count) : undefined,
+    rider_last_reminded_at: String(payload.rider_last_reminded_at || '').trim() || undefined,
+  };
 }
 
 async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies']) {
@@ -172,16 +211,23 @@ async function notifyTelegramRecipients(
     const riderId = Number(rider.id || 0);
     const riderPhone = String(rider.phone || '').trim();
     const riderChatId = String(rider.telegram_chat_id || '').trim();
-    const claimCallbackData = riderId > 0 && String(rider.name || '').trim() && riderPhone && riderChatId
-      ? buildTelegramClaimCallback({
+    let claimCallbackData: string | undefined;
+    if (riderId > 0 && String(rider.name || '').trim() && riderPhone && riderChatId) {
+      try {
+        claimCallbackData = buildTelegramClaimCallback({
           orderId: Number(order.id || 0),
           riderId,
           riderName: String(rider.name || '').trim(),
           restaurantId,
           riderPhone,
           telegramChatId: riderChatId,
-        })
-      : undefined;
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        if (message !== 'missing_telegram_callback_secret') throw error;
+        claimCallbackData = undefined;
+      }
+    }
     const message = buildTelegramDispatchMessage({
       shopName,
       address,
@@ -272,46 +318,50 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  const authHeaders = buildAdminAuthHeader(request, cookies);
+  buildAdminAuthHeader(request, cookies);
 
   if (action === 'publish' || action === 'remind') {
-    const orderRes = await proxyAdminRequest({
-      request,
-      cookies,
-      url: `${API_BASE_URL}/api/admin/orders`,
-      method: 'GET',
-    });
-    const orderText = await orderRes.text();
+    let order = readDispatchOrderFromBody(parsedBody, orderId);
 
-    let orderPayload: Record<string, unknown> = {};
-    try {
-      orderPayload = JSON.parse(orderText) as Record<string, unknown>;
-    } catch {
-      orderPayload = {};
-    }
-
-    if (!orderRes.ok || orderPayload.success === false) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'order_fetch_failed',
-        upstream_status: orderRes.status,
-        upstream_body: orderText || JSON.stringify(orderPayload),
-      }), {
-        status: orderRes.status,
-        headers: { 'Content-Type': 'application/json' },
+    if (!order) {
+      const orderRes = await proxyAdminRequest({
+        request,
+        cookies,
+        url: `${API_BASE_URL}/api/admin/orders`,
+        method: 'GET',
       });
-    }
+      const orderText = await orderRes.text();
 
-    const order = extractDispatchOrder(orderPayload as DispatchProxyPayload, orderId) || (orderPayload as DispatchOrderSnapshot);
-    if (!order || !order.id) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'order_snapshot_unavailable',
-        raw_response_text: orderText,
-      }), {
-        status: orderRes.status || 502,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      let orderPayload: Record<string, unknown> = {};
+      try {
+        orderPayload = JSON.parse(orderText) as Record<string, unknown>;
+      } catch {
+        orderPayload = {};
+      }
+
+      if (!orderRes.ok || orderPayload.success === false) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'order_fetch_failed',
+          upstream_status: orderRes.status,
+          upstream_body: orderText || JSON.stringify(orderPayload),
+        }), {
+          status: orderRes.status,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      order = extractDispatchOrder(orderPayload as DispatchProxyPayload, orderId) || (orderPayload as DispatchOrderSnapshot);
+      if (!order || !order.id) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'order_snapshot_unavailable',
+          raw_response_text: orderText,
+        }), {
+          status: orderRes.status || 502,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     const updatePayload = action === 'publish'

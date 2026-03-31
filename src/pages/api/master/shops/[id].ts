@@ -1,16 +1,21 @@
 import type { APIRoute } from 'astro';
-import { API_BASE_URL, MASTER_TOKEN } from '../../../../config';
-import { proxyMasterRequest } from '../../../../lib/master-api-route';
+import { API_BASE_URL } from '../../../../config.ts';
+import { createApiError } from '../../../../domain/api/api-envelope.ts';
+import { proxyMasterRequest } from '../../../../lib/master-api-route.ts';
 
 export const prerender = false;
+
+function buildInvalidShopIdResponse() {
+  return new Response(JSON.stringify(createApiError('invalid_shop_id', 'Invalid shop id')), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
 export const PUT: APIRoute = async ({ request, cookies, params }) => {
   const id = params.id;
   if (!id) {
-    return new Response(JSON.stringify({ success: false, error: 'invalid shop id' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildInvalidShopIdResponse();
   }
 
   const body = await request.text();
@@ -19,8 +24,6 @@ export const PUT: APIRoute = async ({ request, cookies, params }) => {
     cookies,
     upstreamUrl: `${API_BASE_URL}/api/master/shops/${encodeURIComponent(id)}`,
     method: 'PUT',
-    fallbackToken: MASTER_TOKEN,
-    allowFallbackToken: false,
     headers: { 'Content-Type': 'application/json' },
     body,
   });
@@ -29,10 +32,7 @@ export const PUT: APIRoute = async ({ request, cookies, params }) => {
 export const DELETE: APIRoute = async ({ request, cookies, params }) => {
   const id = params.id;
   if (!id) {
-    return new Response(JSON.stringify({ success: false, error: 'invalid shop id' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildInvalidShopIdResponse();
   }
 
   return proxyMasterRequest({
@@ -40,7 +40,5 @@ export const DELETE: APIRoute = async ({ request, cookies, params }) => {
     cookies,
     upstreamUrl: `${API_BASE_URL}/api/master/shops/${encodeURIComponent(id)}`,
     method: 'DELETE',
-    fallbackToken: MASTER_TOKEN,
-    allowFallbackToken: false,
   });
 };

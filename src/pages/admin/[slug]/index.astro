@@ -115,6 +115,15 @@ const categories = rawMenu.map((c: any) => ({
   sort_order: Number(c?.sort_order || 0),
 }));
 
+const normalizeMenuImageUrl = (raw: unknown): string => {
+  if (typeof raw !== 'string' || raw.trim() === '') return '';
+  const img = raw.trim();
+  if (img.startsWith('http://') || img.startsWith('https://')) return img;
+  if (img.startsWith('/uploads/')) return `${API_BASE_URL}${img}`;
+  if (img.startsWith('/assets/uploads/')) return `${API_BASE_URL}${img}`;
+  return img;
+};
+
 const products = rawMenu.flatMap((c: any) => {
   const list = Array.isArray(c?.products) ? c.products : [];
   return list.map((p: any) => ({
@@ -125,7 +134,7 @@ const products = rawMenu.flatMap((c: any) => {
     sort_order: Number(p?.sort_order || 0),
     name: String(p?.name || ''),
     sub_name: String(p?.sub_name || ''),
-    img: String(p?.img || ''),
+    img: normalizeMenuImageUrl(p?.img || p?.imageUrl),
   }));
 });
 

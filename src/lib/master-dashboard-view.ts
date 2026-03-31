@@ -34,7 +34,7 @@ type MasterDashboardSettingsInput = {
   defaultShopTier?: unknown;
 };
 
-export type MasterDashboardTab = 'overview' | 'shops' | 'settings' | 'backup';
+export type MasterDashboardTab = 'overview' | 'shops' | 'settings' | 'backup' | 'dispatch' | 'riders';
 
 export type MasterDashboardBuildInput = {
   shops: MasterDashboardShopInput[];

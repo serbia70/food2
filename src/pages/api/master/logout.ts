@@ -1,11 +1,14 @@
 import type { APIRoute } from 'astro';
+import { createApiSuccess } from '../../../domain/api/api-envelope.ts';
+import { createGuestSessionPayload } from '../../../application/auth/load-session-query.ts';
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ cookies, request }) => {
-  const secure = import.meta.env.PROD || new URL(request.url).protocol === 'https:';
+const isProd = Boolean((import.meta as ImportMeta & { env?: { PROD?: boolean } }).env?.PROD);
 
-  // Explicitly expire cookie with the same attributes as login.
+export const POST: APIRoute = async ({ cookies, request }) => {
+  const secure = isProd || new URL(request.url).protocol === 'https:';
+
   cookies.set('master_token', '', {
     path: '/',
     httpOnly: true,
@@ -14,7 +17,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     maxAge: 0,
   });
 
-  return new Response(JSON.stringify({ success: true }), {
+  return new Response(JSON.stringify(createApiSuccess(createGuestSessionPayload())), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });

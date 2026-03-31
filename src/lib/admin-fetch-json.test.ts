@@ -51,6 +51,27 @@ test('fetchJSON: ok response with non-JSON text returns null data', async () => 
   }
 });
 
+test('fetchJSON: ok response unwraps canonical envelope data payload', async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({
+        ok: true,
+        data: { id: 101, slug: '101' },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+    const result = await fetchJSON('http://example.test/canonical');
+
+    assert.deepEqual(result, { ok: true, status: 200, data: { id: 101, slug: '101' } });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('fetchJSON: fetch throws returns 503', async () => {
   const originalFetch = globalThis.fetch;
 

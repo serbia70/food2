@@ -135,7 +135,12 @@
       "Bash(cmd.exe /c \"D:\\\\ai\\\\food\\\\.worktrees\\\\260311\\\\food2astro\\\\上传3.bat\")",
       "Bash(cmd.exe /c type \"D:\\\\ai\\\\food\\\\.worktrees\\\\260311\\\\food2astro\\\\上传3.bat\")",
       "Bash(\"D:/ai/food/.worktrees/260311/food2astro/上传3.bat\")",
-      "Bash(printf 'fix: deploy admin auth cookie fallback:*)"
+      "Bash(printf 'fix: deploy admin auth cookie fallback:*)",
+      "Bash(tasklist)",
+      "Bash(findstr /I \"node.exe pnpm.exe astro.exe\")",
+      "Bash(findstr \":3000\")",
+      "Bash(cmd.exe /c taskkill /PID 5056 /F)",
+      "Bash(\"/tmp/handlers_test.log\")"
     ]
   }
 }

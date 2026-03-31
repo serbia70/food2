@@ -55,8 +55,10 @@ if (masterTokenCookie && masterTokenCookie.value) {
           body: JSON.stringify({ username: 'admin', password }),
         });
         const data = await res.json();
+        const isOkEnvelope = data && typeof data === 'object' && 'ok' in data && data.ok === true;
+        const sessionData = isOkEnvelope && 'data' in data && data.data && typeof data.data === 'object' ? data.data : null;
 
-        if (!res.ok || !(data && data.success) || !(data && data.token)) {
+        if (!res.ok || !sessionData) {
           errorMsg.textContent = '密码错误';
           btn.disabled = false;
           btn.textContent = '进入系统';

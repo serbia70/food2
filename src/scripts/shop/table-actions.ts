@@ -1,4 +1,4 @@
-import { SHOP_EVENTS } from "../../lib/events";
+import { SHOP_EVENTS } from '../../lib/events.ts';
 
 type TableActionsOptions = {
   slug: string | null | undefined;

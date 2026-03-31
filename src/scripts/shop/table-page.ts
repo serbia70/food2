@@ -1,6 +1,6 @@
-import { createTableActions } from './table-actions';
-import { createTableDetails } from './table-details';
-import { buildTableLookupKeys, createBelgradeFormatter, escapeHtml } from './table-utils';
+import { createTableActions } from './table-actions.ts';
+import { createTableDetails } from './table-details.ts';
+import { buildTableLookupKeys, createBelgradeFormatter, escapeHtml } from './table-utils.ts';
 
 type TablePageConfig = {
   slug: string;

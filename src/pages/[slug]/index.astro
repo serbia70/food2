@@ -63,6 +63,9 @@ try {
 } catch {
   return new Response('Invalid upstream response', { status: 502 });
 }
+const isOkShopEnvelope = shop && typeof shop === 'object' && 'ok' in shop && shop.ok === true;
+const shopData = isOkShopEnvelope && 'data' in shop && shop.data && typeof shop.data === 'object' ? shop.data : null;
+shop = shopData || shop;
 const settings = parseJSON<any>(shop?.settings, {});
 const menuLayout = settings?.menu_layout || 'image-2col';
 const isMenuTextMode = settings?.menu_text_mode === true || menuLayout.startsWith('text'); // Check text mode setting
@@ -72,7 +75,8 @@ let rawMenu: any[] = [];
 if (menuRes.ok) {
   try {
     const parsed = await menuRes.json();
-    rawMenu = Array.isArray(parsed) ? parsed : [];
+    const parsedMenuData = parsed && typeof parsed === 'object' && 'ok' in parsed && parsed.ok === true && 'data' in parsed ? parsed.data : parsed;
+    rawMenu = Array.isArray(parsedMenuData) ? parsedMenuData : [];
   } catch {
     rawMenu = [];
   }
@@ -87,6 +91,7 @@ const normalizeMenuImageUrl = (raw: any): string => {
   const img = raw.trim();
   if (img.startsWith('http://') || img.startsWith('https://')) return img;
   if (img.startsWith('/uploads/')) return `${API_BASE_URL}${img}`;
+  if (img.startsWith('/assets/uploads/')) return `${API_BASE_URL}${img}`;
   return img;
 };
 
@@ -98,7 +103,7 @@ const activeMenu = (Array.isArray(rawMenu) ? rawMenu : [])
     products: (cat?.products || []).map((p: any) => ({
       ...p,
       subName: p?.sub_name || p?.subName || '',
-      img: normalizeMenuImageUrl(p?.img) || '/favicon.svg',
+      img: normalizeMenuImageUrl(p?.img || p?.imageUrl) || '/favicon.svg',
     })),
   }))
   .filter((cat: any) => Array.isArray(cat.products) && cat.products.length > 0);

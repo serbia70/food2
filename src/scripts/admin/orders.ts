@@ -77,22 +77,65 @@ export async function deleteArchivedOrders() {
   }
 }
 
+function readDispatchOrderSnapshot(orderId: string) {
+  const hidden = document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null
+    || document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null;
+  const runtime = (window as typeof window & { __adminRuntime?: { shopId?: number | string; shopSlug?: string; shop?: { name?: string } } }).__adminRuntime;
+  const phoneButton = document.querySelector(`[data-admin-action="open-chat"][data-phone][data-order-id="${orderId}"]`) as HTMLElement | null;
+  const orderCard = hidden?.closest('.order-card') as HTMLElement | null;
+  const inlinePhoneText = orderCard?.textContent?.match(/Tel:\s*([^\s)]+)/i)?.[1] || '';
+
+  return {
+    shop_id: runtime?.shopId,
+    shop_slug: runtime?.shopSlug,
+    shop_name: runtime?.shop?.name,
+    table_info: hidden?.dataset?.table || undefined,
+    total_amount: hidden?.dataset?.total || undefined,
+    user_phone: phoneButton?.dataset?.phone || inlinePhoneText || undefined,
+    status: hidden?.dataset?.status || undefined,
+    rider_remind_count: hidden?.dataset?.riderRemindCount ? Number(hidden.dataset.riderRemindCount) : undefined,
+  };
+}
+
 export async function publishRiderDispatch(orderId: string, etaMinutes: number) {
   const payload = {
     orderId,
     action: 'publish',
+    ...readDispatchOrderSnapshot(orderId),
     ...buildDispatchPublishPayload(etaMinutes, new Date().toISOString()),
   };
 
-  const res = await fetch('/api/admin/rider-dispatch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch('/api/admin/rider-dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : 'dispatch publish failed');
+  }
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data?.success === false) {
-    throw new Error(data?.error || 'dispatch publish failed');
+  const rawText = await res.text();
+  let data: unknown = {};
+  try {
+    data = JSON.parse(rawText || '{}') as unknown;
+  } catch {
+    data = {};
+  }
+
+  const parsed = data && typeof data === 'object' ? data as {
+    success?: boolean;
+    upstream_body?: string;
+    error?: string;
+  } : {};
+
+  if (!res.ok || parsed.success === false) {
+    const upstreamBody = String(parsed.upstream_body || '').trim();
+    const errorMessage = String(parsed.error || '').trim();
+    const rawMessage = rawText.trim();
+    const details = upstreamBody || errorMessage || rawMessage || `dispatch publish failed (${res.status})`;
+    throw new Error(details);
   }
 
   const tg = data?.telegram_dispatch;

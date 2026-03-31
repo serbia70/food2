@@ -1,42 +1,53 @@
-import type { APIContext } from "astro";
-import { API_BASE_URL } from "../../../config";
+import type { APIContext } from 'astro';
+import { API_BASE_URL } from '../../../config.ts';
+import { createApiError, createApiSuccess } from '../../../domain/api/api-envelope.ts';
+import { createGuestSessionPayload, createSessionPayload } from '../../../application/auth/load-session-query.ts';
+import { parseJsonEnvelope } from '../../../infra/http/http-json-client.ts';
 
 export const GET = async ({ cookies }: APIContext) => {
-  const token = cookies.get("admin_token")?.value;
+  const token = cookies.get('admin_token')?.value;
+
   if (!token) {
-    return new Response(JSON.stringify({ authenticated: false }), {
+    return new Response(JSON.stringify(createApiSuccess(createGuestSessionPayload())), {
       status: 401,
-      headers: { "Content-Type": "application/json" },
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 
   try {
-    const res = await fetch(`${API_BASE_URL}/api/admin/status`, {
+    const upstream = await fetch(`${API_BASE_URL}/api/admin/status`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    if (!res.ok) {
-      return new Response(JSON.stringify({ authenticated: false }), {
+    if (!upstream.ok) {
+      return new Response(JSON.stringify(createApiSuccess(createGuestSessionPayload())), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    const data: any = await res.json().catch(() => ({}));
+    const data = await parseJsonEnvelope<Record<string, unknown>>(upstream);
+    const shopIdRaw = data.shop_id;
+    const userId = typeof shopIdRaw === 'number' ? shopIdRaw : Number.parseInt(String(shopIdRaw || ''), 10);
+
     return new Response(
-      JSON.stringify({
-        authenticated: true,
-        shopId: data?.shop_id,
-      }),
+      JSON.stringify(createApiSuccess(createSessionPayload({
+        kind: 'admin',
+        token,
+        userId: Number.isFinite(userId) ? userId : undefined,
+      }))),
       {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { 'Content-Type': 'application/json' },
       },
     );
   } catch {
-    return new Response(JSON.stringify({ authenticated: false, error: "Backend unavailable" }), {
-      status: 503,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify(createApiError('backend_unavailable', 'Backend unavailable')),
+      {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
   }
 };

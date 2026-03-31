@@ -98,3 +98,19 @@ test('telegram claim callback rejects missing signature', () => {
   const unsigned = Buffer.from(JSON.stringify(raw), 'utf8').toString('base64url');
   assert.throws(() => parseTelegramClaimCallback(unsigned), /invalid_signature/);
 });
+
+test('buildTelegramDispatchMessage 在无 callback data 时只保留查看入口和电话', () => {
+  const message = buildTelegramDispatchMessage({
+    shopName: '101 店',
+    address: 'Main St 1',
+    totalAmount: 1200,
+    pickupEtaMinutes: 15,
+    phone: '0601',
+    dashboardLink: 'https://food.example.com/rider/dashboard?orderId=88&restaurantId=101',
+  });
+
+  assert.deepEqual(message.replyMarkup.inline_keyboard[0], [
+    { text: '查看并接单', url: 'https://food.example.com/rider/dashboard?orderId=88&restaurantId=101' },
+    { text: '联系门店', url: 'tel:0601' },
+  ]);
+});

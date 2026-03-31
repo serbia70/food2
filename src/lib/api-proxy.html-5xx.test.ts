@@ -25,10 +25,15 @@ test('proxyFetch: wraps upstream 5xx HTML into JSON (prevents browser JSON.parse
     assert.ok((res.headers.get('content-type') || '').includes('application/json'));
 
     const data = JSON.parse(text);
-    assert.equal(data?.success, false);
-    assert.ok(String(data?.error || '').length > 0);
-    assert.equal(data?.code, 'upstream_non_json');
-    assert.equal(data?.upstreamStatus, 502);
+    assert.equal(data?.ok, false);
+    assert.deepEqual(data?.error, {
+      code: 'upstream_non_json',
+      message: 'Upstream error (502)',
+      details: { upstreamStatus: 502 },
+    });
+    assert.equal(Object.hasOwn(data, 'success'), false);
+    assert.equal(Object.hasOwn(data, 'code'), false);
+    assert.equal(Object.hasOwn(data, 'upstreamStatus'), false);
   } finally {
     globalThis.fetch = fetchOrig;
   }

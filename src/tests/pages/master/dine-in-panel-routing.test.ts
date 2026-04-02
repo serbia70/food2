@@ -89,7 +89,26 @@ test('delivery cards avoid duplicate remark panel and remark action button', asy
 
   assert.doesNotMatch(tabTables, /<section class="remark-ui">/);
   assert.doesNotMatch(tabTables, /data-admin-action="order-remarks"/);
-  assert.match(tabTables, /📍 \{o\.table_info\}/);
+  assert.match(tabTables, /📍 \{o\.tableInfo\}/);
+  assert.doesNotMatch(tabTables, /📍 \{o\.table_info\}/);
+});
+
+test('delivery cards render awaiting_courier as Chinese copy', async () => {
+  const tabTablesPath = resolve(process.cwd(), 'src/components/admin/TabTables.astro');
+  const tabTables = await readFile(tabTablesPath, 'utf8');
+
+  assert.match(tabTables, /o\.status === 'awaiting_courier' \? '待骑手接单'/);
+  assert.match(tabTables, /o\.status === 'delivering' \? '派送中' : o\.status/);
+});
+
+test('delivery cards source exposes notify, assign and auto-assign actions', async () => {
+  const tabTablesPath = resolve(process.cwd(), 'src/components/admin/TabTables.astro');
+  const tabTables = await readFile(tabTablesPath, 'utf8');
+
+  assert.match(tabTables, /data-admin-action="open-delivery"/);
+  assert.match(tabTables, /data-admin-action="assign-rider"/);
+  assert.match(tabTables, /data-admin-action="auto-assign-rider"/);
+  assert.match(tabTables, /已指派骑手/);
 });
 
 test('admin page source removes top billing and status cards grid', async () => {
@@ -126,7 +145,9 @@ test('reservation visibility source falls back from new fields to legacy shop to
   const shopPage = await readFile(shopPagePath, 'utf8');
 
   assert.match(adminPage, /showReservationTab\s*=\s*adminBillingView\.reservationPlan\.enabled/);
-  assert.match(shopPage, /shop\?\.reservation_enabled\s*\?\?\s*settings\?\.reservation_enabled\s*\?\?\s*shop\?\.enableReservation\s*\?\?\s*shop\?\.enable_reservation\s*\?\?\s*settings\?\.subscription_enabled\s*\?\?\s*1/);
+  assert.match(shopPage, /const reservationEnabled = Number\(shop\?\.reservationEnabled \?\? settings\?\.reservationEnabled \?\? 1\) !== 0;/);
+  assert.match(shopPage, /const enableReservation = reservationEnabled;/);
+  assert.doesNotMatch(shopPage, /shop\?\.reservation_enabled\s*\?\?\s*settings\?\.reservation_enabled\s*\?\?\s*shop\?\.enableReservation\s*\?\?\s*shop\?\.enable_reservation\s*\?\?\s*settings\?\.subscription_enabled\s*\?\?\s*1/);
 });
 
 test('admin tabs source orders reservation before history', async () => {

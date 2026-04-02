@@ -1,6 +1,6 @@
 
 import { registerAdminGlobal, showAdminToast } from './globals';
-import { fetchAvailableRiders, publishRiderDispatch, remindRiders } from './orders';
+import { fetchAvailableRiders, publishRiderDispatch, remindRiders, assignRider, autoAssignRider } from './orders';
 
 const DELIVERY_ETA_OPTIONS = [10, 15, 20, 30, 45];
 
@@ -112,10 +112,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
 
 export async function remindAwaitingOrder(orderId: string) {
   if (!orderId) return;
-  const rider_remind_count = getReminderCountFromDataset(orderId);
+  const riderRemindCount = getReminderCountFromDataset(orderId);
 
   try {
-    await remindRiders(orderId, { rider_remind_count });
+    await remindRiders(orderId, { riderRemindCount });
   } catch (error: unknown) {
     showAdminToast(getErrorMessage(error, '提醒失败'));
   }
@@ -174,12 +174,71 @@ registerAdminGlobal('remind-riders', async (el: HTMLElement) => {
   await remindAwaitingOrder(orderId);
 }, false);
 
+function readAssignContext(orderId: string) {
+  const hidden = document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null
+    || document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null;
+  const runtime = (window as typeof window & {
+    __adminRuntime?: { shopSlug?: string };
+    __adminDispatchCursor?: Record<string, string>;
+  }).__adminRuntime;
+  const cursorStore = ((window as typeof window & { __adminDispatchCursor?: Record<string, string> }).__adminDispatchCursor ||= {});
+  const shopSlug = String(runtime?.shopSlug || '').trim();
+  const lastAssignedRiderId = String(cursorStore[shopSlug] || '').trim();
+  return {
+    shopSlug,
+    lastAssignedRiderId,
+    hidden,
+    cursorStore,
+  };
+}
+
+registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
+  const orderId = String(el?.dataset?.orderId || '').trim();
+  if (!orderId) return;
+
+  try {
+    const riders = await fetchAvailableRiders();
+    if (riders.length === 0) {
+      showAdminToast('当前无可接单骑手');
+      return;
+    }
+
+    const lines = riders.map((rider, idx) => `${idx + 1}. ${rider.name} (${rider.phone})`);
+    const selected = prompt(`选择要指派的骑手：\n${lines.join('\n')}\n\n请输入序号`);
+    if (!selected) return;
+
+    const target = riders[Number(selected) - 1];
+    if (!target) {
+      showAdminToast('序号无效');
+      return;
+    }
+
+    const { shopSlug, cursorStore } = readAssignContext(orderId);
+    await assignRider(orderId, String(target.id || ''), { shopSlug });
+    if (shopSlug) cursorStore[shopSlug] = String(target.id || '').trim();
+  } catch (error) {
+    showAdminToast(getErrorMessage(error, '指派骑手失败'));
+  }
+}, false);
+
+registerAdminGlobal('auto-assign-rider', async (el: HTMLElement) => {
+  const orderId = String(el?.dataset?.orderId || '').trim();
+  if (!orderId) return;
+
+  try {
+    const { shopSlug, lastAssignedRiderId } = readAssignContext(orderId);
+    await autoAssignRider(orderId, { shopSlug, lastAssignedRiderId });
+  } catch (error) {
+    showAdminToast(getErrorMessage(error, '自动派单失败'));
+  }
+}, false);
+
 export async function updateOrderStatus(orderId: string | number, status: string, driverInfo: any = null) {
   try {
     const payload: any = { status };
     if (driverInfo) {
-      payload.courier_name = driverInfo.name;
-      payload.courier_phone = driverInfo.phone;
+      payload.courierName = driverInfo.name;
+      payload.courierPhone = driverInfo.phone;
     }
     const res = await fetch(`/api/admin/orders/${orderId}/status`, {
       method: "PUT",

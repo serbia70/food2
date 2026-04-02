@@ -1,81 +1,4 @@
-export async function loadOrderStats() {
-  const restaurantId = window.location.pathname.split("/")[2];
-  try {
-    const res = await fetch("/api/admin/orders/archive", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "stats", restaurantId }),
-    });
-    const data = await res.json();
-    if (!data.success) return;
-
-    const completedEl = document.getElementById("completed-orders-count");
-    if (completedEl) completedEl.textContent = String(data.stats?.completed || 0);
-
-    const archivedEl = document.getElementById("archived-orders-count");
-    if (archivedEl) archivedEl.textContent = String(data.stats?.archived || 0);
-
-    const dbSizeEl = document.getElementById("db-size");
-    if (dbSizeEl) dbSizeEl.textContent = "Calculating...";
-  } catch (error) {
-    console.error("loadOrderStats failed:", error);
-  }
-}
-
-export async function archiveOldOrders() {
-  const restaurantId = window.location.pathname.split("/")[2];
-  const monthsInput = document.getElementById("archive-months") as HTMLInputElement | null;
-  const months = Number(monthsInput?.value || 3);
-
-  if (!confirm(`Archive completed orders older than ${months} months?`)) return;
-
-  try {
-    const res = await fetch("/api/admin/orders/archive", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "archive", restaurantId, months }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      alert(data.message || "Archived.");
-      loadOrderStats();
-      return;
-    }
-    alert("Archive failed: " + (data.error || "unknown error"));
-  } catch (error: any) {
-    alert("Archive failed: " + (error?.message || error));
-  }
-}
-
-import {
-  buildContactableRiderRows,
-  buildDispatchPublishPayload,
-  buildReminderPayload,
-} from '../../lib/rider-dispatch.ts';
-
-export async function deleteArchivedOrders() {
-  const restaurantId = window.location.pathname.split("/")[2];
-  const password = prompt("Dangerous operation: permanently delete archived orders.\nInput admin password to continue:");
-  if (!password) return;
-  if (!confirm("Final confirm: permanently delete all archived orders?")) return;
-
-  try {
-    const res = await fetch("/api/admin/orders/archive", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "delete_archived", restaurantId }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      alert((data.message || "Deleted.") + (data.backup ? `\nBackup: ${data.backup}` : ""));
-      loadOrderStats();
-      return;
-    }
-    alert("Delete failed: " + (data.error || "unknown error"));
-  } catch (error: any) {
-    alert("Delete failed: " + (error?.message || error));
-  }
-}
+import { buildContactableRiderRows, buildDispatchPublishPayload, buildReminderPayload } from '../../lib/rider-dispatch.ts';
 
 function readDispatchOrderSnapshot(orderId: string) {
   const hidden = document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null
@@ -86,14 +9,14 @@ function readDispatchOrderSnapshot(orderId: string) {
   const inlinePhoneText = orderCard?.textContent?.match(/Tel:\s*([^\s)]+)/i)?.[1] || '';
 
   return {
-    shop_id: runtime?.shopId,
-    shop_slug: runtime?.shopSlug,
-    shop_name: runtime?.shop?.name,
-    table_info: hidden?.dataset?.table || undefined,
-    total_amount: hidden?.dataset?.total || undefined,
-    user_phone: phoneButton?.dataset?.phone || inlinePhoneText || undefined,
+    shopId: runtime?.shopId,
+    shopSlug: runtime?.shopSlug,
+    shopName: runtime?.shop?.name,
+    tableInfo: hidden?.dataset?.table || undefined,
+    totalAmount: hidden?.dataset?.total || undefined,
+    userPhone: phoneButton?.dataset?.phone || inlinePhoneText || undefined,
     status: hidden?.dataset?.status || undefined,
-    rider_remind_count: hidden?.dataset?.riderRemindCount ? Number(hidden.dataset.riderRemindCount) : undefined,
+    riderRemindCount: hidden?.dataset?.riderRemindCount ? Number(hidden.dataset.riderRemindCount) : undefined,
   };
 }
 
@@ -172,7 +95,7 @@ export async function publishRiderDispatch(orderId: string, etaMinutes: number) 
   else location.reload();
 }
 
-export async function remindRiders(orderId: string, order: { rider_remind_count?: number | null } = {}) {
+export async function remindRiders(orderId: string, order: { riderRemindCount?: number | null } = {}) {
   const payload = {
     orderId,
     action: 'remind',
@@ -206,12 +129,51 @@ export async function fetchAvailableRiders() {
   return buildContactableRiderRows(rows);
 }
 
+export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string } = {}) {
+  const res = await fetch('/api/admin/rider-assign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'manual_assign',
+      orderId,
+      riderId,
+      shopSlug: input.shopSlug || '',
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.error || 'assign rider failed');
+  }
+
+  if (window.showToast) window.showToast('已指派骑手');
+  if (window.refreshOrderList) window.refreshOrderList();
+}
+
+export async function autoAssignRider(orderId: string, input: { shopSlug?: string; lastAssignedRiderId?: string } = {}) {
+  const res = await fetch('/api/admin/rider-assign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'auto_assign',
+      orderId,
+      shopSlug: input.shopSlug || '',
+      lastAssignedRiderId: input.lastAssignedRiderId || '',
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.error || 'auto assign rider failed');
+  }
+
+  if (window.showToast) window.showToast('已自动派单');
+  if (window.refreshOrderList) window.refreshOrderList();
+}
+
 if (typeof window !== "undefined") {
   const registry = (window.__adminHandlers ||= {});
 
-  window.loadOrderStats = loadOrderStats;
-  window.archiveOldOrders = archiveOldOrders;
-  window.deleteArchivedOrders = deleteArchivedOrders;
 
   window.updateOrderStatus = async function (
     orderId: string | number,
@@ -221,8 +183,8 @@ if (typeof window !== "undefined") {
     try {
       const payload: any = { status };
       if (driverInfo) {
-        payload.courier_name = driverInfo.name;
-        payload.courier_phone = driverInfo.phone;
+        payload.courierName = driverInfo.name;
+        payload.courierPhone = driverInfo.phone;
       }
 
       const res = await fetch(`/api/admin/orders/${encodeURIComponent(String(orderId))}/status`, {
@@ -268,9 +230,6 @@ if (typeof window !== "undefined") {
   };
 
   Object.assign(registry, {
-    loadOrderStats,
-    archiveOldOrders,
-    deleteArchivedOrders,
     updateOrderStatus: window.updateOrderStatus,
     refreshOrderList: window.refreshOrderList,
     markPaid: window.markPaid,

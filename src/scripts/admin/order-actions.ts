@@ -192,11 +192,61 @@ function readAssignContext(orderId: string) {
   };
 }
 
+async function pickDispatchEtaMinutes() {
+  const modal = document.getElementById('delivery-modal');
+  const listEl = document.getElementById('driver-select-list');
+  if (!modal || !listEl) return 0;
+
+  modal.dataset.etaMinutes = '';
+  listEl.replaceChildren();
+
+  DELIVERY_ETA_OPTIONS.forEach((minutes, index) => {
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.className = 'driver-option';
+    option.dataset.etaMinutes = String(minutes);
+    option.textContent = `${minutes} 分钟`;
+    option.style.width = '100%';
+    option.style.padding = '10px';
+    option.style.border = '1px solid #eee';
+    option.style.borderRadius = '6px';
+    option.style.cursor = 'pointer';
+    option.style.background = '#fff';
+    option.style.marginBottom = '8px';
+    option.addEventListener('click', () => {
+      modal.dataset.etaMinutes = String(minutes);
+      listEl.querySelectorAll('[data-eta-minutes]').forEach((node) => {
+        const item = node as HTMLElement;
+        item.style.background = '#fff';
+        item.style.borderColor = '#eee';
+      });
+      option.style.background = '#eef2ff';
+      option.style.borderColor = '#6366f1';
+    });
+
+    listEl.appendChild(option);
+    if (index === 1) option.click();
+  });
+
+  const selected = prompt(`请选择预计取餐时间：\n${DELIVERY_ETA_OPTIONS.map((m, idx) => `${idx + 1}. ${m} 分钟`).join('\n')}\n\n请输入序号`);
+  if (!selected) return 0;
+  const eta = DELIVERY_ETA_OPTIONS[Number(selected) - 1] || 0;
+  if (!eta) return 0;
+  modal.dataset.etaMinutes = String(eta);
+  return eta;
+}
+
 registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
   const orderId = String(el?.dataset?.orderId || '').trim();
   if (!orderId) return;
 
   try {
+    const pickupEtaMinutes = await pickDispatchEtaMinutes();
+    if (!pickupEtaMinutes) {
+      showAdminToast('请选择预计取餐时间');
+      return;
+    }
+
     const riders = await fetchAvailableRiders();
     if (riders.length === 0) {
       showAdminToast('当前无可接单骑手');
@@ -214,7 +264,7 @@ registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
     }
 
     const { shopSlug, cursorStore } = readAssignContext(orderId);
-    await assignRider(orderId, String(target.id || ''), { shopSlug });
+    await assignRider(orderId, String(target.id || ''), { shopSlug, pickupEtaMinutes });
     if (shopSlug) cursorStore[shopSlug] = String(target.id || '').trim();
   } catch (error) {
     showAdminToast(getErrorMessage(error, '指派骑手失败'));
@@ -226,8 +276,14 @@ registerAdminGlobal('auto-assign-rider', async (el: HTMLElement) => {
   if (!orderId) return;
 
   try {
+    const pickupEtaMinutes = await pickDispatchEtaMinutes();
+    if (!pickupEtaMinutes) {
+      showAdminToast('请选择预计取餐时间');
+      return;
+    }
+
     const { shopSlug, lastAssignedRiderId } = readAssignContext(orderId);
-    await autoAssignRider(orderId, { shopSlug, lastAssignedRiderId });
+    await autoAssignRider(orderId, { shopSlug, lastAssignedRiderId, pickupEtaMinutes });
   } catch (error) {
     showAdminToast(getErrorMessage(error, '自动派单失败'));
   }

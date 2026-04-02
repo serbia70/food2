@@ -14,8 +14,8 @@ export function readOnlineRiders(input: unknown): AssignableRider[] {
       name: String(row.name || '').trim(),
       phone: String(row.phone || '').trim(),
       status: String(row.status || '').trim() as AssignableRider['status'],
-      telegramChatId: typeof row.telegramChatId === 'string' ? row.telegramChatId : undefined,
-      telegram_chat_id: typeof row.telegram_chat_id === 'string' ? row.telegram_chat_id : undefined,
+      ...(typeof row.telegramChatId === 'string' ? { telegramChatId: row.telegramChatId } : {}),
+      ...(typeof row.telegram_chat_id === 'string' ? { telegram_chat_id: row.telegram_chat_id } : {}),
     }))
     .filter((row) => row.status === 'available' && row.phone)
     .sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
@@ -35,7 +35,13 @@ export function pickNextAvailableRider({
   return riders[(currentIndex + 1) % riders.length] || null;
 }
 
-export function buildAssignedOrderStatusPayload({ rider }: { rider: AssignableRider }) {
+export function buildAssignedOrderStatusPayload({
+  rider,
+  pickupEtaMinutes,
+}: {
+  rider: AssignableRider;
+  pickupEtaMinutes?: number;
+}) {
   const riderName = String(rider?.name || '').trim();
   const riderPhone = String(rider?.phone || '').trim();
 
@@ -45,5 +51,6 @@ export function buildAssignedOrderStatusPayload({ rider }: { rider: AssignableRi
     courierPhone: riderPhone,
     courier_name: riderName,
     courier_phone: riderPhone,
+    pickupEtaMinutes: Number.isFinite(Number(pickupEtaMinutes)) ? Number(pickupEtaMinutes) : 0,
   };
 }

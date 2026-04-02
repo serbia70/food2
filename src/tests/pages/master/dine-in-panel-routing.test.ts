@@ -101,11 +101,11 @@ test('delivery cards render awaiting_courier as Chinese copy', async () => {
   assert.match(tabTables, /o\.status === 'delivering' \? '派送中' : o\.status/);
 });
 
-test('delivery cards source exposes notify, assign and auto-assign actions', async () => {
+test('delivery cards source exposes assign and auto-assign actions without notify button', async () => {
   const tabTablesPath = resolve(process.cwd(), 'src/components/admin/TabTables.astro');
   const tabTables = await readFile(tabTablesPath, 'utf8');
 
-  assert.match(tabTables, /data-admin-action="open-delivery"/);
+  assert.doesNotMatch(tabTables, /data-admin-action="open-delivery"/);
   assert.match(tabTables, /data-admin-action="assign-rider"/);
   assert.match(tabTables, /data-admin-action="auto-assign-rider"/);
   assert.match(tabTables, /已指派骑手/);

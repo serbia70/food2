@@ -19,7 +19,7 @@ test.afterEach(() => {
   globalThis.location = originalLocation;
 });
 
-test('assignRider posts manual_assign payload', async () => {
+test('assignRider posts manual_assign payload with eta', async () => {
   let capturedBody: Record<string, unknown> | null = null;
   globalThis.window = { showToast() {}, refreshOrderList() {} } as any;
 
@@ -31,17 +31,18 @@ test('assignRider posts manual_assign payload', async () => {
     });
   };
 
-  await assignRider('470', '7', { shopSlug: 'demo-shop' });
+  await assignRider('470', '7', { shopSlug: 'demo-shop', pickupEtaMinutes: 15 });
 
   assert.deepEqual(capturedBody, {
     action: 'manual_assign',
     orderId: '470',
     riderId: '7',
     shopSlug: 'demo-shop',
+    pickupEtaMinutes: 15,
   });
 });
 
-test('autoAssignRider posts auto_assign payload with cursor', async () => {
+test('autoAssignRider posts auto_assign payload with cursor and eta', async () => {
   let capturedBody: Record<string, unknown> | null = null;
   globalThis.window = { showToast() {}, refreshOrderList() {} } as any;
 
@@ -53,13 +54,14 @@ test('autoAssignRider posts auto_assign payload with cursor', async () => {
     });
   };
 
-  await autoAssignRider('471', { shopSlug: 'demo-shop', lastAssignedRiderId: '7' });
+  await autoAssignRider('471', { shopSlug: 'demo-shop', lastAssignedRiderId: '7', pickupEtaMinutes: 20 });
 
   assert.deepEqual(capturedBody, {
     action: 'auto_assign',
     orderId: '471',
     shopSlug: 'demo-shop',
     lastAssignedRiderId: '7',
+    pickupEtaMinutes: 20,
   });
 });
 

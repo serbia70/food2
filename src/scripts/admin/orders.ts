@@ -129,7 +129,7 @@ export async function fetchAvailableRiders() {
   return buildContactableRiderRows(rows);
 }
 
-export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string } = {}) {
+export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number } = {}) {
   const res = await fetch('/api/admin/rider-assign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -138,6 +138,7 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
       orderId,
       riderId,
       shopSlug: input.shopSlug || '',
+      pickupEtaMinutes: Number(input.pickupEtaMinutes || 0),
     }),
   });
 
@@ -150,7 +151,7 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
   if (window.refreshOrderList) window.refreshOrderList();
 }
 
-export async function autoAssignRider(orderId: string, input: { shopSlug?: string; lastAssignedRiderId?: string } = {}) {
+export async function autoAssignRider(orderId: string, input: { shopSlug?: string; lastAssignedRiderId?: string; pickupEtaMinutes?: number } = {}) {
   const res = await fetch('/api/admin/rider-assign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -159,6 +160,7 @@ export async function autoAssignRider(orderId: string, input: { shopSlug?: strin
       orderId,
       shopSlug: input.shopSlug || '',
       lastAssignedRiderId: input.lastAssignedRiderId || '',
+      pickupEtaMinutes: Number(input.pickupEtaMinutes || 0),
     }),
   });
 

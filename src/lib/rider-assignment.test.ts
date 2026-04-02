@@ -74,6 +74,7 @@ test('buildAssignedOrderStatusPayload writes canonical delivering payload', () =
   assert.deepEqual(
     buildAssignedOrderStatusPayload({
       rider: { id: 2, name: 'B', phone: '062', status: 'available' },
+      pickupEtaMinutes: 15,
     }),
     {
       status: 'delivering',
@@ -81,6 +82,7 @@ test('buildAssignedOrderStatusPayload writes canonical delivering payload', () =
       courierPhone: '062',
       courier_name: 'B',
       courier_phone: '062',
+      pickupEtaMinutes: 15,
     },
   );
 });

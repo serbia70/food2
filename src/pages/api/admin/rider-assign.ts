@@ -79,6 +79,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const shopSlug = String(body.shopSlug || '').trim();
   const lastAssignedRiderId = String(body.lastAssignedRiderId || '').trim();
   const manualRiderId = String(body.riderId || '').trim();
+  const pickupEtaMinutes = Number(body.pickupEtaMinutes || 0);
 
   if (action !== 'manual_assign' && action !== 'auto_assign') {
     return new Response(JSON.stringify({ success: false, error: 'invalid_action' }), {
@@ -131,7 +132,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     url: `${API_BASE_URL}/api/admin/orders/${encodeURIComponent(orderId)}/status`,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildAssignedOrderStatusPayload({ rider: target })),
+    body: JSON.stringify(buildAssignedOrderStatusPayload({ rider: target, pickupEtaMinutes })),
   });
 
   const updateText = await updateRes.text();

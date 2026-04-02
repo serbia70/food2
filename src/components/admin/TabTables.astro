@@ -259,7 +259,6 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
 
                 {(o.status === 'pending' || o.status === 'confirmed' || o.status === 'awaiting_courier') && (
                   <>
-                    <button class="btn-xs" data-admin-action="open-delivery" data-order-id={o.id} style="background:#2196f3; color:white;">🛵 通知骑手</button>
                     <button class="btn-xs" data-admin-action="assign-rider" data-order-id={o.id} style="background:#7c3aed; color:white;">👤 指派骑手</button>
                     <button class="btn-xs" data-admin-action="auto-assign-rider" data-order-id={o.id} style="background:#0f766e; color:white;">🔁 自动派单</button>
                     <button class="btn-xs" data-admin-action="mark-paid" data-order-id={o.id} style="background:#4caf50; color:white;">💰 结账</button>

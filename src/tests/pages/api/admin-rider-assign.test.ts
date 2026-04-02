@@ -42,6 +42,7 @@ test('manual_assign updates order to delivering for selected available rider', a
       assert.equal(body.status, 'delivering');
       assert.equal(body.courierName, '骑手A');
       assert.equal(body.courierPhone, '061');
+      assert.equal(body.pickupEtaMinutes, 15);
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -57,7 +58,7 @@ test('manual_assign updates order to delivering for selected available rider', a
     request: new Request('http://localhost:3000/api/admin/rider-assign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', cookie: 'admin_token=test-token' },
-      body: JSON.stringify({ action: 'manual_assign', orderId: '470', riderId: '7', shopSlug: 'demo-shop' }),
+      body: JSON.stringify({ action: 'manual_assign', orderId: '470', riderId: '7', shopSlug: 'demo-shop', pickupEtaMinutes: 15 }),
     }),
     cookies: createCookies(),
   } as any);
@@ -84,6 +85,7 @@ test('auto_assign picks next available rider when cursor is present', async () =
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.equal(body.courierName, '骑手B');
       assert.equal(body.courierPhone, '062');
+      assert.equal(body.pickupEtaMinutes, 20);
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -99,7 +101,7 @@ test('auto_assign picks next available rider when cursor is present', async () =
     request: new Request('http://localhost:3000/api/admin/rider-assign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', cookie: 'admin_token=test-token' },
-      body: JSON.stringify({ action: 'auto_assign', orderId: '471', shopSlug: 'demo-shop', lastAssignedRiderId: '7' }),
+      body: JSON.stringify({ action: 'auto_assign', orderId: '471', shopSlug: 'demo-shop', lastAssignedRiderId: '7', pickupEtaMinutes: 20 }),
     }),
     cookies: createCookies(),
   } as any);

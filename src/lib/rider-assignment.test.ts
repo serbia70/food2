@@ -83,6 +83,7 @@ test('buildAssignedOrderStatusPayload writes canonical delivering payload', () =
       courier_name: 'B',
       courier_phone: '062',
       pickupEtaMinutes: 15,
+      pickup_eta_minutes: 15,
     },
   );
 });

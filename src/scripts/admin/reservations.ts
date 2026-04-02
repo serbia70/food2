@@ -2,6 +2,20 @@
 import { showTab } from './core';
 import { getAdminHandler, getAdminRuntimeState, registerAdminGlobal, showAdminToast } from './globals';
 
+async function fetchJSONWithRetry(url: string, init?: RequestInit) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const res = await fetch(url, init);
+      const data = await res.json();
+      return { res, data };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 function setStyles(el: HTMLElement, styles: Record<string, string>) {
   Object.entries(styles).forEach(([key, value]) => {
     (el.style as any)[key] = value;
@@ -24,17 +38,55 @@ function buildReservationActionButton(text: string, handler: () => void, styles:
   return button;
 }
 
+function getLocalTodayISODate() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function extractReservations(data: any) {
+  return Array.isArray(data)
+    ? data
+    : Array.isArray(data?.reservations)
+      ? data.reservations
+      : Array.isArray(data?.data?.reservations)
+        ? data.data.reservations
+        : [];
+}
+
 export async function loadReservationStats() {
   try {
-    const res = await fetch('/api/admin/reservation-stats');
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    const today = getLocalTodayISODate();
+    const { res, data } = await fetchJSONWithRetry(`/api/admin/reservations?date=${today}`);
+    if (res.status === 401 || res.status === 403) {
+      window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+      return;
+    }
+    if (!res.ok) throw new Error(String(data?.error || 'load_reservation_stats_failed'));
+    const items = extractReservations(data);
+    const stats = items.reduce((acc: any, item: any) => {
+      const status = String(item?.status || '').trim();
+      acc.today_total += 1;
+      if (status === 'pending') acc.today_pending += 1;
+      if (status === 'confirmed') acc.today_confirmed += 1;
+      if (status === 'completed') acc.today_completed += 1;
+      if (status === 'cancelled') acc.today_cancelled += 1;
+      return acc;
+    }, {
+      today_total: 0,
+      today_pending: 0,
+      today_confirmed: 0,
+      today_completed: 0,
+      today_cancelled: 0,
+    });
     const map: any = {
-      'res-stat-total': data.today_total,
-      'res-stat-pending': data.today_pending,
-      'res-stat-confirmed': data.today_confirmed,
-      'res-stat-completed': data.today_completed,
-      'res-stat-cancelled': data.today_cancelled
+      'res-stat-total': stats.today_total,
+      'res-stat-pending': stats.today_pending,
+      'res-stat-confirmed': stats.today_confirmed,
+      'res-stat-completed': stats.today_completed,
+      'res-stat-cancelled': stats.today_cancelled,
     };
     Object.keys(map).forEach(id => {
       const el = document.getElementById(id);
@@ -76,16 +128,17 @@ export async function loadReservations() {
         query += (query ? '&' : '?') + `status=${statusSelect.value}`;
     }
 
-    const res = await fetch(`/api/admin/reservations${query}`);
-    const data = await res.json();
-    
-    if (Array.isArray(data)) {
-      renderReservations(data);
-    } else if (data && data.reservations && Array.isArray(data.reservations)) {
-      renderReservations(data.reservations);
-    } else {
-       renderReservations([]);
+    const { res, data } = await fetchJSONWithRetry(`/api/admin/reservations${query}`);
+    if (res.status === 401 || res.status === 403) {
+      window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+      return;
     }
+    if (!res.ok) {
+      throw new Error(String(data?.error || 'load_reservations_failed'));
+    }
+
+    const items = extractReservations(data);
+    renderReservations(items);
   } catch (err) {
     console.error('loadReservations error:', err);
     setReservationListMessage(list, '加载失败 / Neuspešno učitavanje', 'red');
@@ -108,7 +161,7 @@ function renderReservations(items: any[]) {
   const cards = items.map(item => {
     let hasItems = false;
     try {
-        const parsed = JSON.parse(item.items_json || '[]');
+        const parsed = JSON.parse(item.itemsJson || '[]');
         if (Array.isArray(parsed) && (parsed.length > 0 || (typeof parsed === 'object' && Object.keys(parsed).length > 0))) {
             hasItems = true;
         }
@@ -120,8 +173,8 @@ function renderReservations(items: any[]) {
         span.className = 'hidden-data hidden-data-res';
         span.dataset.oid = 'res-' + item.id;
         span.dataset.orderId = 'res-' + item.id;
-        span.dataset.items = item.items_json || '[]';
-        span.dataset.total = String(item.total_amount || 0);
+        span.dataset.items = item.itemsJson || '[]';
+        span.dataset.total = String(item.totalAmount || 0);
         span.dataset.isReservation = 'true';
         hiddenContainer.appendChild(span);
     }
@@ -138,7 +191,7 @@ function renderReservations(items: any[]) {
     setStyles(top, { display: 'flex', justifyContent: 'space-between', marginBottom: '8px' });
     const title = document.createElement('span');
     setStyles(title, { fontWeight: 'bold', color: '#1e293b', fontSize: '16px' });
-    title.textContent = `${item.customer_name || '客人'} (${item.guest_count}人)`;
+    title.textContent = `${item.customerName || '客人'} (${item.guestCount}人)`;
     const status = document.createElement('span');
     setStyles(status, { padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '600' });
     status.style.cssText += getStatusStyle(item.status);
@@ -147,10 +200,10 @@ function renderReservations(items: any[]) {
 
     const time = document.createElement('div');
     setStyles(time, { fontSize: '14px', color: '#475569', marginBottom: '4px' });
-    time.textContent = `📅 预约时间: ${item.reservation_time}`;
+    time.textContent = `📅 预约时间: ${item.reservationTime}`;
     const phone = document.createElement('div');
     setStyles(phone, { fontSize: '14px', color: '#475569', marginBottom: '8px' });
-    phone.textContent = `📞 联系电话: ${item.customer_phone}`;
+    phone.textContent = `📞 联系电话: ${item.customerPhone}`;
 
     const actions = document.createElement('div');
     setStyles(actions, { marginTop: '15px', display: 'flex', gap: '10px', flexWrap: 'wrap' });
@@ -304,7 +357,7 @@ registerAdminGlobal('confirmCheckin', async function() {
         const res = await fetch(`/api/admin/reservations`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ id: Number(resId), action: 'checkin', table_info: tableName })
+            body: JSON.stringify({ id: Number(resId), action: 'checkin', tableInfo: tableName })
         });
         const data = await res.json();
         if (data.success) {

@@ -5,8 +5,8 @@ import { parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
 export const prerender = false;
 
 interface TelegramClaimBody {
-  callback_data?: unknown;
-  chat_id?: unknown;
+  callbackData?: unknown;
+  chatId?: unknown;
 }
 
 function readTelegramRequestSecret(): string {
@@ -44,8 +44,8 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  const callbackData = String(parsedBody.callback_data || '').trim();
-  const chatId = String(parsedBody.chat_id || '').trim();
+  const callbackData = String(parsedBody.callbackData || '').trim();
+  const chatId = String(parsedBody.chatId || '').trim();
   if (!callbackData) {
     return new Response(JSON.stringify({ success: false, error: 'callback_data_required' }), {
       status: 400,

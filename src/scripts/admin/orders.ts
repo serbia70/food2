@@ -28,12 +28,16 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
   if (!res.ok || data?.success === false) {
     throw new Error(data?.error || 'assign rider failed');
   }
+  if (data?.telegram_notification?.success === false) {
+    const detail = String(data?.telegram_notification?.error || 'telegram notify failed').trim();
+    throw new Error(detail || 'telegram notify failed');
+  }
 
   if (window.showToast) window.showToast('已指派骑手');
   if (window.refreshOrderList) window.refreshOrderList();
 }
 
-export async function autoAssignRider(orderId: string, input: { shopSlug?: string; lastAssignedRiderId?: string; pickupEtaMinutes?: number } = {}) {
+export async function autoAssignRider(orderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number } = {}) {
   const res = await fetch('/api/admin/rider-assign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -41,7 +45,6 @@ export async function autoAssignRider(orderId: string, input: { shopSlug?: strin
       action: 'auto_assign',
       orderId,
       shopSlug: input.shopSlug || '',
-      lastAssignedRiderId: input.lastAssignedRiderId || '',
       pickupEtaMinutes: Number(input.pickupEtaMinutes || 0),
     }),
   });

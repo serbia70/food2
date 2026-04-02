@@ -122,8 +122,11 @@ test('master rider status card source exposes no-js expandable contract', async 
 
 test('master riders tab no longer depends on missing /api/master/riders upstream', async () => {
   const page = await readFile(pagePath, 'utf8');
+  const loader = await readFile(resolve(process.cwd(), 'src/lib/master-rider-status-loader.ts'), 'utf8');
 
   assert.doesNotMatch(page, /const MASTER_RIDERS_PROXY_PATH = '\/api\/master\/riders';/);
   assert.doesNotMatch(page, /new URL\(MASTER_RIDERS_PROXY_PATH, Astro\.url\)/);
   assert.doesNotMatch(page, /骑手状态加载失败/);
+  assert.match(loader, /const ridersProxyUrl = new URL\('\/api\/admin\/riders', requestUrl\);/);
+  assert.doesNotMatch(loader, /\$\{API_BASE_URL\}\/api\/admin\/riders/);
 });

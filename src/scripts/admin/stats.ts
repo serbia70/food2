@@ -1,4 +1,34 @@
 
+async function fetchJSONWithRetry(url: string, init?: RequestInit) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const res = await fetch(url, init);
+      const data = await res.json();
+      return { res, data };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+function unwrapStatsPayload(data: unknown) {
+  if (
+    data
+    && typeof data === 'object'
+    && 'ok' in data
+    && (data as { ok?: unknown }).ok === true
+    && 'data' in data
+    && (data as { data?: unknown }).data
+    && typeof (data as { data?: unknown }).data === 'object'
+  ) {
+    return (data as { data: Record<string, unknown> }).data;
+  }
+
+  return data;
+}
+
 export async function loadStats() {
   const start = (document.getElementById('stats-start') as HTMLInputElement)?.value;
   const end = (document.getElementById('stats-end') as HTMLInputElement)?.value;
@@ -8,23 +38,10 @@ export async function loadStats() {
   }
   const type = (document.getElementById('stats-type') as HTMLSelectElement)?.value || 'all';
   try {
-    const res = await fetch(
+    const { res, data } = await fetchJSONWithRetry(
       `/api/admin/stats?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&type=${encodeURIComponent(type)}`,
     );
-    let data: any;
-    try {
-      data = await res.json();
-    } catch (err) {
-      console.error('Failed to parse stats response', err);
-      if (res.status === 401 || res.status === 403) {
-        alert('登录已失效，请重新登录 / Sesija je istekla, prijavite se ponovo');
-        window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
-        return;
-      }
-      alert('查询失败 / Neuspešan upit：响应解析失败');
-      return;
-    }
-    if (!res.ok || data?.success === false) {
+    if (!res.ok || data?.success === false || data?.ok === false) {
       if (res.status === 401 || res.status === 403) {
         alert('登录已失效，请重新登录 / Sesija je istekla, prijavite se ponovo');
         window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
@@ -34,8 +51,8 @@ export async function loadStats() {
       alert(`查询失败 / Neuspešan upit${message}`);
       return;
     }
-    renderStats(data);
-  } catch (e: any) {
+    renderStats(unwrapStatsPayload(data));
+  } catch {
     alert('查询失败 / Neuspešan upit');
   }
 }
@@ -107,19 +124,18 @@ function getLocalTodayISODate() {
   return `${year}-${month}-${day}`;
 }
 
-export function initDefaultDatesAndLoad() {
+if (typeof window !== 'undefined') {
+  window.loadStats = loadStats;
+}
+
+export function initDefaultStatsDates() {
   const startInput = document.getElementById('stats-start') as HTMLInputElement | null;
   const endInput = document.getElementById('stats-end') as HTMLInputElement | null;
   if (!startInput || !endInput) return;
-  
-  // Only set if empty
+
   if (!startInput.value) {
-      const today = getLocalTodayISODate();
-      startInput.value = today;
-      endInput.value = today;
-      void loadStats();
+    const today = getLocalTodayISODate();
+    startInput.value = today;
+    endInput.value = today;
   }
 }
-
-// Remove the auto-listener, we will call it explicitly
-// document.addEventListener('DOMContentLoaded', initDefaultDatesAndLoad);

@@ -8,7 +8,7 @@ test('normalizeRiderSession keeps required rider fields', () => {
     name: 'Test Rider',
     phone: '1234567890',
     status: 'available',
-    telegram_chat_id: '123',
+    telegramChatId: '123',
     extra: 'ignore me'
   };
   const result = normalizeRiderSession(input);
@@ -17,7 +17,7 @@ test('normalizeRiderSession keeps required rider fields', () => {
     name: 'Test Rider',
     phone: '1234567890',
     status: 'available',
-    telegram_chat_id: '123'
+    telegramChatId: '123'
   });
 });
 
@@ -54,12 +54,12 @@ test('normalizeRiderSession trims fields', () => {
     name: '  Name  ',
     phone: '  123  ',
     status: 'available',
-    telegram_chat_id: '  chat  '
+    telegramChatId: '  chat  '
   };
   const result = normalizeRiderSession(input);
   assert.strictEqual(result.name, 'Name');
   assert.strictEqual(result.phone, '123');
-  assert.strictEqual(result.telegram_chat_id, 'chat');
+  assert.strictEqual(result.telegramChatId, 'chat');
 });
 
 test('isValidRiderSession rejects invalid id', () => {
@@ -75,9 +75,9 @@ test('normalize and validate combo', () => {
 });
 
 test('getRiderTelegramBindingCopy handles binding states', () => {
-  assert.strictEqual(getRiderTelegramBindingCopy({ telegram_chat_id: null }), '未绑定 Telegram，无法接收送餐通知');
-  assert.strictEqual(getRiderTelegramBindingCopy({ telegram_chat_id: undefined }), '未绑定 Telegram，无法接收送餐通知');
-  assert.strictEqual(getRiderTelegramBindingCopy({ telegram_chat_id: '' }), '未绑定 Telegram，无法接收送餐通知');
-  assert.strictEqual(getRiderTelegramBindingCopy({ telegram_chat_id: '  ' }), '未绑定 Telegram，无法接收送餐通知');
-  assert.strictEqual(getRiderTelegramBindingCopy({ telegram_chat_id: '123' }), '已绑定 Telegram，可接收送餐通知');
+  assert.strictEqual(getRiderTelegramBindingCopy({ telegramChatId: null }), '未绑定 Telegram，无法接收送餐通知');
+  assert.strictEqual(getRiderTelegramBindingCopy({ telegramChatId: undefined }), '未绑定 Telegram，无法接收送餐通知');
+  assert.strictEqual(getRiderTelegramBindingCopy({ telegramChatId: '' }), '未绑定 Telegram，无法接收送餐通知');
+  assert.strictEqual(getRiderTelegramBindingCopy({ telegramChatId: '  ' }), '未绑定 Telegram，无法接收送餐通知');
+  assert.strictEqual(getRiderTelegramBindingCopy({ telegramChatId: '123' }), '已绑定 Telegram，可接收送餐通知');
 });

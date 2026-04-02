@@ -36,14 +36,14 @@ export interface RecentUserOrderSummary {
 
 export function filterUserVisibleOrders<T extends RawOrder>(orders: T[]): T[] {
   return (orders || []).filter((order) => {
-    const t = String(order?.order_type || '').trim();
-    return t === 'delivery' || t === 'dine_in';
+    const t = String(order?.orderType || '').trim();
+    return t === 'delivery';
   });
 }
 
 export function buildRecentUserOrderSummary(orders: RawOrder[]): RecentUserOrderSummary {
   const visibleOrders = filterUserVisibleOrders(orders || []).sort((a, b) =>
-    String(b?.created_at || '').localeCompare(String(a?.created_at || '')),
+    String(b?.createdAt || '').localeCompare(String(a?.createdAt || '')),
   );
 
   return {
@@ -71,8 +71,8 @@ function pickFirstNumber(order: RawOrder, keys: string[]) {
 }
 
 function pickVip(order: RawOrder) {
-  if (order?.is_vip === true || order?.is_vip === 1 || order?.is_vip === '1') return true;
-  const vipLevel = String(order?.vip_level || '').trim();
+  if (order?.isVip === true || order?.isVip === 1 || order?.isVip === '1') return true;
+  const vipLevel = String(order?.vipLevel || '').trim();
   return Boolean(vipLevel && vipLevel !== '0' && vipLevel.toLowerCase() !== 'none');
 }
 
@@ -84,11 +84,11 @@ function buildMembershipLabel(points: number | null, isVip: boolean) {
 }
 
 export function buildUserOrderView(order: RawOrder, shopMap: UserOrderShopMap = {}): UserOrderView {
-  const shopId = String(order?.shop_id || order?.restaurant_id || '').trim();
+  const shopId = String(order?.shopId || order?.restaurantId || '').trim();
   const fallbackShop = shopId ? shopMap[shopId] || {} : {};
-  const shopName = pickFirstString(order, ['shop_name', 'restaurant_name', 'merchant_name']) || String(fallbackShop.name || '').trim() || '未知店铺';
-  const shopSlug = pickFirstString(order, ['shop_slug', 'slug', 'restaurant_slug']) || String(fallbackShop.slug || '').trim();
-  const points = pickFirstNumber(order, ['points', 'user_points', 'points_balance']);
+  const shopName = pickFirstString(order, ['shopName', 'restaurantName', 'merchantName']) || String(fallbackShop.name || '').trim() || '未知店铺';
+  const shopSlug = pickFirstString(order, ['shopSlug', 'slug', 'restaurantSlug']) || String(fallbackShop.slug || '').trim();
+  const points = pickFirstNumber(order, ['points', 'userPoints', 'pointsBalance']);
   const isVip = pickVip(order);
 
   return {
@@ -98,7 +98,7 @@ export function buildUserOrderView(order: RawOrder, shopMap: UserOrderShopMap = 
     points,
     isVip,
     membershipLabel: buildMembershipLabel(points, isVip),
-    createdAt: String(order?.created_at || ''),
+    createdAt: String(order?.createdAt || ''),
   };
 }
 

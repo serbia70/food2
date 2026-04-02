@@ -34,3 +34,14 @@ test('delivery button state contract is locked in shop page', async () => {
 
   assert.match(pageSource, /enableDelivery=\{enableDelivery\}/);
 });
+
+test('CartModal uses resolved display hours without hardcoded fallback and shows unset copy when empty', async () => {
+  const source = await readFile(resolve(process.cwd(), 'src/components/CartModal.tsx'), 'utf8');
+
+  assert.doesNotMatch(source, /settings\.hours\?\.open \|\| "10:00"/);
+  assert.doesNotMatch(source, /settings\.hours\?\.close \|\| "23:00"/);
+  assert.match(source, /resolvedDisplaySettings\?\.hours\?\.open\?\.trim\(\) \|\| settings\.hours\?\.open\?\.trim\(\) \|\| ""/);
+  assert.match(source, /resolvedDisplaySettings\?\.hours\?\.close\?\.trim\(\) \|\| settings\.hours\?\.close\?\.trim\(\) \|\| ""/);
+  assert.match(source, /const hoursDisplayText = openTime && closeTime \? `\$\{openTime\} - \$\{closeTime\}` : "未设置";/);
+  assert.match(source, /Radno vreme \/ 营业时间: \{hoursDisplayText\}/);
+});

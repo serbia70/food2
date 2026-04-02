@@ -36,6 +36,7 @@ import { REMARK_CATEGORIES } from "./cart-modal/remarkCategories";
 import { useRemarkState } from "./cart-modal/useRemarkState";
 import { useAuthState } from "./cart-modal/useAuthState";
 import { useCartProfileSync } from "./cart-modal/useCartProfileSync";
+import type { ShopDisplaySettings } from "../lib/shop-display-settings";
 
 interface ShopSettings {
   delivery?: {
@@ -56,6 +57,7 @@ interface ShopSettings {
 interface CartModalProps {
   restaurantId?: string | number;
   shopSettings?: ShopSettings;
+  resolvedDisplaySettings?: ShopDisplaySettings;
   specialPromotionMap?: Record<string, SpecialPromotion>;
   spendDiscountPromotion?: SpendDiscountPromotion | null;
   isDeliveryLocked?: boolean;
@@ -93,6 +95,7 @@ declare global {
 export default function CartModal({
   restaurantId,
   shopSettings,
+  resolvedDisplaySettings,
   specialPromotionMap = {},
   spendDiscountPromotion = null,
   isDeliveryLocked = false,
@@ -161,16 +164,29 @@ export default function CartModal({
   const simpleHallMode = isSimpleHallMode(tableConfig);
 
   // 营业时间检查
-  const openTime = settings.hours?.open || "10:00";
-  const closeTime = settings.hours?.close || "23:00";
+  const openTime = resolvedDisplaySettings?.hours?.open?.trim() || settings.hours?.open?.trim() || "";
+  const closeTime = resolvedDisplaySettings?.hours?.close?.trim() || settings.hours?.close?.trim() || "";
+  const hoursDisplayText = openTime && closeTime ? `${openTime} - ${closeTime}` : "未设置";
 
   const checkShopOpen = () => {
+    if (!openTime || !closeTime) {
+      return false;
+    }
 
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     const [openH, openM] = openTime.split(":").map(Number);
     const [closeH, closeM] = closeTime.split(":").map(Number);
+    if (
+      Number.isNaN(openH) ||
+      Number.isNaN(openM) ||
+      Number.isNaN(closeH) ||
+      Number.isNaN(closeM)
+    ) {
+      return false;
+    }
+
     const openMinutes = openH * 60 + openM;
     let closeMinutes = closeH * 60 + closeM;
 
@@ -213,7 +229,7 @@ export default function CartModal({
   // 生成订单文本
   const generateOrderText = () => {
     const items = Object.values($items)
-      .map((i) => `${i.name}${(i.subName || i.sub_name) ? " " + (i.subName || i.sub_name) : ""} x${i.quantity}`)
+      .map((i) => `${i.name}${i.subName ? " " + i.subName : ""} x${i.quantity}`)
       .join(", ");
     return `订单: ${items}\n地址: ${form.address}\n总计: ${finalTotalDelivery} RSD (¥${cnyTotal})`;
   };
@@ -481,7 +497,7 @@ export default function CartModal({
 
                           <div className="cart-item-details">
                             <div className="cart-item-name">{item.name}</div>
-                            <div className="cart-item-desc">{item.subName || item.sub_name}</div>
+                            <div className="cart-item-desc">{item.subName}</div>
                             <div className="cart-item-price" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                               {isSpecialPrice && (
                                 <span style={{ fontSize: "10px", fontWeight: "700", color: "#c53030", background: "#fed7d7", borderRadius: "999px", padding: "1px 6px", width: "fit-content" }}>
@@ -553,7 +569,7 @@ export default function CartModal({
                           🚫 Zatvoreno / 店铺已打烊
                           <br />
                           <span>
-                            Radno vreme / 营业时间: {openTime} - {closeTime}
+                            Radno vreme / 营业时间: {hoursDisplayText}
                           </span>
                         </div>
                       )}

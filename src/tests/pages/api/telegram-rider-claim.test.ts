@@ -15,8 +15,8 @@ test('POST rider-claim 在 secret 错误时返回 401', async () => {
       'x-telegram-claim-secret': 'wrong-secret',
     },
     body: JSON.stringify({
-      callback_data: 'ignored',
-      chat_id: 'chat-3',
+      callbackData: 'ignored',
+      chatId: 'chat-3',
     }),
   });
 
@@ -28,7 +28,7 @@ test('POST rider-claim 在 secret 错误时返回 401', async () => {
   });
 });
 
-test('POST rider-claim 在 chat_id 不匹配时返回 400', async () => {
+test('POST rider-claim 在 chatId 不匹配时返回 400', async () => {
   const originalFetch = globalThis.fetch;
 
   try {
@@ -53,8 +53,8 @@ test('POST rider-claim 在 chat_id 不匹配时返回 400', async () => {
         'x-telegram-claim-secret': 'test-telegram-callback-secret',
       },
       body: JSON.stringify({
-        callback_data: callbackData,
-        chat_id: 'chat-other',
+        callbackData: callbackData,
+        chatId: 'chat-other',
       }),
     });
 
@@ -97,8 +97,8 @@ test('POST rider-claim 在 callback 已过期时返回 400', async () => {
         'x-telegram-claim-secret': 'test-telegram-callback-secret',
       },
       body: JSON.stringify({
-        callback_data: expiredCallbackData,
-        chat_id: 'chat-3',
+        callbackData: expiredCallbackData,
+        chatId: 'chat-3',
       }),
     });
 
@@ -113,7 +113,7 @@ test('POST rider-claim 在 callback 已过期时返回 400', async () => {
   }
 });
 
-test('POST rider-claim 在 callback_data 非法时返回统一错误码 400', async () => {
+test('POST rider-claim 在 callbackData 非法时返回统一错误码 400', async () => {
   const originalFetch = globalThis.fetch;
 
   try {
@@ -128,8 +128,8 @@ test('POST rider-claim 在 callback_data 非法时返回统一错误码 400', as
         'x-telegram-claim-secret': 'test-telegram-callback-secret',
       },
       body: JSON.stringify({
-        callback_data: 'not-valid-base64url',
-        chat_id: 'chat-3',
+        callbackData: 'not-valid-base64url',
+        chatId: 'chat-3',
       }),
     });
 
@@ -193,8 +193,8 @@ test('POST rider-claim 在 list_available 不可用时仍可按签名 payload �
         'x-telegram-claim-secret': 'test-telegram-callback-secret',
       },
       body: JSON.stringify({
-        callback_data: callbackData,
-        chat_id: 'chat-3',
+        callbackData: callbackData,
+        chatId: 'chat-3',
       }),
     });
 
@@ -204,4 +204,19 @@ test('POST rider-claim 在 list_available 不可用时仍可按签名 payload �
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('rider-claim source uses canonical internal request fields', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/pages/api/telegram/rider-claim.ts'), 'utf8');
+
+  assert.match(source, /callbackData\?: unknown;/);
+  assert.match(source, /chatId\?: unknown;/);
+  assert.match(source, /const callbackData = String\(parsedBody\.callbackData \|\| ''\)\.trim\(\);/);
+  assert.match(source, /const chatId = String\(parsedBody\.chatId \|\| ''\)\.trim\(\);/);
+  assert.doesNotMatch(source, /callback_data\?: unknown;/);
+  assert.doesNotMatch(source, /chat_id\?: unknown;/);
+  assert.doesNotMatch(source, /parsedBody\.callback_data/);
+  assert.doesNotMatch(source, /parsedBody\.chat_id/);
 });

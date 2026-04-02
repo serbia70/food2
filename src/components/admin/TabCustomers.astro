@@ -132,19 +132,39 @@ const { shopSlug } = Astro.props;
     container.appendChild(div);
   }
 
+  async function fetchJSONWithRetry(url, init) {
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const res = await fetch(url, init);
+        const data = await res.json();
+        return { res, data };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
+
   async function loadCustomers() {
     try {
-      const res = await fetch('/api/admin/customers');
-      const data = await res.json();
-      if (data.success) {
-        customersData = data.customers || [];
-        renderCustomers(customersData);
-        renderChatCustomerList(customersData);
+      const { res, data } = await fetchJSONWithRetry('/api/admin/customers');
+      if (res.status === 401 || res.status === 403) {
+        window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+        return;
       }
+      if (!res.ok || !data.success) {
+        throw new Error('load_customers_failed');
+      }
+      customersData = data.customers || [];
+      renderCustomers(customersData);
+      renderChatCustomerList(customersData);
     } catch (e) {
       console.error('Failed to load customers:', e);
     }
   }
+
+  window.loadCustomers = loadCustomers;
 
   function renderCustomers(customers) {
     const container = document.getElementById('customers-list');
@@ -399,5 +419,4 @@ const { shopSlug } = Astro.props;
     nodes.forEach((n) => container.appendChild(n));
   }
 
-  loadCustomers();
 </script>

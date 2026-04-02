@@ -24,7 +24,7 @@ test('new fields override legacy fields and 0 stays free', () => {
   assert.equal(plan.sourceLabel, '店铺覆盖');
 });
 
-test('new fields can still reuse legacy enabled when explicit enabled is missing', () => {
+test('missing enabled does not reuse legacy enabled', () => {
   const plan = buildOrderChannelFeePlan({
     channel: 'reservation',
     commissionType: 'percentage',
@@ -34,7 +34,7 @@ test('new fields can still reuse legacy enabled when explicit enabled is missing
     legacyCommissionValue: 18,
   });
 
-  assert.equal(plan.enabled, false);
+  assert.equal(plan.enabled, true);
   assert.equal(plan.commissionType, 'percentage');
   assert.equal(plan.commissionValue, 0);
   assert.equal(plan.isFree, true);
@@ -43,7 +43,7 @@ test('new fields can still reuse legacy enabled when explicit enabled is missing
   assert.equal(plan.sourceLabel, '店铺覆盖');
 });
 
-test('legacy fields still resolve when new fields are missing', () => {
+test('legacy fields are ignored when new fields are missing', () => {
   const plan = buildOrderChannelFeePlan({
     channel: 'delivery',
     legacyEnabled: 1,
@@ -55,16 +55,16 @@ test('legacy fields still resolve when new fields are missing', () => {
   });
 
   assert.equal(plan.channel, 'delivery');
-  assert.equal(plan.enabled, true);
-  assert.equal(plan.commissionType, 'per_order');
-  assert.equal(plan.commissionValue, 35);
+  assert.equal(plan.enabled, false);
+  assert.equal(plan.commissionType, 'percentage');
+  assert.equal(plan.commissionValue, 3);
   assert.equal(plan.isFree, false);
-  assert.equal(plan.displayText, '每单 35 RSD');
-  assert.equal(plan.source, 'legacy');
-  assert.equal(plan.sourceLabel, '店铺覆盖');
+  assert.equal(plan.displayText, '3%');
+  assert.equal(plan.source, 'default');
+  assert.equal(plan.sourceLabel, '全局默认');
 });
 
-test('legacy values matching defaults should be treated as defaults', () => {
+test('legacy values matching defaults still stay on defaults', () => {
   const plan = buildOrderChannelFeePlan({
     channel: 'reservation',
     legacyEnabled: 0,
@@ -75,7 +75,7 @@ test('legacy values matching defaults should be treated as defaults', () => {
     defaultCommissionValue: 30,
   });
 
-  assert.equal(plan.enabled, false);
+  assert.equal(plan.enabled, true);
   assert.equal(plan.commissionType, 'per_order');
   assert.equal(plan.commissionValue, 30);
   assert.equal(plan.displayText, '每单 30 RSD');

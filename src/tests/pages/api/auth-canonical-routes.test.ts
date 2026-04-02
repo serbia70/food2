@@ -203,6 +203,15 @@ test('auth check 返回 canonical envelope（含未登录与已登录）', async
   });
 });
 
+test('auth check source reads backend snake_case shop_id field', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/pages/api/auth/check.ts'), 'utf8');
+
+  assert.match(source, /const shopIdRaw = data\.shop_id;/);
+  assert.doesNotMatch(source, /data\.shopId/);
+});
+
 test('master/admin logout 返回非双包裹 canonical envelope', async () => {
   const master = await masterLogoutPost({
     request: new Request('https://food2.serbia70.com/api/master/logout', { method: 'POST' }),
@@ -320,9 +329,9 @@ test('master login 在上游异常时返回稳定的 canonical 错误而不泄�
   });
 });
 
-test('master impersonate-shop 仅接受 canonical envelope 并返回 canonical 结果', async () => {
+test('master impersonate-shop 仅接受 legacy upstream shape 并返回 canonical 结果', async () => {
   globalThis.fetch = (async () => {
-    return new Response(JSON.stringify({ ok: true, data: { token: 'admin-token', slug: 'shop-21' } }), {
+    return new Response(JSON.stringify({ success: true, token: 'admin-token', slug: 'shop-21', impersonated: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -350,6 +359,7 @@ test('master impersonate-shop 仅接受 canonical envelope 并返回 canonical �
     ok: true,
     data: {
       slug: 'shop-21',
+      token: 'admin-token',
       impersonated: true,
     },
   });
@@ -387,9 +397,9 @@ test('master impersonate-shop 仅接受 canonical envelope 并返回 canonical �
   });
 });
 
-test('shop list 透传 canonical data 与 upstream canonical error', async () => {
+test('shop list 透传 home payload 并保留 GET 重试与错误透传', async () => {
   globalThis.fetch = (async () => {
-    return new Response(JSON.stringify({ ok: true, data: [{ id: 1, slug: 'a' }] }), {
+    return new Response(JSON.stringify({ shops: [{ id: 1, slug: 'a' }], settings: { theme: 'x' } }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -398,8 +408,8 @@ test('shop list 透传 canonical data 与 upstream canonical error', async () =>
   const okRes = await shopListGet();
   assert.equal(okRes.status, 200);
   assert.deepEqual(await okRes.json(), {
-    ok: true,
-    data: [{ id: 1, slug: 'a' }],
+    shops: [{ id: 1, slug: 'a' }],
+    settings: { theme: 'x' },
   });
 
   globalThis.fetch = (async () => {
@@ -416,7 +426,7 @@ test('shop list 透传 canonical data 与 upstream canonical error', async () =>
   }) as typeof fetch;
 
   const upstreamFailRes = await shopListGet();
-  assert.equal(upstreamFailRes.status, 502);
+  assert.equal(upstreamFailRes.status, 503);
   assert.deepEqual(await upstreamFailRes.json(), {
     ok: false,
     error: {
@@ -425,12 +435,29 @@ test('shop list 透传 canonical data 与 upstream canonical error', async () =>
     },
   });
 
+  let attempts = 0;
+  globalThis.fetch = (async () => {
+    attempts += 1;
+    if (attempts === 1) throw new Error('socket hang up');
+    return new Response(JSON.stringify({ shops: [{ id: 2, slug: 'b' }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  const retriedRes = await shopListGet();
+  assert.equal(retriedRes.status, 200);
+  assert.equal(attempts, 2);
+  assert.deepEqual(await retriedRes.json(), {
+    shops: [{ id: 2, slug: 'b' }],
+  });
+
   globalThis.fetch = (async () => {
     throw new Error('network down');
   }) as typeof fetch;
 
   const failRes = await shopListGet();
-  assert.equal(failRes.status, 502);
+  assert.equal(failRes.status, 503);
   assert.deepEqual(await failRes.json(), {
     ok: false,
     error: {

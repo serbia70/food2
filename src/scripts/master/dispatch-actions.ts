@@ -86,6 +86,39 @@ export function initMasterDispatchActions({
     }
   }
 
+  const DELIVERY_ETA_OPTIONS = [10, 15, 20, 30, 45];
+
+  function pickDispatchEtaMinutes() {
+    const selected = prompt(`请选择预计取餐时间：\n${DELIVERY_ETA_OPTIONS.map((m, idx) => `${idx + 1}. ${m} 分钟`).join('\n')}\n\n请输入序号`);
+    if (!selected) return 0;
+    return DELIVERY_ETA_OPTIONS[Number(selected) - 1] || 0;
+  }
+
+  async function submitAssignAction(input: {
+    orderId: string;
+    action: 'manual_assign' | 'auto_assign';
+    riderId?: string;
+    lastAssignedRiderId?: string;
+    pickupEtaMinutes: number;
+  }) {
+    const assignRes = await fetch('/api/admin/rider-assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: input.action,
+        orderId: input.orderId,
+        riderId: input.riderId || '',
+        lastAssignedRiderId: input.lastAssignedRiderId || '',
+        pickupEtaMinutes: input.pickupEtaMinutes,
+      }),
+    });
+    const assignData = await assignRes.json().catch(() => ({}));
+    if (!assignRes.ok || assignData?.success === false) {
+      throw new Error(String(assignData?.error || (input.action === 'auto_assign' ? '自动派单失败' : '指派骑手失败')));
+    }
+    return assignData;
+  }
+
   async function masterDispatchAssignRider(orderId: unknown, shopId: unknown) {
     const normalizedOrderId = String(orderId || '').trim();
     const normalizedShopId = Number(shopId || 0);
@@ -97,6 +130,12 @@ export function initMasterDispatchActions({
     try {
       const ready = await ensureMasterDispatchShopContext(normalizedShopId);
       if (!ready) return;
+
+      const pickupEtaMinutes = pickDispatchEtaMinutes();
+      if (!pickupEtaMinutes) {
+        alert('请选择预计取餐时间');
+        return;
+      }
 
       const ridersRes = await fetch('/api/rider/status?action=list_available');
       const ridersData = await ridersRes.json().catch(() => ({}));
@@ -116,24 +155,49 @@ export function initMasterDispatchActions({
         throw new Error('序号无效');
       }
 
-      const updateRes = await fetch(`/api/admin/orders/${encodeURIComponent(normalizedOrderId)}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'delivering',
-          courier_name: String(target?.name || '').trim(),
-          courier_phone: String(target?.phone || '').trim(),
-        }),
+      await submitAssignAction({
+        action: 'manual_assign',
+        orderId: normalizedOrderId,
+        riderId: String(target?.id || '').trim(),
+        pickupEtaMinutes,
       });
-      const updateData = await updateRes.json().catch(() => ({}));
-      if (!updateRes.ok || updateData?.success === false) {
-        throw new Error(String(updateData?.error || '指派骑手失败'));
-      }
 
       alert('已指派骑手');
       runtimeActionBindings.reloadPage();
     } catch (error) {
       alert(error instanceof Error ? error.message : '指派骑手失败');
+    }
+  }
+
+  async function masterDispatchAutoAssignRider(orderId: unknown, shopId: unknown, lastAssignedRiderId: unknown) {
+    const normalizedOrderId = String(orderId || '').trim();
+    const normalizedShopId = Number(shopId || 0);
+    if (!normalizedOrderId || !normalizedShopId) {
+      alert('缺少订单或店铺信息');
+      return;
+    }
+
+    try {
+      const ready = await ensureMasterDispatchShopContext(normalizedShopId);
+      if (!ready) return;
+
+      const pickupEtaMinutes = pickDispatchEtaMinutes();
+      if (!pickupEtaMinutes) {
+        alert('请选择预计取餐时间');
+        return;
+      }
+
+      await submitAssignAction({
+        action: 'auto_assign',
+        orderId: normalizedOrderId,
+        lastAssignedRiderId: String(lastAssignedRiderId || '').trim(),
+        pickupEtaMinutes,
+      });
+
+      alert('已自动派单');
+      runtimeActionBindings.reloadPage();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '自动派单失败');
     }
   }
 
@@ -149,6 +213,14 @@ export function initMasterDispatchActions({
     }
     if (action === 'assign') {
       void masterDispatchAssignRider(target.dataset.masterDispatchOrderId || '', shopId);
+      return;
+    }
+    if (action === 'auto-assign') {
+      void masterDispatchAutoAssignRider(
+        target.dataset.masterDispatchOrderId || '',
+        shopId,
+        target.dataset.masterDispatchLastRiderId || '',
+      );
       return;
     }
     if (action === 'remind') {

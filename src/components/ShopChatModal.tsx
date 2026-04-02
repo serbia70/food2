@@ -58,11 +58,10 @@ export default function ShopChatModal() {
     const sid = Number(shopId || 0);
     if (!sid) return null;
     const list = (orders || [])
-      .filter((o) => String(o?.order_type || '').toLowerCase() === 'delivery')
-      .filter((o) => Number(o?.shop_id || o?.restaurant_id || 0) === sid);
+      .filter((o) => String(o?.orderType || '').toLowerCase() === 'delivery')
+      .filter((o) => Number(o?.shopId || o?.restaurantId || 0) === sid);
     if (list.length === 0) return null;
-    // created_at is usually "YYYY-MM-DD HH:mm:ss"; lexical sort works.
-    return [...list].sort((a, b) => String(b?.created_at || '').localeCompare(String(a?.created_at || '')))[0] || null;
+    return [...list].sort((a, b) => String(b?.createdAt || '').localeCompare(String(a?.createdAt || '')))[0] || null;
   };
 
   const loadLastReservationLocal = (phone: string, shopSlug: string) => {
@@ -165,7 +164,7 @@ export default function ShopChatModal() {
       shopId: chatContext.shopId,
       userPhone: chatContext.userPhone,
       onMessage(payload) {
-        if (!payload || Number(payload.shop_id || 0) !== Number(chatContext.shopId)) return;
+        if (!payload || Number(payload.shopId || 0) !== Number(chatContext.shopId)) return;
         setChatMessages((prev) => normalizeUserChatMessages([...(prev || []), payload], chatContext.shopId));
         requestAnimationFrame(() => {
           const el = document.getElementById('shop-chat-messages');
@@ -285,21 +284,21 @@ export default function ShopChatModal() {
                 )}
               </div>
 
-              {lastReservation?.reservation_time ? (
+              {lastReservation?.reservationTime ? (
                 <div style={{ background: '#f6fbff', border: '1px solid #dbeafe', borderRadius: '14px', padding: '12px 14px', display: 'grid', gap: '8px' }}>
                   <div style={{ fontSize: '12px', color: '#1d4ed8', fontWeight: 900 }}>{t('最近预订', 'Rezervacija')}</div>
-                  <div style={{ fontSize: '12px', color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Vreme/时间: ${String(lastReservation.reservation_time || '')} | Os/人数: ${Number(lastReservation.guest_count || 0) || '-'}`}</div>
+                  <div style={{ fontSize: '12px', color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Vreme/时间: ${String(lastReservation.reservationTime || '')} | Os/人数: ${Number(lastReservation.guestCount || 0) || '-'}`}</div>
                 </div>
               ) : null}
             </div>
 
             <div id="shop-chat-messages" style={{ flex: 1, minHeight: 0, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '12px', overflowY: 'auto', display: 'grid', gap: '8px' }}>
               {chatMessages.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', padding: '20px 8px' }}>暂无聊天记录，先发第一条消息吧。</div> : chatMessages.map((msg, idx) => (
-                <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.sender_role === 'user' ? 'flex-end' : 'flex-start' }}>
-                  <div style={{ maxWidth: '85%', background: msg.sender_role === 'user' ? '#ffedd5' : '#ffffff', color: '#334155', border: '1px solid #e2e8f0', borderRadius: msg.sender_role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px', padding: '10px 12px', boxShadow: '0 6px 14px rgba(15,23,42,.04)' }}>
+                <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.senderRole === 'user' ? 'flex-end' : 'flex-start' }}>
+                  <div style={{ maxWidth: '85%', background: msg.senderRole === 'user' ? '#ffedd5' : '#ffffff', color: '#334155', border: '1px solid #e2e8f0', borderRadius: msg.senderRole === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px', padding: '10px 12px', boxShadow: '0 6px 14px rgba(15,23,42,.04)' }}>
                     <div style={{ fontSize: '13px', lineHeight: 1.6 }}>{msg.message}</div>
                   </div>
-                  <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px', padding: '0 4px' }}>{msg.created_at ? new Date(msg.created_at).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</div>
+                  <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px', padding: '0 4px' }}>{msg.createdAt ? new Date(msg.createdAt).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</div>
                 </div>
               ))}
             </div>
@@ -341,7 +340,7 @@ export default function ShopChatModal() {
                   const res = await fetch('/api/user/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ shop_id: chatContext.shopId, sender_phone: chatContext.userPhone, message }),
+                    body: JSON.stringify({ shopId: chatContext.shopId, senderPhone: chatContext.userPhone, message }),
                   });
                   const data = await res.json();
                   if (data.success) {

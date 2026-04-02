@@ -7,9 +7,9 @@ test('localizeImagesBatch: updateProductImage receives product fields (prevents 
   const products = [
     {
       id: 1,
-      category_id: 9,
+      categoryId: 9,
       name: 'N1',
-      sub_name: 'S1',
+      subName: 'S1',
       price: 123,
       img: 'https://example.com/a.webp',
     },
@@ -37,9 +37,9 @@ test('localizeImagesBatch: updateProductImage receives product fields (prevents 
     updates[0].product,
     {
       id: 1,
-      category_id: 9,
+      categoryId: 9,
       name: 'N1',
-      sub_name: 'S1',
+      subName: 'S1',
       price: 123,
       img: 'https://example.com/a.webp',
     },

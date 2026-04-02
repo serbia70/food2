@@ -110,6 +110,9 @@ export function buildMasterShopEditPayload(input: MasterShopEditInput, options: 
     inputCommissionMode === 'global' && (hasReservationOverride || hasDeliveryOverride) ? 'override' : inputCommissionMode;
 
   const password = buildName(input.password);
+  const hasShopTierMode = input.shopTierMode !== undefined && String(input.shopTierMode ?? '').trim() !== '';
+  const hasShopTierOverride = input.shopTierOverride !== undefined && String(input.shopTierOverride ?? '').trim() !== '';
+  const hasExplicitShopTier = hasShopTierMode || hasShopTierOverride;
   const defaultShopTier = toShopTier(options.defaults?.defaultShopTier, 'subscription');
   const shopTierMode = toShopTierMode(input.shopTierMode, 'global');
   const shopTierOverride = toShopTier(input.shopTierOverride, defaultShopTier);
@@ -133,8 +136,8 @@ export function buildMasterShopEditPayload(input: MasterShopEditInput, options: 
     delivery_commission_type: deliveryCommissionType,
     delivery_commission_value: deliveryCommissionValue,
     subscription_enabled: reservationEnabled ? 1 : 0,
-    subscription_delivery_commission_type: reservationCommissionType,
-    subscription_delivery_commission_value: reservationCommissionValue,
+    subscription_delivery_commission_type: deliveryCommissionType,
+    subscription_delivery_commission_value: deliveryCommissionValue,
     business_enabled: deliveryEnabled ? 1 : 0,
     business_delivery_commission_type: deliveryCommissionType,
     business_delivery_commission_value: deliveryCommissionValue,
@@ -145,18 +148,20 @@ export function buildMasterShopEditPayload(input: MasterShopEditInput, options: 
     commission_value: deliveryCommissionValue,
     subscriptionFeeRsd: reservationCommissionValue,
     businessFeeRsd: deliveryCommissionValue,
-    subscriptionDeliveryCommissionType: reservationCommissionType,
-    subscriptionDeliveryCommissionValue: reservationCommissionValue,
+    subscriptionDeliveryCommissionType: deliveryCommissionType,
+    subscriptionDeliveryCommissionValue: deliveryCommissionValue,
     businessDeliveryCommissionType: deliveryCommissionType,
     businessDeliveryCommissionValue: deliveryCommissionValue,
-    billingPlanType: effectiveShopTier,
-    billing_plan_type: effectiveShopTier,
-    planType: effectiveShopTier,
-    plan_type: effectiveShopTier,
-    shopTierMode,
-    shopTierOverride,
-    shop_tier_mode: shopTierMode,
-    shop_tier_override: shopTierOverride,
+    ...(hasExplicitShopTier ? {
+      billingPlanType: effectiveShopTier,
+      billing_plan_type: effectiveShopTier,
+      planType: effectiveShopTier,
+      plan_type: effectiveShopTier,
+      shopTierMode,
+      shopTierOverride,
+      shop_tier_mode: shopTierMode,
+      shop_tier_override: shopTierOverride,
+    } : {}),
   };
 }
 

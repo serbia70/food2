@@ -29,8 +29,9 @@ export function getAdminDispatchStatusCopy(status: string | null | undefined): s
 export function isRiderClaimableOrder(order: {
   status?: string | null;
   courier_phone?: string | null;
+  courierPhone?: string | null;
 }): boolean {
-  return isAwaitingCourierOrder(order) && !String(order?.courier_phone || '').trim();
+  return isAwaitingCourierOrder(order);
 }
 
 export function pickAvailableRiders<T extends Pick<Rider, 'id' | 'name' | 'phone' | 'status'>>(riders: T[]): T[] {
@@ -41,7 +42,7 @@ export function buildContactableRiderRows<T extends Pick<Rider, 'id' | 'name' | 
   return pickAvailableRiders(riders);
 }
 
-export function filterRiderActiveOrders<T extends { status?: string | null; courier_phone?: string | null }>(
+export function filterRiderActiveOrders<T extends { status?: string | null; courier_phone?: string | null; courierPhone?: string | null }>(
   orders: T[],
   riderPhone?: string | null,
 ): T[] {
@@ -50,11 +51,11 @@ export function filterRiderActiveOrders<T extends { status?: string | null; cour
     if (isRiderClaimableOrder(order)) return true;
     if (String(order?.status || '') !== 'delivering') return false;
     if (!phone) return false;
-    return String(order?.courier_phone || '').trim() === phone;
+    return String(order?.courierPhone || order?.courier_phone || '').trim() === phone;
   });
 }
 
-export function filterRiderDashboardOrders<T extends { status?: string | null; courier_phone?: string | null }>(
+export function filterRiderDashboardOrders<T extends { status?: string | null; courier_phone?: string | null; courierPhone?: string | null }>(
   orders: T[],
   riderPhone?: string | null,
   view: 'active' | 'history' = 'active',
@@ -63,7 +64,7 @@ export function filterRiderDashboardOrders<T extends { status?: string | null; c
     const phone = String(riderPhone || '').trim();
     if (!phone) return [];
     return orders.filter(
-      (order) => String(order?.status || '') === 'completed' && String(order?.courier_phone || '').trim() === phone,
+      (order) => String(order?.status || '') === 'completed' && String(order?.courierPhone || order?.courier_phone || '').trim() === phone,
     );
   }
   return filterRiderActiveOrders(orders, riderPhone);
@@ -92,8 +93,8 @@ export function getReminderBadgeCopy(count: number | null | undefined): string {
 export function shouldEscalateUnclaimedOrder(
   order: {
     status?: string | null;
-    rider_broadcasted_at?: string | null;
-    rider_last_reminded_at?: string | null;
+    riderBroadcastedAt?: string | null;
+    riderLastRemindedAt?: string | null;
   },
   nowIso: string,
   remindAfterMinutes: number,
@@ -101,21 +102,21 @@ export function shouldEscalateUnclaimedOrder(
   if (!isAwaitingCourierOrder(order)) return false;
 
   const now = parseTimestamp(nowIso);
-  const base = parseTimestamp(order.rider_last_reminded_at) || parseTimestamp(order.rider_broadcasted_at);
+  const base = parseTimestamp(order.riderLastRemindedAt) || parseTimestamp(order.riderBroadcastedAt);
   return now > 0 && base > 0 && now - base >= remindAfterMinutes * 60_000;
 }
 
 export function buildReminderPayload(
   order: {
-    rider_remind_count?: number | null;
+    riderRemindCount?: number | null;
   },
   nowIso: string,
 ) {
   const baseTs = Date.parse(nowIso);
   const safeNowIso = Number.isFinite(baseTs) ? new Date(baseTs).toISOString() : '';
   return {
-    rider_remind_count: Math.max(0, Number(order.rider_remind_count || 0)) + 1,
-    rider_last_reminded_at: safeNowIso,
+    riderRemindCount: Math.max(0, Number(order.riderRemindCount || 0)) + 1,
+    riderLastRemindedAt: safeNowIso,
   };
 }
 
@@ -127,10 +128,10 @@ export function buildDispatchPublishPayload(minutes: number, nowIso: string) {
 
   return {
     status: 'awaiting_courier',
-    pickup_eta_minutes: safeMinutes,
-    pickup_ready_at: readyAt,
-    rider_broadcasted_at: safeNowIso,
-    rider_remind_count: 0,
-    rider_last_reminded_at: '',
+    pickupEtaMinutes: safeMinutes,
+    pickupReadyAt: readyAt,
+    riderBroadcastedAt: safeNowIso,
+    riderRemindCount: 0,
+    riderLastRemindedAt: '',
   };
 }

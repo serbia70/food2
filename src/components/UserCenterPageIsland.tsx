@@ -82,7 +82,7 @@ export default function UserCenterPageIsland() {
     const view = buildUserOrderView(sourceOrder as any, shopMap);
     setCurrentShopName(view.shopName || '当前店铺');
     setCurrentShopSlug(view.shopSlug || '');
-    setCurrentShopId(String((sourceOrder as any)?.shop_id || (sourceOrder as any)?.restaurant_id || ''));
+    setCurrentShopId(String((sourceOrder as any)?.shopId || (sourceOrder as any)?.restaurantId || ''));
   };
 
   const loadHistoryWithFallback = async () => {

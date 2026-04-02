@@ -10,6 +10,7 @@ import { normalizeSpecialPromotions, normalizeSpendDiscountPromotions } from '..
 import { API_BASE_URL } from '../../config';
 import { classifyShopResponseStatus } from '../../lib/shop-status';
 import { shouldRetryStream } from '../../lib/stream-retry';
+import { resolveShopDisplaySettings } from '../../lib/shop-display-settings';
 import {
   buildTableButtonLabel,
   buildTableValue,
@@ -67,8 +68,8 @@ const isOkShopEnvelope = shop && typeof shop === 'object' && 'ok' in shop && sho
 const shopData = isOkShopEnvelope && 'data' in shop && shop.data && typeof shop.data === 'object' ? shop.data : null;
 shop = shopData || shop;
 const settings = parseJSON<any>(shop?.settings, {});
-const menuLayout = settings?.menu_layout || 'image-2col';
-const isMenuTextMode = settings?.menu_text_mode === true || menuLayout.startsWith('text'); // Check text mode setting
+const menuLayout = settings?.menuLayout || 'image-2col';
+const isMenuTextMode = settings?.menuTextMode === true || menuLayout.startsWith('text'); // Check text mode setting
 
 
 let rawMenu: any[] = [];
@@ -99,10 +100,10 @@ const activeMenu = (Array.isArray(rawMenu) ? rawMenu : [])
   .map((cat: any) => ({
     id: `cat_${cat?.id}`,
     name: cat?.name || '未分类',
-    subName: cat?.sub_name || cat?.subName || '',
+    subName: cat?.subName || '',
     products: (cat?.products || []).map((p: any) => ({
       ...p,
-      subName: p?.sub_name || p?.subName || '',
+      subName: p?.subName || '',
       img: normalizeMenuImageUrl(p?.img || p?.imageUrl) || '/favicon.svg',
     })),
   }))
@@ -123,23 +124,22 @@ try {
   }
 } catch {}
 
-const footerPhone =
-  publicMasterSettings.footer_phone || publicMasterSettings.footerPhone || masterSettings.footer_phone || '000000000';
-const footerCopyright =
-  publicMasterSettings.footer_copyright || publicMasterSettings.footerCopyright || masterSettings.footer_copyright || '© Fast Food';
-const footerText =
-  publicMasterSettings.footer_text || publicMasterSettings.footerText || masterSettings.footer_text || '订餐热线';
-const mqttBroker = String(settings?.mqtt_broker || masterSettings?.mqtt_broker || 'mqtt.serbia70.com');
-const mqttSecret = String(shop?.mqtt_secret || '');
+const footerPhone = publicMasterSettings.footer_phone || publicMasterSettings.footerPhone || masterSettings.footerPhone || '000000000';
+const footerCopyright = publicMasterSettings.footer_copyright || publicMasterSettings.footerCopyright || masterSettings.footerCopyright || '© Fast Food';
+const footerText = publicMasterSettings.footer_text || publicMasterSettings.footerText || masterSettings.footerText || '订餐热线';
+const mqttBroker = String(settings?.mqttBroker || masterSettings?.mqttBroker || publicMasterSettings?.mqtt_broker || 'mqtt.serbia70.com');
+const mqttSecret = String(shop?.mqttSecret || '');
 const shopId = Number(shop?.id || 0);
+
+const resolvedDisplaySettings = resolveShopDisplaySettings(shop, settings, publicMasterSettings);
 
 const phone = settings?.contact?.phone || settings?.phone || shop?.phone || '0613083899';
 const addressForMap = String(settings?.contact?.address || settings?.address || shop?.address || shop?.zone || shop?.name || slug || '').trim();
 const mapUrl = String(settings?.contact?.map_url || settings?.map_url || (addressForMap ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressForMap)}` : '')).trim();
 
-let isDeliveryLocked = Boolean(shop?.delivery_locked);
+let isDeliveryLocked = Boolean(shop?.deliveryLocked);
 const deliveryLockReason = String(
-  shop?.delivery_lock_reason ||
+  shop?.deliveryLockReason ||
     '余额不足，请先充值后使用外卖 / Insufficient wallet balance, please top up first',
 );
 const dineInBilling = buildDineInBillingState(shop);
@@ -186,10 +186,10 @@ const normalizeZones = (raw: any): Array<{ name: string; count: number; prefix?:
 };
 
 try {
-  const parsedTableConfig = parseJSON<any>(shop?.table_config, null);
+  const parsedTableConfig = parseJSON<any>(shop?.tableConfig, null);
   tableConfig = normalizeZones(parsedTableConfig);
   if (tableConfig.length === 0) {
-    tableConfig = normalizeZones(settings?.table_config);
+    tableConfig = normalizeZones(settings?.tableConfig);
   }
 } catch {}
 
@@ -305,9 +305,9 @@ if (allTables.length > 0) {
         return;
       }
 
-      const total = active.reduce((sum: number, o: any) => sum + Number(o?.total_amount || 0), 0);
-      const firstOrder = [...active].sort((a: any, b: any) => parseDbTimeMs(a?.created_at) - parseDbTimeMs(b?.created_at))[0];
-      const firstMs = parseDbTimeMs(firstOrder?.created_at);
+      const total = active.reduce((sum: number, o: any) => sum + Number(o?.totalAmount || 0), 0);
+      const firstOrder = [...active].sort((a: any, b: any) => parseDbTimeMs(a?.createdAt) - parseDbTimeMs(b?.createdAt))[0];
+      const firstMs = parseDbTimeMs(firstOrder?.createdAt);
       const orderTime = firstMs ? belgradeTime.format(new Date(firstMs)) : '--:--';
 
       tableStatusMap[tableValue] = {
@@ -324,16 +324,9 @@ let ogImage = shop?.logo || `https://ui-avatars.com/api/?name=${encodeURICompone
 if (String(ogImage).startsWith('/')) ogImage = `${Astro.url.origin}${ogImage}`;
 
 const showClosedPage = false;
-const enableDelivery = Number(shop?.enable_delivery ?? 1) !== 0;
-const enableDineIn = Number(shop?.enable_dine_in ?? 1) !== 0 && !dineInSubscriptionBlocked;
-const reservationEnabled = Number(
-  shop?.reservation_enabled ??
-    settings?.reservation_enabled ??
-    shop?.enableReservation ??
-    shop?.enable_reservation ??
-    settings?.subscription_enabled ??
-    1,
-) !== 0;
+const enableDelivery = Number(shop?.enableDelivery ?? 1) !== 0;
+const enableDineIn = Number(shop?.enableDineIn ?? 1) !== 0 && !dineInSubscriptionBlocked;
+const reservationEnabled = Number(shop?.reservationEnabled ?? settings?.reservationEnabled ?? 1) !== 0;
 const enableReservation = reservationEnabled;
 ---
 
@@ -668,7 +661,7 @@ const enableReservation = reservationEnabled;
               <div class="shop-name">{shop?.name || slug}</div>
             </div>
             <div class="shop-info">
-              <span>🕒 {settings?.hours?.open || '08:00'}-{settings?.hours?.close || '22:00'}</span>
+              <span>🕒 {resolvedDisplaySettings.hours.open}-{resolvedDisplaySettings.hours.close}</span>
               <a href={`tel:${phone}`} style="margin-left:10px; color:#333; text-decoration:none; font-weight:bold;">📞 {phone}</a>
               {mapUrl && <a href={mapUrl} target="_blank" rel="noopener noreferrer" style="margin-left:10px; color:#1565a8; text-decoration:none; font-weight:bold;">📍 地图 / Mapa</a>}
             </div>
@@ -693,6 +686,7 @@ const enableReservation = reservationEnabled;
           shopSettings={settings}
           specialPromotionMap={specialPromotionMap}
           spendDiscountPromotion={spendDiscountPromotion}
+          resolvedDisplaySettings={resolvedDisplaySettings}
           isDeliveryLocked={isDeliveryLocked}
           isTableLocked={isTableLocked}
           enableDelivery={enableDelivery}

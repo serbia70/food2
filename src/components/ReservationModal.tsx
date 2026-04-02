@@ -21,16 +21,14 @@ interface CartMenuItem {
 interface MenuProduct {
   id: string | number;
   name: string;
-  sub_name?: string;
   subName?: string;
   price: number;
-  is_available?: number;
+  isAvailable?: number;
 }
 
 interface MenuCategoryRaw {
   id?: string | number;
   name?: string;
-  sub_name?: string;
   subName?: string;
   products?: MenuProduct[];
 }
@@ -43,9 +41,9 @@ interface MenuCategory {
 }
 
 interface SelectedMenuItem {
-  product_id: string | number;
+  productId: string | number;
   name: string;
-  sub_name: string;
+  subName: string;
   price: number;
   quantity: number;
 }
@@ -133,7 +131,7 @@ export default function ReservationModal({ restaurantId, specialPromotionMap = {
         (sum, item) =>
           sum +
           resolveCartItemUnitPrice(
-            { id: item.product_id, price: Number(item.price || 0) },
+            { id: item.productId, price: Number(item.price || 0) },
             specialPromotionMap,
           ) * Number(item.quantity || 0),
         0,
@@ -145,28 +143,28 @@ export default function ReservationModal({ restaurantId, specialPromotionMap = {
 
   const buildReservationItems = () => {
     let itemsJson: Array<{
-      product_id: string | number;
+      productId: string | number;
       name: string;
-      sub_name: string;
+      subName: string;
       price: number;
       quantity: number;
     }> | null = null;
 
     if (preOrderMode === "cart" && hasCartItems) {
       itemsJson = Object.values($items).map((item: CartMenuItem) => ({
-        product_id: item.id,
+        productId: item.id,
         name: item.name,
-        sub_name: item.subName || item.sub_name || "",
+        subName: item.subName || "",
         price: item.price,
         quantity: item.quantity,
       }));
     } else if (preOrderMode === "menu" && selectedMenuList.length > 0) {
       itemsJson = selectedMenuList.map((item) => ({
-        product_id: item.product_id,
+        productId: item.productId,
         name: item.name,
-        sub_name: item.sub_name,
+        subName: item.subName,
         price: resolveCartItemUnitPrice(
-          { id: item.product_id, price: Number(item.price || 0) },
+          { id: item.productId, price: Number(item.price || 0) },
           specialPromotionMap,
         ),
         quantity: item.quantity,
@@ -255,19 +253,19 @@ export default function ReservationModal({ restaurantId, specialPromotionMap = {
         const parsed = rawCategories
           .map((cat, idx) => {
             const products = (Array.isArray(cat?.products) ? cat.products : [])
-              .filter((p) => Number(p?.is_available ?? 1) !== 0)
+              .filter((p) => Number(p?.isAvailable ?? 1) !== 0)
               .map((p) => ({
                 id: p.id,
                 name: String(p.name || "未命名菜品 / Bez naziva"),
-                sub_name: String(p.sub_name || p.subName || ""),
+                subName: String(p.subName || ""),
                 price: Number(p.price || 0),
-                is_available: Number(p.is_available ?? 1),
+                isAvailable: Number(p.isAvailable ?? 1),
               }));
 
             return {
               id: String(cat?.id ?? `cat-${idx}`),
               name: String(cat?.name || "分类 / Kategorija"),
-              subName: String(cat?.sub_name || cat?.subName || ""),
+              subName: String(cat?.subName || ""),
               products,
             } as MenuCategory;
           })
@@ -288,7 +286,7 @@ export default function ReservationModal({ restaurantId, specialPromotionMap = {
 
     const hasKeyword = (p: MenuProduct) => {
       if (!key) return true;
-      const text = `${p.name} ${p.sub_name || p.subName || ""}`.toLowerCase();
+      const text = `${p.name} ${p.subName || ""}`.toLowerCase();
       return text.includes(key);
     };
 
@@ -382,9 +380,9 @@ export default function ReservationModal({ restaurantId, specialPromotionMap = {
         return next;
       }
       next[key] = {
-        product_id: product.id,
+        productId: product.id,
         name: product.name,
-        sub_name: String(product.sub_name || product.subName || ""),
+        subName: String(product.subName || ""),
         price: Number(product.price || 0),
         quantity: nextQty,
       };
@@ -411,12 +409,12 @@ export default function ReservationModal({ restaurantId, specialPromotionMap = {
 
     setLoading(true);
     const payload = {
-      guest_count: guestCount,
-      reservation_time: reservationDateTime,
-      customer_phone: customerPhone,
-      dine_type: "dine_in",
-      delivery_address: null,
-      customer_name: customerName || null,
+      guestCount: guestCount,
+      reservationTime: reservationDateTime,
+      customerPhone: customerPhone,
+      dineType: "dine_in",
+      deliveryAddress: null,
+      customerName: customerName || null,
       items: itemsJson,
       remarks: remarks || null,
     };
@@ -441,11 +439,11 @@ export default function ReservationModal({ restaurantId, specialPromotionMap = {
         if (p && slug) {
           const key = `user_last_reservation:${p}:${slug}`;
           const stored = {
-            reservation_id: data?.reservation_id || null,
-            reservation_time: payload.reservation_time,
-            guest_count: payload.guest_count,
-            customer_phone: payload.customer_phone,
-            created_at: new Date().toISOString(),
+            reservationId: data?.reservationId || null,
+            reservationTime: payload.reservationTime,
+            guestCount: payload.guestCount,
+            customerPhone: payload.customerPhone,
+            createdAt: new Date().toISOString(),
           };
           localStorage.setItem(key, JSON.stringify(stored));
         }
@@ -456,7 +454,7 @@ export default function ReservationModal({ restaurantId, specialPromotionMap = {
         preOrderMode === "none"
           ? "到店再点 / Narucivanje u lokalu"
           : `已预点 ${itemsJson?.length || 0} 个菜品 / Stavki: ${itemsJson?.length || 0}`;
-      const reservationId = data?.reservation_id ? `\n预订号 / ID: ${data.reservation_id}` : "";
+      const reservationId = data?.reservationId ? `\n预订号 / ID: ${data.reservationId}` : "";
 
       alert(
         `✅ 预约成功 / Rezervacija uspesna!\n\n预约时间 / Vreme: ${reservationDate} ${reservationTime}\n用餐人数 / Broj gostiju: ${guestCount}\n用餐方式 / Nacin: ${dineTypeText}\n点餐方式 / Narucivanje: ${preOrderText}${reservationId}`,
@@ -655,7 +653,7 @@ export default function ReservationModal({ restaurantId, specialPromotionMap = {
                               <div key={String(p.id)} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "10px", alignItems: "center", padding: "10px 12px", borderBottom: "1px solid #edf2f8" }}>
                                 <div>
                                   <div style={{ fontWeight: 600, color: "#2a4258", fontSize: "13px" }}>{p.name}</div>
-                                  <div style={{ color: "#73879a", fontSize: "12px" }}>{p.sub_name || p.subName || "-"}</div>
+                                  <div style={{ color: "#73879a", fontSize: "12px" }}>{p.subName || "-"}</div>
                                   <div style={{ color: "#166ca6", fontSize: "12px", fontWeight: 700 }}>{resolveCartItemUnitPrice({ id: p.id, price: Number(p.price || 0) }, specialPromotionMap)} RSD</div>
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

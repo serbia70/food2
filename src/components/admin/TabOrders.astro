@@ -2,7 +2,6 @@
 import {
   formatPickupEtaLabel,
   getAdminDispatchStatusCopy,
-  getReminderBadgeCopy,
   isAwaitingCourierOrder,
 } from '../../lib/rider-dispatch.ts';
 
@@ -95,7 +94,7 @@ function formatTableLabel(tableInfo: any) {
       } catch {}
 
       return (
-        <div class={`order-card ${isNewest ? 'new-order-highlight' : ''}`} data-order-time={oTime} data-oid={o.id} data-rider-remind-count={Number(o.riderRemindCount || 0)} style={isCancelled ? 'opacity:0.6; filter:grayscale(0.8); background:#f5f5f5;' : ''}>
+        <div class={`order-card ${isNewest ? 'new-order-highlight' : ''}`} data-order-time={oTime} data-oid={o.id} style={isCancelled ? 'opacity:0.6; filter:grayscale(0.8); background:#f5f5f5;' : ''}>
           <div class="order-header">
             <span class={`order-type-tag ${o.orderType === 'delivery' ? 'delivery' : 'dine'}`}>
               {o.orderType === 'delivery' ? '外卖' : '堂食'}
@@ -145,18 +144,13 @@ function formatTableLabel(tableInfo: any) {
               <span class="order-amount">{o.totalAmount} RSD</span>
             </div>
 
-            <span class="hidden-data" data-oid={o.id} data-order-id={o.id} data-order-no={o.orderNo} data-items={o.itemsJson} data-remarks={o.remarksJson} data-total={o.totalAmount} data-table={o.tableInfo} data-status={o.status} data-rider-remind-count={Number(o.riderRemindCount || 0)}></span>
+            <span class="hidden-data" data-oid={o.id} data-order-id={o.id} data-order-no={o.orderNo} data-items={o.itemsJson} data-remarks={o.remarksJson} data-total={o.totalAmount} data-table={o.tableInfo} data-status={o.status}></span>
           </div>
 
           {o.orderType === 'delivery' && <div class="order-address-row">地址: {o.tableInfo}</div>}
           {isAwaitingCourierOrder(o) && formatPickupEtaLabel(o.pickupEtaMinutes) && (
             <div class="order-address-row" style="margin-top:6px; color:#7c3aed; font-weight:700;">
               {formatPickupEtaLabel(o.pickupEtaMinutes)}
-            </div>
-          )}
-          {isAwaitingCourierOrder(o) && (
-            <div class="order-address-row" style="margin-top:4px; color:#6b7280;">
-              {getReminderBadgeCopy(o.riderRemindCount)}
             </div>
           )}
           {o.orderType === 'delivery' && o.scheduledFor && (

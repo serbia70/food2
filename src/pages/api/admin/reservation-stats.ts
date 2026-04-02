@@ -8,7 +8,7 @@ export const GET: APIRoute = async ({ request, cookies }) => {
   return proxyAdminRequest({
     request,
     cookies,
-    url: `${API_BASE_URL}/api/admin/reservations/stats`,
+    url: `${API_BASE_URL}/api/admin/reservation-stats`,
     method: 'GET',
   });
 };

@@ -105,8 +105,8 @@ test('getActiveSpecialPromotionProducts deduplicates products across promotions'
 
     const activePromos = getActiveSpecialPromotionProducts(
       [
-        { id: 201, name: '商品201', sub_name: '子商品201', price: 999 },
-        { id: 202, name: '商品202', sub_name: '子商品202', price: 999 },
+        { id: 201, name: '商品201', subName: '子商品201', price: 999 },
+        { id: 202, name: '商品202', subName: '子商品202', price: 999 },
       ],
       promotions,
     );
@@ -233,7 +233,7 @@ test('getActiveSpecialPromotionProducts keeps subName compatibility', () => {
   const activePromos = getActiveSpecialPromotionProducts(
     [
       { id: 11, name: '商品11', subName: '新副名11', price: 100 },
-      { id: 12, name: '商品12', sub_name: '旧副名12', price: 100 },
+      { id: 12, name: '商品12', subName: '旧副名12', price: 100 },
     ],
     promotions,
   );
@@ -250,10 +250,10 @@ test('getActiveSpecialPromotionProducts sorts by special price then original men
 
   try {
     const products = [
-      { id: 1, name: '商品1', sub_name: '子商品1', price: 100 },
-      { id: 2, name: '商品2', sub_name: '子商品2', price: 100 },
-      { id: 3, name: '商品3', sub_name: '子商品3', price: 100 },
-      { id: 4, name: '商品4', sub_name: '子商品4', price: 100 },
+      { id: 1, name: '商品1', subName: '子商品1', price: 100 },
+      { id: 2, name: '商品2', subName: '子商品2', price: 100 },
+      { id: 3, name: '商品3', subName: '子商品3', price: 100 },
+      { id: 4, name: '商品4', subName: '子商品4', price: 100 },
     ];
 
     const promotions = normalizeSpecialPromotions([

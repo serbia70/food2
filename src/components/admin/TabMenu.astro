@@ -2,7 +2,7 @@
 const { categories, products, shop } = Astro.props;
 ---
 <div id="tab-menu" class="tab-content">
-  <div style="margin-bottom:15px; text-align:right; display:flex; justify-content:flex-end; gap:10px; align-items: center;">
+  <div style="margin-bottom:15px; text-align:right; display:flex; justify-content:flex-end; gap:10px; align-items: center; flex-wrap:wrap;">
     <div class="layout-switcher" style="margin-right:auto; display:flex; gap:5px; background:#f0f2f5; padding:3px; border-radius:6px;">
         <select id="admin-menu-layout-select" onchange="window.saveMenuLayout(this.value)" style="padding:5px 10px; border:none; background:transparent; font-size:13px; cursor:pointer; color:#333;">
             <option value="image-2col">🖼️ 图文 (两列)</option>
@@ -11,21 +11,35 @@ const { categories, products, shop } = Astro.props;
             <option value="text-1col">📝 文字 (一列)</option>
         </select>
     </div>
+    <textarea
+      id="import-area"
+      rows="6"
+      style="width:min(100%, 460px); font-family:monospace; font-size:13px; display:block;"
+      placeholder={`[
+  {
+    "category": "主菜",
+    "category_sub": "热炒",
+    "items": []
+  }
+]`}
+    ></textarea>
+    <button type="button" class="btn-blue" data-admin-action="export-data">导出菜单</button>
+    <button type="button" class="btn-blue" data-admin-action="import-data">导入菜单</button>
     <button type="button" class="btn-blue" data-admin-action="open-create-category">➕ 新建分类 (New Category)</button>
     <button type="button" class="btn-blue" data-admin-action="localize-images">🔄 一键转存远程图片 (Localize Images)</button>
   </div>
   {categories.map((cat: any) => (
     <div class="cat-group">
       <div class="cat-title" style="display:flex; justify-content:space-between; align-items:center;">
-        <span>{cat.name} <small>({cat.sub_name})</small></span>
+        <span>{cat.name} <small>({cat.subName})</small></span>
         <div class="sort-btns">
           <button type="button" data-admin-action="move-category" data-category-id={cat.id} data-direction="up">⬆️</button>
           <button type="button" data-admin-action="move-category" data-category-id={cat.id} data-direction="down">⬇️</button>
-          <button type="button" class="btn-del" data-admin-action="delete-category" data-category-id={cat.id} data-product-count={products.filter((p: any) => p.category_id === cat.id).length}>删分类</button>
+          <button type="button" class="btn-del" data-admin-action="delete-category" data-category-id={cat.id} data-product-count={products.filter((p: any) => p.categoryId === cat.id).length}>删分类</button>
         </div>
       </div>
       <div class="prod-list">
-        {products.filter((p: any) => p.category_id === cat.id).sort((a: any, b: any) => (a.sort_order||0) - (b.sort_order||0)).map((p: any) => (
+        {products.filter((p: any) => p.categoryId === cat.id).sort((a: any, b: any) => (a.sortOrder||0) - (b.sortOrder||0)).map((p: any) => (
           <div class="prod-row">
             <div class="prod-img">
               <img
@@ -37,7 +51,7 @@ const { categories, products, shop } = Astro.props;
             </div>
             <div class="prod-info">
               <div class="p-name">{p.name}</div>
-              <div class="p-sub">{p.sub_name}</div>
+              <div class="p-sub">{p.subName}</div>
             </div>
             <div class="prod-price">
               <input type="number" value={p.price} disabled />
@@ -52,7 +66,7 @@ const { categories, products, shop } = Astro.props;
         ))}
 
         <div class="add-box">
-          <h4>➕ 添加新菜品到 "{cat.sub_name}"</h4>
+          <h4>➕ 添加新菜品到 "{cat.subName}"</h4>
           <div class="add-grid">
             <input id={`new-name-${cat.id}`} placeholder="塞语名称" />
             <input id={`new-sub-${cat.id}`} placeholder="中文名称" />

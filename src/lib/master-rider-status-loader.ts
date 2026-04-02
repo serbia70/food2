@@ -14,6 +14,7 @@ type RiderSummary = {
   status?: RiderStatus | string;
 };
 
+
 type MasterRiderStatusPayload = {
   summary: {
     total_riders: number;
@@ -33,7 +34,9 @@ type MasterRiderStatusPayload = {
 };
 
 export type LoadMasterRiderStatusDataInput = {
+  requestUrl: URL;
   authHeader: string;
+  cookieHeader?: string;
   shopRows: ShopSummary[];
 };
 
@@ -61,11 +64,28 @@ const EMPTY_MASTER_RIDER_STATUS_PAYLOAD: MasterRiderStatusPayload = {
 };
 
 function normalizeRiderRows(payload: unknown): RiderSummary[] {
+  if (Array.isArray(payload)) {
+    return payload.filter((row): row is RiderSummary => !!row && typeof row === 'object' && !Array.isArray(row));
+  }
   if (!payload || typeof payload !== 'object') return [];
-  const envelope = payload as { ok?: unknown; data?: unknown };
-  if (envelope.ok !== true || !envelope.data || typeof envelope.data !== 'object') return [];
-  const data = envelope.data as { riders?: unknown };
-  return Array.isArray(data.riders) ? (data.riders as RiderSummary[]) : [];
+  const record = payload as {
+    success?: unknown;
+    riders?: unknown;
+    rows?: unknown;
+    items?: unknown;
+    ok?: unknown;
+    data?: unknown;
+  };
+  const canonicalData = record.data && typeof record.data === 'object'
+    ? record.data as { riders?: unknown; rows?: unknown; items?: unknown }
+    : null;
+  const riders = record.success === true
+    ? (record.riders ?? record.rows ?? record.items)
+    : record.ok === true
+      ? (canonicalData?.riders ?? canonicalData?.rows ?? canonicalData?.items)
+      : (record.riders ?? record.rows ?? record.items ?? canonicalData?.riders ?? canonicalData?.rows ?? canonicalData?.items);
+  if (!Array.isArray(riders)) return [];
+  return riders.filter((row): row is RiderSummary => !!row && typeof row === 'object' && !Array.isArray(row));
 }
 
 function normalizeStatus(status: unknown): RiderStatus {
@@ -77,11 +97,74 @@ function normalizeStatus(status: unknown): RiderStatus {
 function buildRiderDedupKey(rider: RiderSummary): string {
   const riderId = String(rider?.id ?? '').trim();
   if (riderId) return `id:${riderId}`;
-  return `fallback:${String(rider?.name ?? '').trim()}::${String(rider?.phone ?? '').trim()}`;
+  const riderName = String(rider?.name ?? '').trim();
+  const riderPhone = String(rider?.phone ?? '').trim();
+  if (riderName || riderPhone) return `fallback:${riderName}::${riderPhone}`;
+  return `ephemeral:${crypto.randomUUID()}`;
+}
+
+async function fetchJsonWithRetry(url: string | URL, init: RequestInit, attempts = 2): Promise<{ res: Response; data: unknown }> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const res = await fetch(url, init);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok || attempt === attempts - 1) {
+        return { res, data };
+      }
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts - 1) throw error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('fetch_failed');
+}
+
+async function findFirstAdminAuthHeader(
+  shopRows: ShopSummary[],
+  requestUrl: URL,
+  authHeader: string,
+): Promise<string> {
+  for (const shop of shopRows) {
+    const shopId = Number(shop?.id || 0);
+    if (!shopId) continue;
+
+    try {
+      const impersonateUrl = new URL(`/api/master/impersonate-shop?id=${encodeURIComponent(String(shopId))}`, requestUrl);
+      const { res: impersonateRes, data: impersonateData } = await fetchJsonWithRetry(impersonateUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: authHeader,
+        },
+      });
+      const impersonateRecord = impersonateData as {
+        ok?: unknown;
+        data?: unknown;
+      };
+      const nestedImpersonate = impersonateRecord.data && typeof impersonateRecord.data === 'object'
+        ? (impersonateRecord.data as { token?: unknown; slug?: unknown; impersonated?: unknown })
+        : null;
+      const adminToken = String(nestedImpersonate?.token ?? '').trim();
+      const isCanonicalImpersonate = impersonateRecord.ok === true
+        && nestedImpersonate?.impersonated === true
+        && String(nestedImpersonate?.slug ?? '').trim().length > 0
+        && adminToken.length > 0;
+      if (!impersonateRes.ok || !isCanonicalImpersonate) continue;
+      return adminToken.startsWith('Bearer ') ? adminToken : `Bearer ${adminToken}`;
+    } catch {
+      continue;
+    }
+  }
+
+  return '';
 }
 
 export async function loadMasterRiderStatusData({
+  requestUrl,
   authHeader,
+  cookieHeader,
   shopRows,
 }: LoadMasterRiderStatusDataInput): Promise<LoadMasterRiderStatusDataResult> {
   if (!authHeader) {
@@ -96,45 +179,37 @@ export async function loadMasterRiderStatusData({
     busy: [],
     offline: [],
   };
-  const seenRiders = new Set<string>();
 
   try {
-    for (const shop of shopRows) {
-      const shopId = Number(shop?.id || 0);
-      if (!shopId) continue;
+    const adminAuthHeader = await findFirstAdminAuthHeader(shopRows, requestUrl, authHeader);
+    if (!adminAuthHeader) {
+      return {
+        payload: EMPTY_MASTER_RIDER_STATUS_PAYLOAD,
+        error: '',
+      };
+    }
 
-      const impersonateRes = await fetch(`${API_BASE_URL}/api/master/impersonate-shop`, {
-        method: 'POST',
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ id: shopId }),
-      });
-      const impersonateData = await impersonateRes.json().catch(() => ({}));
-      const isCanonicalImpersonate = impersonateData && typeof impersonateData === 'object' && (impersonateData as { ok?: unknown }).ok === true;
-      const impersonatePayload = isCanonicalImpersonate && 'data' in (impersonateData as Record<string, unknown>)
-        ? (impersonateData as { data?: unknown }).data
-        : null;
-      const hasImpersonated = impersonatePayload && typeof impersonatePayload === 'object'
-        && typeof (impersonatePayload as { slug?: unknown }).slug === 'string'
-        && String((impersonatePayload as { slug?: unknown }).slug || '').trim()
-        && (impersonatePayload as { impersonated?: unknown }).impersonated === true;
-      if (!impersonateRes.ok || !hasImpersonated) continue;
+    const ridersProxyUrl = new URL('/api/admin/riders', requestUrl);
+    const { res: ridersRes, data: ridersData } = await fetchJsonWithRetry(ridersProxyUrl, {
+      method: 'GET',
+      headers: {
+        Authorization: adminAuthHeader,
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
+      },
+    });
+    if (!ridersRes.ok) {
+      return {
+        payload: EMPTY_MASTER_RIDER_STATUS_PAYLOAD,
+        error: '',
+      };
+    }
 
-      const ridersRes = await fetch(`${API_BASE_URL}/api/admin/riders`, {
-        method: 'GET',
-        headers: { Authorization: authHeader },
-      });
-      const ridersData = await ridersRes.json().catch(() => ({}));
-      if (!ridersRes.ok) continue;
-
-      for (const rider of normalizeRiderRows(ridersData)) {
-        const dedupKey = buildRiderDedupKey(rider);
-        if (seenRiders.has(dedupKey)) continue;
-        seenRiders.add(dedupKey);
-        groups[normalizeStatus(rider?.status)].push(rider);
-      }
+    const seenRiders = new Set<string>();
+    for (const rider of normalizeRiderRows(ridersData)) {
+      const dedupKey = buildRiderDedupKey(rider);
+      if (seenRiders.has(dedupKey)) continue;
+      seenRiders.add(dedupKey);
+      groups[normalizeStatus(rider?.status)].push(rider);
     }
 
     return {

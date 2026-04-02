@@ -169,7 +169,7 @@ export function initOrderEditUI(options: {
       const res = await fetch(`/api/admin/orders/${encodeURIComponent(String(currentOrderId))}/edit`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items_json: JSON.stringify(itemsArray), total_amount: newTotal }),
+        body: JSON.stringify({ itemsJson: JSON.stringify(itemsArray), totalAmount: newTotal }),
       });
       const data = await res.json();
       if (data.success) {

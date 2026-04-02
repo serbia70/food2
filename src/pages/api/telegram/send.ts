@@ -4,7 +4,8 @@ import { API_BASE_URL } from '../../../config.ts';
 export const prerender = false;
 
 type TelegramSendBody = {
-  shop_slug?: unknown;
+  shopSlug?: unknown;
+  chatId?: unknown;
   chat_id?: unknown;
   text?: unknown;
   reply_markup?: unknown;
@@ -33,35 +34,65 @@ function parseShopSettings(raw: unknown): Record<string, unknown> {
   }
 }
 
-async function loadTelegramBotToken(shopSlug: string): Promise<string> {
-  const shopRes = await fetch(`${API_BASE_URL}/${encodeURIComponent(shopSlug)}/info`);
-  if (!shopRes.ok) throw new Error(`shop_info_http_${shopRes.status}`);
-  const shop = await shopRes.json().catch(() => ({}));
-  const settings = parseShopSettings(asRecord(shop).settings);
-  const telegram = asRecord(settings.telegram);
-  const shopToken = String(telegram.token || '').trim();
-  if (shopToken) return shopToken;
+function readTelegramBotToken(raw: unknown): string {
+  const settings = asRecord(raw);
+  const serverSettings = asRecord(settings.server);
+  return String(
+    settings.telegram_bot_token
+      || settings.telegramBotToken
+      || serverSettings.telegram_bot_token
+      || serverSettings.telegramBotToken
+      || '',
+  ).trim();
+}
 
-  const masterRes = await fetch(`${API_BASE_URL}/api/master/settings`);
-  if (!masterRes.ok) throw new Error(`master_settings_http_${masterRes.status}`);
-  const masterData = await masterRes.json().catch(() => ({}));
-  const masterSettings = asRecord(asRecord(masterData).settings);
-  return String(masterSettings.telegram_bot_token || masterSettings.telegramBotToken || '').trim();
+async function loadTelegramBotToken(request: Request, shopSlug: string): Promise<string> {
+  const normalizedShopSlug = String(shopSlug || '').trim();
+  if (normalizedShopSlug) {
+    const shopRes = await fetch(`${API_BASE_URL}/${encodeURIComponent(normalizedShopSlug)}/info`);
+    if (!shopRes.ok) throw new Error(`shop_info_http_${shopRes.status}`);
+    const shop = await shopRes.json().catch(() => ({}));
+    const settings = parseShopSettings(asRecord(shop).settings);
+    const telegram = asRecord(settings.telegram);
+    const shopToken = String(telegram.token || '').trim();
+    if (shopToken) return shopToken;
+  }
+
+  const passthroughHeaders: Record<string, string> = {};
+  const cookie = request.headers.get('cookie') || '';
+  const authorization = request.headers.get('authorization') || '';
+  if (cookie) passthroughHeaders.cookie = cookie;
+  if (authorization) passthroughHeaders.authorization = authorization;
+
+  const masterRes = await fetch(new URL('/api/master/settings', request.url).toString(), {
+    method: 'GET',
+    ...(Object.keys(passthroughHeaders).length > 0 ? { headers: passthroughHeaders } : {}),
+  });
+  if (masterRes.ok) {
+    const masterData = await masterRes.json().catch(() => ({}));
+    const masterToken = readTelegramBotToken(asRecord(masterData).settings);
+    if (masterToken) return masterToken;
+  }
+
+  const homeRes = await fetch(`${API_BASE_URL}/api/home`);
+  if (!homeRes.ok) throw new Error(`home_settings_http_${homeRes.status}`);
+  const homeData = await homeRes.json().catch(() => ({}));
+  return readTelegramBotToken(asRecord(homeData).settings);
 }
 
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.json().catch(() => ({})) as TelegramSendBody;
-  const shopSlug = String(body.shop_slug || '').trim();
-  const chatId = String(body.chat_id || '').trim();
+  const shopSlug = String(body.shopSlug || '').trim();
+  const chatId = String(body.chatId || body.chat_id || '').trim();
   const text = String(body.text || '').trim();
 
-  if (!shopSlug || !chatId || !text) {
+  if (!chatId || !text) {
     return json({ success: false, error: 'invalid_send_request' }, 400);
   }
 
   let token = '';
   try {
-    token = await loadTelegramBotToken(shopSlug);
+    token = await loadTelegramBotToken(request, shopSlug);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'shop_info_failed';
     return json({ success: false, error: message }, 502);

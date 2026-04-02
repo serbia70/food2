@@ -140,7 +140,13 @@
       "Bash(findstr /I \"node.exe pnpm.exe astro.exe\")",
       "Bash(findstr \":3000\")",
       "Bash(cmd.exe /c taskkill /PID 5056 /F)",
-      "Bash(\"/tmp/handlers_test.log\")"
+      "Bash(\"/tmp/handlers_test.log\")",
+      "Bash(printf '\\\\n---\\\\n')",
+      "Bash(tr '>' '>\\\\n')",
+      "WebFetch(domain:food.serbia70.com)",
+      "Bash([ -d \"$d/food2astro\" ])",
+      "Bash(printf '%s\\\\n' __TRACKED_VAR__/food2astro)",
+      "Bash(printf '\\\\n---SPLIT---\\\\n')"
     ]
   }
 }

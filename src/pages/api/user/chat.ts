@@ -1,20 +1,18 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config';
-import { proxyFetch } from '../../../lib/api-proxy';
 
 export const prerender = false;
 
 export const GET: APIRoute = async ({ request, url }) => {
-  const senderPhone =
-    url.searchParams.get('sender_phone') || url.searchParams.get('user_phone') || '';
+  const senderPhone = url.searchParams.get('senderPhone') || '';
   if (!senderPhone) {
-    return new Response(JSON.stringify({ success: false, error: 'sender_phone required' }), {
+    return new Response(JSON.stringify({ success: false, error: 'senderPhone required' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' }
     });
   }
   
-  const upstream = `${API_BASE_URL}/api/user/chat?sender_phone=${encodeURIComponent(senderPhone)}`;
+  const upstream = `${API_BASE_URL}/api/user/chat?senderPhone=${encodeURIComponent(senderPhone)}`;
   
   try {
     const res = await fetch(upstream);

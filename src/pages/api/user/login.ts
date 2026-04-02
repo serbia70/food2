@@ -6,7 +6,7 @@ export const prerender = false;
 
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.text();
-  const res = await fetch(buildUserApiUrl(API_BASE_URL, 'login'), {
+  const res = await fetch(buildUserApiUrl(API_BASE_URL, 'history'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,

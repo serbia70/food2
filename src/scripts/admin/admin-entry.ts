@@ -1,9 +1,8 @@
 import { initMqtt } from './mqtt-audio';
 import { showTab } from './core';
 import { getAdminRuntimeState, registerAdminGlobal, showAdminToast } from './globals';
-import { loadFeeDailySummary } from './billing-ui';
 import { loadReservations, loadReservationStats } from './reservations';
-import { loadStats, initDefaultDatesAndLoad } from './stats';
+import { initDefaultStatsDates } from './stats';
 import { initSettingsUI } from './settings-ui';
 import { initOrderEditUI } from './order-edit-ui';
 import { initAdminChatUI } from './user-chat';
@@ -51,6 +50,7 @@ const handleEditOrder = (el: any) => {
 export const initAdminPage = () => {
   try {
     bindAdminGlobals();
+    initDefaultStatsDates();
     const lastTab = localStorage.getItem('adminLastTab') || 'orders';
     showTab(lastTab);
     const runtime = getAdminRuntimeState();
@@ -68,8 +68,6 @@ export const initAdminPage = () => {
       getCurrentOrderId: () => currentOrderId,
     });
     initSettingsUI(() => showAdminToast('✅ 设置已全部保存'));
-    initDefaultDatesAndLoad();
-    void loadFeeDailySummary();
     console.log('[admin-entry] initialized');
   } catch (error) {
     console.error('[admin-entry] init failed', error);

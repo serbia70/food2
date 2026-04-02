@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config';
 import { buildAdminAuthHeader } from '../../../lib/admin-api-route';
-// TODO: 移除代理层业务修补，待后端稳定输出订单 items_json 后删除。
+// TODO: 移除代理层业务修补，待后端稳定输出订单 itemsJson 后删除。
 
 export const prerender = false;
 
@@ -49,19 +49,19 @@ export const GET: APIRoute = async ({ request, url, cookies }) => {
 
   if (Array.isArray(data)) {
     data = data.map((order: any) => {
-      if (!order || typeof order.items_json !== 'string') return order;
+      if (!order || typeof order.itemsJson !== 'string') return order;
       try {
-        const parsed = JSON.parse(order.items_json);
+        const parsed = JSON.parse(order.itemsJson);
         if (Array.isArray(parsed)) return order;
         if (parsed && typeof parsed === 'object') {
           const arr = Object.entries(parsed as Record<string, any>).map(([key, value]) => {
             const item = value && typeof value === 'object' ? { ...value } : {};
             const pid = Number(key);
-            if (item.product_id == null) item.product_id = Number.isNaN(pid) ? item.id || 0 : pid;
-            if (item.quantity == null) item.quantity = item.qty || 1;
+            if (item.productId == null) item.productId = Number.isNaN(pid) ? item.id || 0 : pid;
+            if (item.quantity == null) item.quantity = 1;
             return item;
           });
-          return { ...order, items_json: JSON.stringify(arr) };
+          return { ...order, itemsJson: JSON.stringify(arr) };
         }
       } catch {
         return order;

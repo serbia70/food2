@@ -51,7 +51,7 @@ export default function MenuList({
     return {
       id: product.productId,
       name: source?.name ?? product.productName,
-      sub_name: source?.sub_name ?? product.productSubName,
+      subName: source?.subName ?? product.productSubName,
       price: source?.price ?? product.originalPrice,
       img: source?.img,
       stock: source?.stock,
@@ -142,7 +142,7 @@ export default function MenuList({
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: isTextMode ? 'center' : 'space-between', minWidth: 0, paddingLeft: '4px' }}>
           <div style={{ overflow: 'hidden' }}>
             <div style={{ fontSize: isTextMode ? '15px' : '13px', fontWeight: '700', color: '#1a202c', lineHeight: '1.2', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-            <div style={{ fontSize: '11px', color: '#a0aec0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.subName || p.sub_name}</div>
+            <div style={{ fontSize: '11px', color: '#a0aec0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.subName}</div>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: isTextMode ? '4px' : 'auto', gap: '2px' }}>

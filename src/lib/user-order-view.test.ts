@@ -5,13 +5,13 @@ import { buildRecentUserOrderSummary, buildShopMembershipSummaries, buildUserOrd
 
 test('优先使用订单中的店铺名与 slug，并生成会员标签', () => {
   const view = buildUserOrderView({
-    order_no: 'A1001',
-    total_amount: 1680,
-    created_at: '2026-03-09 14:00:00',
-    shop_name: 'Burger House',
+    orderNo: 'A1001',
+    totalAmount: 1680,
+    createdAt: '2026-03-09 14:00:00',
+    shopName: 'Burger House',
     slug: 'burger-house',
     points: 120,
-    is_vip: true,
+    isVip: true,
   });
 
   assert.equal(view.shopName, 'Burger House');
@@ -23,9 +23,9 @@ test('优先使用订单中的店铺名与 slug，并生成会员标签', () => 
 
 test('缺少店铺字段时回退为未知店铺', () => {
   const view = buildUserOrderView({
-    order_no: 'A1002',
-    total_amount: 50,
-    created_at: '2026-03-09 14:05:00',
+    orderNo: 'A1002',
+    totalAmount: 50,
+    createdAt: '2026-03-09 14:05:00',
   });
 
   assert.equal(view.shopName, '未知店铺');
@@ -36,34 +36,34 @@ test('缺少店铺字段时回退为未知店铺', () => {
 test('同店多笔订单应聚合为一个店铺权益摘要', () => {
   const summaries = buildShopMembershipSummaries([
     {
-      order_no: 'A1001',
-      order_type: 'delivery',
-      total_amount: 1680,
-      created_at: '2026-03-09 14:00:00',
-      shop_name: 'Burger House',
+      orderNo: 'A1001',
+      orderType: 'delivery',
+      totalAmount: 1680,
+      createdAt: '2026-03-09 14:00:00',
+      shopName: 'Burger House',
       slug: 'burger-house',
       points: 120,
-      is_vip: true,
+      isVip: true,
     },
     {
-      order_no: 'A1002',
-      order_type: 'delivery',
-      total_amount: 980,
-      created_at: '2026-03-09 15:00:00',
-      shop_name: 'Burger House',
+      orderNo: 'A1002',
+      orderType: 'delivery',
+      totalAmount: 980,
+      createdAt: '2026-03-09 15:00:00',
+      shopName: 'Burger House',
       slug: 'burger-house',
       points: 140,
-      is_vip: true,
+      isVip: true,
     },
     {
-      order_no: 'B2001',
-      order_type: 'delivery',
-      total_amount: 430,
-      created_at: '2026-03-09 13:00:00',
-      restaurant_name: 'Pizza Corner',
-      shop_slug: 'pizza-corner',
-      user_points: 30,
-      vip_level: 'gold',
+      orderNo: 'B2001',
+      orderType: 'delivery',
+      totalAmount: 430,
+      createdAt: '2026-03-09 13:00:00',
+      restaurantName: 'Pizza Corner',
+      shopSlug: 'pizza-corner',
+      userPoints: 30,
+      vipLevel: 'gold',
     },
   ]);
 
@@ -79,13 +79,13 @@ test('同店多笔订单应聚合为一个店铺权益摘要', () => {
   assert.equal(summaries[1]?.isVip, true);
 });
 
-test('仅有 shop_id 时可通过店铺字典补出店铺名与 slug', () => {
+test('仅有 shopId 时可通过店铺字典补出店铺名与 slug', () => {
   const view = buildUserOrderView(
     {
-      order_no: 'C3001',
-      shop_id: 2,
-      total_amount: 556,
-      created_at: '2026-03-02 02:41:00',
+      orderNo: 'C3001',
+      shopId: 2,
+      totalAmount: 556,
+      createdAt: '2026-03-02 02:41:00',
     },
     {
       2: { id: 2, name: '辣府海鲜', slug: 'la-fu-seafood' },
@@ -98,24 +98,47 @@ test('仅有 shop_id 时可通过店铺字典补出店铺名与 slug', () => {
 
 test('用户侧订单列表只保留外卖订单', () => {
   const visible = filterUserVisibleOrders([
-    { id: 1, order_type: 'dine_in', order_no: 'A1' },
-    { id: 2, order_type: 'delivery', order_no: 'A2' },
-    { id: 3, order_type: 'delivery', order_no: 'A3' },
+    { id: 1, orderType: 'dine_in', orderNo: 'A1' },
+    { id: 2, orderType: 'delivery', orderNo: 'A2' },
+    { id: 3, orderType: 'delivery', orderNo: 'A3' },
   ]);
 
   assert.deepEqual(
-    visible.map((order) => order.order_no),
+    visible.map((order) => order.orderNo),
     ['A2', 'A3'],
   );
 });
 
 test('用户中心可生成最近外卖订单摘要', () => {
   const summary = buildRecentUserOrderSummary([
-    { order_no: 'A1', order_type: 'dine_in', created_at: '2026-03-09 10:00:00', total_amount: 20 },
-    { order_no: 'A2', order_type: 'delivery', created_at: '2026-03-09 11:00:00', total_amount: 50, status: 'pending' },
-    { order_no: 'A3', order_type: 'delivery', created_at: '2026-03-09 12:00:00', total_amount: 70, status: 'completed' },
+    { orderNo: 'A1', orderType: 'dine_in', createdAt: '2026-03-09 10:00:00', totalAmount: 20 },
+    { orderNo: 'A2', orderType: 'delivery', createdAt: '2026-03-09 11:00:00', totalAmount: 50, status: 'pending' },
+    { orderNo: 'A3', orderType: 'delivery', createdAt: '2026-03-09 12:00:00', totalAmount: 70, status: 'completed' },
   ]);
 
   assert.equal(summary.totalCount, 2);
-  assert.equal(summary.latestOrder?.order_no, 'A3');
+  assert.equal(summary.latestOrder?.orderNo, 'A3');
+});
+
+test('user order view source uses canonical order fields', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/lib/user-order-view.ts'), 'utf8');
+
+  assert.match(source, /order\?\.orderType/);
+  assert.match(source, /createdAt/);
+  assert.match(source, /order\?\.shopId/);
+  assert.match(source, /shopName/);
+  assert.match(source, /shopSlug/);
+  assert.match(source, /isVip/);
+  assert.match(source, /vipLevel/);
+  assert.match(source, /userPoints/);
+  assert.doesNotMatch(source, /order_type/);
+  assert.doesNotMatch(source, /created_at/);
+  assert.doesNotMatch(source, /shop_id/);
+  assert.doesNotMatch(source, /shop_name/);
+  assert.doesNotMatch(source, /shop_slug/);
+  assert.doesNotMatch(source, /is_vip/);
+  assert.doesNotMatch(source, /vip_level/);
+  assert.doesNotMatch(source, /user_points/);
 });

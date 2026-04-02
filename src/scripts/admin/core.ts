@@ -14,19 +14,33 @@ export function showTab(tabName: string) {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   localStorage.setItem('adminLastTab', tabName);
-  
+
   const renderZones = getAdminHandler<() => void>('renderZones');
   const loadReservationStats = getAdminHandler<() => void>('loadReservationStats');
   const loadReservations = getAdminHandler<() => void>('loadReservations');
   const loadFeeDailySummary = getAdminHandler<() => void>('loadFeeDailySummary');
+  const loadCustomers = getAdminHandler<() => void>('loadCustomers') || (window as any).loadCustomers;
+  const loadStats = getAdminHandler<() => void>('loadStats') || (window as any).loadStats;
+  const loadDrivers = getAdminHandler<() => void>('load-drivers') || (window as any)['load-drivers'];
+  const loadPromotions = getAdminHandler<() => void>('loadPromotions') || (window as any).loadPromotions;
+  const loadMarketingProducts = getAdminHandler<() => void>('loadMarketingProducts') || (window as any).loadMarketingProducts;
 
-  if (tabName === 'settings' && typeof renderZones === 'function') renderZones();
+  if (tabName === 'settings') {
+    if (typeof renderZones === 'function') renderZones();
+    if (typeof loadDrivers === 'function') loadDrivers();
+  }
   if (tabName === 'reservations') {
     if (typeof loadReservationStats === 'function') loadReservationStats();
     if (typeof loadReservations === 'function') loadReservations();
   }
   if (tabName === 'renew') {
     if (typeof loadFeeDailySummary === 'function') loadFeeDailySummary();
+  }
+  if (tabName === 'customers' && typeof loadCustomers === 'function') loadCustomers();
+  if (tabName === 'stats' && typeof loadStats === 'function') loadStats();
+  if (tabName === 'marketing') {
+    if (typeof loadPromotions === 'function') loadPromotions();
+    if (typeof loadMarketingProducts === 'function') loadMarketingProducts();
   }
 }
 

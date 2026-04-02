@@ -94,7 +94,9 @@ export function formatHHmm(v: any): string {
 export function resolveTableConfig(shop: any, settings: any): Array<{ name: string; prefix: string; count: number }> {
   const candidates: any[] = [
     parseMaybeJSON(shop?.table_config),
+    parseMaybeJSON(shop?.tableConfig),
     settings?.table_config,
+    settings?.tableConfig,
     settings?.tables,
   ];
 
@@ -141,12 +143,12 @@ export function resolveTableConfig(shop: any, settings: any): Array<{ name: stri
 
 export function isActiveDineInOrder(order: any): boolean {
   return (
-    order?.order_type === 'dine_in' &&
+    order?.orderType === 'dine_in' &&
     order?.status !== 'completed' &&
     order?.status !== 'cancelled' &&
     order?.status !== 'archived' &&
     order?.status !== 'paid' &&
-    order?.is_deleted !== 1
+    order?.isDeleted !== 1
   );
 }
 
@@ -164,7 +166,7 @@ export function buildTableCards(orders: any[], tableConfig: Array<{ name: string
       const tableRef: ParsedTableRef = parseTableRef(tableNum);
       const displayNum = String(i);
       const tableOrders = activeDineIn.filter((o) => {
-        const tableInfo = String(o.table_info || '').trim();
+        const tableInfo = String(o.tableInfo || '').trim();
         if (!tableInfo) return false;
         const orderRef = parseTableRef(tableInfo);
         const sameExact = !!(orderRef.key && tableRef.key && orderRef.key === tableRef.key);
@@ -186,7 +188,7 @@ export function buildTableCards(orders: any[], tableConfig: Array<{ name: string
 
       const hasOrder = tableOrders.length > 0;
       const hasReviewRequest = tableOrders.some((o) => o.status === 'review_needed');
-      const total = tableOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+      const total = tableOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
 
       let orderTime = '';
       let orderTimeTimestamp = 0;
@@ -195,15 +197,15 @@ export function buildTableCards(orders: any[], tableConfig: Array<{ name: string
 
       if (hasOrder) {
         const sorted = [...tableOrders].sort(
-          (a, b) => parseDBDateMs(a.created_at) - parseDBDateMs(b.created_at),
+          (a, b) => parseDBDateMs(a.createdAt) - parseDBDateMs(b.createdAt),
         );
         const firstOrder = sorted[0];
-        orderTime = formatHHmm(firstOrder?.created_at);
+        orderTime = formatHHmm(firstOrder?.createdAt);
 
         const latestInTable = [...tableOrders].sort((a, b) => Number(b.id || 0) - Number(a.id || 0))[0];
-        orderTimeTimestamp = parseDBDateMs(latestInTable?.created_at);
+        orderTimeTimestamp = parseDBDateMs(latestInTable?.createdAt);
         isNew = Number(latestInTable?.id || 0) === latestActiveId && Date.now() - orderTimeTimestamp < 60_000;
-        const latestOrderNo = String(latestInTable?.order_no || latestInTable?.id || '');
+        const latestOrderNo = String(latestInTable?.orderNo || latestInTable?.id || '');
         latestPickupNo = latestOrderNo ? latestOrderNo.slice(-3) : '';
       }
 

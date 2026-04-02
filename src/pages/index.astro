@@ -1,13 +1,15 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { API_BASE_URL, MASTER_TOKEN } from '../config';
+import { resolveShopDisplaySettings } from '../lib/shop-display-settings';
 import PlatformBottomNav from '../components/PlatformBottomNav.astro';
 
 export const prerender = false;
 
 const url = new URL(Astro.request.url);
 const currentCat = url.searchParams.get('cat') || 'all';
-const currentCity = url.searchParams.get('city') || 'Belgrade';
+const currentCity = url.searchParams.get('city') || '';
+const selectedCity = currentCity || 'Belgrade';
 const currentZone = url.searchParams.get('zone') || 'all';
 
 const cities: Record<string, string[]> = {
@@ -15,7 +17,7 @@ const cities: Record<string, string[]> = {
   'Novi Sad': ['全部区域', '市中心', '利曼', '代泰利纳拉'],
   Nis: ['全部区域', '梅迪亚纳', '潘泰莱'],
 };
-const zones = cities[currentCity] || cities.Belgrade;
+const zones = cities[selectedCity] || cities.Belgrade;
 
 type ShopView = {
   id: number;
@@ -26,7 +28,7 @@ type ShopView = {
   zone: string;
   city: string;
   category: string;
-  delivery_type: 'merchant' | 'platform';
+  deliveryType: 'merchant' | 'platform';
   products: Array<{ name: string; price: number; img?: string }>;
 };
 
@@ -53,7 +55,15 @@ try {
             shopSettings = JSON.parse(shop.settings || '{}');
           } catch {}
 
-          const city = String(shopSettings.city || currentCity || 'Belgrade');
+          const resolvedDisplaySettings = resolveShopDisplaySettings(shop, shopSettings, masterSettings);
+          const normalizeMenuImageUrl = (raw: any): string => {
+            if (typeof raw !== 'string' || raw.trim() === '') return raw;
+            const img = raw.trim();
+            if (img.startsWith('http://') || img.startsWith('https://')) return img;
+            if (img.startsWith('/uploads/')) return `${API_BASE_URL}${img}`;
+            if (img.startsWith('/assets/uploads/')) return `${API_BASE_URL}${img}`;
+            return img;
+          };
           const zoneSource = String(shopSettings.delivery?.zones || '');
           const firstZone = zoneSource
             .split(',')
@@ -65,21 +75,26 @@ try {
           const address =
             String(shop.address || '').trim() ||
             String(shopSettings.address || '').trim() ||
-            `${zone}, ${city}`;
+            (resolvedDisplaySettings.city ? `${resolvedDisplaySettings.city}` : '');
 
           let products: Array<{ name: string; price: number; img?: string }> = [];
           try {
             const menuRes = await fetch(`${API_BASE_URL}/${encodeURIComponent(shop.slug)}/menu`);
             if (menuRes.ok) {
               const menu = await menuRes.json();
+              const menuCategories = Array.isArray(menu?.data)
+                ? menu.data
+                : Array.isArray(menu)
+                  ? menu
+                  : [];
               const flat: any[] = [];
-              (Array.isArray(menu) ? menu : []).forEach((cat: any) => {
+              (menuCategories).forEach((cat: any) => {
                 (cat?.products || []).forEach((p: any) => flat.push(p));
               });
-              products = flat.slice(0, 12).map((p) => ({
+              products = flat.map((p) => ({
                 name: p?.name || '未命名商品',
                 price: Number(p?.price || 0),
-                img: p?.img || '/favicon.svg',
+                img: normalizeMenuImageUrl(p?.img || p?.imageUrl) || '/favicon.svg',
               }));
             }
           } catch {}
@@ -91,9 +106,9 @@ try {
             logo,
             address,
             zone,
-            city,
+            city: resolvedDisplaySettings.city,
             category: String(shopSettings.category || 'food'),
-            delivery_type: shopSettings.delivery_type === 'platform' ? 'platform' : 'merchant',
+            deliveryType: shopSettings.deliveryType === 'platform' ? 'platform' : 'merchant',
             products,
           } as ShopView;
         }),
@@ -104,7 +119,7 @@ try {
       shopsArray = shopsArray.filter((s) => s.category === currentCat);
     }
     if (currentCity) {
-      shopsArray = shopsArray.filter((s) => s.city === currentCity || s.city === 'Belgrade');
+      shopsArray = shopsArray.filter((s) => s.city === currentCity);
     }
     if (currentZone !== 'all' && currentZone !== '全部区域') {
       shopsArray = shopsArray.filter((s) => s.zone.includes(currentZone));
@@ -143,7 +158,7 @@ if (!categories || categories.length === 0) {
     <div class="home-header">
       <div class="top-row">
         <div class="city-selector" onclick="toggleCityModal()">
-          <span>📍 {currentCity}</span>
+          <span>📍 {selectedCity}</span>
           <small>▼</small>
         </div>
         <div class="search-bar">
@@ -155,7 +170,7 @@ if (!categories || categories.length === 0) {
       <div class="zone-scroll">
         {zones.map((z) => (
           <a
-            href={`?city=${currentCity}&zone=${z}&cat=${currentCat}`}
+            href={`?city=${selectedCity}&zone=${z}&cat=${currentCat}`}
             class={`zone-pill ${currentZone === z || (currentZone === 'all' && z === '全部区域') ? 'active' : ''}`}
           >
             {z}
@@ -165,12 +180,12 @@ if (!categories || categories.length === 0) {
     </div>
 
     <div class="category-nav">
-      <a href={`?city=${currentCity}&zone=${currentZone}&cat=all`} class="cat-item">
+      <a href={`?city=${selectedCity}&zone=${currentZone}&cat=all`} class="cat-item">
         <div class="cat-icon" style="background:#607d8b;">✨</div>
         <span>全部</span>
       </a>
       {categories.map((c: any) => (
-        <a href={`?city=${currentCity}&zone=${currentZone}&cat=${c.id}`} class="cat-item">
+        <a href={`?city=${selectedCity}&zone=${currentZone}&cat=${c.id}`} class="cat-item">
           <div class="cat-icon" style={`background:${c.color};`}>{c.icon}</div>
           <span>{c.name}</span>
         </a>
@@ -220,8 +235,8 @@ if (!categories || categories.length === 0) {
 
               <div class="shop-row-2">
                 <div class="shop-address">📍 {shop.address || shop.zone || shop.city}</div>
-                <span class={`delivery-tag ${shop.delivery_type === 'platform' ? 'platform' : 'merchant'}`}>
-                  {shop.delivery_type === 'platform' ? '平台' : '商家'}
+                <span class={`delivery-tag ${shop.deliveryType === 'platform' ? 'platform' : 'merchant'}`}>
+                  {shop.deliveryType === 'platform' ? '平台' : '商家'}
                 </span>
               </div>
             </div>

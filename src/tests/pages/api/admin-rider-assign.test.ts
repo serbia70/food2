@@ -43,10 +43,11 @@ test('manual_assign updates order to delivering for selected available rider', a
       assert.equal(body.courierName, '骑手A');
       assert.equal(body.courierPhone, '061');
       assert.equal(body.pickupEtaMinutes, 15);
+      assert.equal(body.pickup_eta_minutes, 15);
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3030/api/telegram/send') {
+    if (url === 'http://localhost:3000/api/telegram/send') {
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -86,10 +87,11 @@ test('auto_assign picks next available rider when cursor is present', async () =
       assert.equal(body.courierName, '骑手B');
       assert.equal(body.courierPhone, '062');
       assert.equal(body.pickupEtaMinutes, 20);
+      assert.equal(body.pickup_eta_minutes, 20);
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3030/api/telegram/send') {
+    if (url === 'http://localhost:3000/api/telegram/send') {
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -204,6 +206,60 @@ test('returns no_available_riders when no available rider exists', async () => {
   });
 });
 
+test('manual_assign resolves shopSlug from orders API when request body misses shopSlug', async () => {
+  let telegramBody: Record<string, unknown> | null = null;
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+
+    if (url === 'http://localhost:3030/api/admin/riders') {
+      return new Response(JSON.stringify({
+        riders: [
+          { id: 9, name: '骑手C', phone: '063', status: 'available', telegramChatId: 'tg-9' },
+        ],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url === 'http://localhost:3030/api/admin/orders/474/status') {
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url === 'http://localhost:3030/api/admin/orders') {
+      return new Response(JSON.stringify([
+        { id: 474, shopSlug: 'demo-shop' },
+      ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url === 'http://localhost:3000/api/telegram/send') {
+      telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('http://localhost:3000/api/admin/rider-assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: 'admin_token=test-token' },
+      body: JSON.stringify({ action: 'manual_assign', orderId: '474', riderId: '9' }),
+    }),
+    cookies: createCookies(),
+  } as any);
+
+  assert.equal(response.status, 200);
+  assert.equal(telegramBody?.shopSlug, 'demo-shop');
+  assert.deepEqual(await response.json(), {
+    success: true,
+    rider: {
+      id: 9,
+      name: '骑手C',
+      phone: '063',
+    },
+  });
+});
+
 test('keeps assignment successful when telegram notification fails', async () => {
   let telegramCalled = false;
 
@@ -222,7 +278,7 @@ test('keeps assignment successful when telegram notification fails', async () =>
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3030/api/telegram/send') {
+    if (url === 'http://localhost:3000/api/telegram/send') {
       telegramCalled = true;
       throw new Error('telegram unavailable');
     }
@@ -248,6 +304,10 @@ test('keeps assignment successful when telegram notification fails', async () =>
       id: 9,
       name: '骑手C',
       phone: '063',
+    },
+    telegram_notification: {
+      success: false,
+      error: 'telegram unavailable',
     },
   });
 });

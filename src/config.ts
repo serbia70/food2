@@ -1,6 +1,6 @@
 // API config
 export const API_BASE_URL =
-  (import.meta as any).env?.PUBLIC_API_URL || 'http://localhost:3030';
+  (import.meta as any).env?.PUBLIC_API_URL || process.env.PUBLIC_API_URL || 'https://food2api.serbia70.com';
 
 // Master auth token
 // NOTE: master token must never be read from PUBLIC_* runtime env.

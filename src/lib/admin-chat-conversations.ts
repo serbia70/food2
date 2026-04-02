@@ -1,6 +1,6 @@
 type ChatMessageLike = {
-	sender_phone?: unknown;
-	created_at?: unknown;
+	senderPhone?: unknown;
+	createdAt?: unknown;
 	message?: unknown;
 };
 
@@ -27,9 +27,9 @@ export function buildConversationList(messages: ChatMessageLike[], unreadByPhone
 	const latestByPhone = new Map<string, { phone: string; timestamp: number; preview: string }>();
 
 	for (const message of messages || []) {
-		const phone = toPhone(message?.sender_phone);
+		const phone = toPhone(message?.senderPhone);
 		if (!phone) continue;
-		const timestamp = toTimestamp(message?.created_at);
+		const timestamp = toTimestamp(message?.createdAt);
 		const preview = toText(message?.message);
 		const previous = latestByPhone.get(phone);
 		if (!previous || timestamp >= previous.timestamp) {

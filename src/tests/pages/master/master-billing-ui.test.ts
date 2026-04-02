@@ -40,7 +40,15 @@ test('master page source only wires dashboard entry and payload helpers', async 
   assert.match(page, /dashboardView\.panels\.shopTopup/);
   assert.match(page, /dashboardView\.panels\.shopDineIn/);
   assert.match(page, /submitMasterShopTier: shopPanelBindings\.submitMasterShopTier,/);
-  assert.match(page, /dashboardView\.pageState\.kind === 'ready'/);
+  assert.match(page, /const shouldKeepMasterTabVisible = activeTab === 'dispatch' \|\| activeTab === 'riders';/);
+  assert.match(page, /const shouldShowMasterContent = dashboardView\.pageState\.kind === 'ready' \|\| shouldKeepMasterTabVisible;/);
+  assert.match(page, /if \(activeTab === 'riders' && shops\.length === 0 && !isUnauthorized\) \{/);
+  assert.match(page, /const retryInitUrl = new URL\(MASTER_INIT_PROXY_PATH, Astro\.url\);/);
+  assert.match(page, /const retryInitRes = await fetch\(retryInitUrl, \{/);
+  assert.match(page, /if \(retryInitRes\.ok\) \{/);
+  assert.match(page, /shops = Array\.isArray\(retryDataShops\) \? retryDataShops : shops;/);
+  assert.match(page, /masterSettings = retryDataSettings && typeof retryDataSettings === 'object' \? retryDataSettings : masterSettings;/);
+  assert.doesNotMatch(page, /if \(shouldKeepMasterTabVisible && shops\.length === 0 && !isUnauthorized\) \{/);
   assert.match(page, /const dashboardActions = dashboardView\.actions;/);
   assert.match(page, /const activeNotice = hasDashboardNotices \? dashboardView\.notices\[0\] : null;/);
   assert.match(

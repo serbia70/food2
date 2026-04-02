@@ -47,6 +47,11 @@ test('master SSR init 使用同域 /api/master/init 且显式转发 cookie', () 
     /fetch\(\s*initUrl\s*,[\s\S]*?headers\s*:\s*\{[\s\S]*?cookie[\s\S]*?\}[\s\S]*?\)/,
     'expected cookie variable to be referenced in fetch headers',
   );
+  assert.match(
+    frontmatter,
+    /for \(let attempt = 0; attempt < 2; attempt \+= 1\) \{[\s\S]*res = await fetch\(initUrl, \{/,
+    'expected master SSR init to retry transient failures before surfacing page-level loadError',
+  );
 
   // Proxy-only invariant: master SSR should not hit API_BASE_URL directly.
   assert.doesNotMatch(frontmatter, /\bAPI_BASE_URL\b/, 'expected no API_BASE_URL usage in master SSR init');

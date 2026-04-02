@@ -7,9 +7,8 @@ type PaymentMethod = "cash" | "wechat";
 
 type CartItemInput = {
   id?: string | number;
-  product_id?: string | number;
+  productId?: string | number;
   name?: string;
-  sub_name?: string;
   subName?: string;
   price?: number;
   quantity?: number;
@@ -93,13 +92,16 @@ export function useCartOrderSubmit({
       const quantity = Math.max(1, Number(nextItem.quantity || 0) || 1);
       const unitPrice = resolveCartItemUnitPrice(
         {
-          id: nextItem.id ?? nextItem.product_id ?? '',
+          id: nextItem.id ?? nextItem.productId ?? '',
+          productId: nextItem.productId ?? nextItem.id ?? '',
           price: Number(nextItem.price || 0),
         },
         promotionMap,
       );
       return {
         ...nextItem,
+        productId: nextItem.productId ?? nextItem.id,
+        subName: nextItem.subName,
         price: unitPrice,
         quantity,
       };
@@ -172,7 +174,7 @@ export function useCartOrderSubmit({
       info: fullInfo,
       note: finalNote,
       remarks: finalRemarks,
-      scheduled_for: type === "delivery" && deliveryTimeMode === "scheduled" ? reservationTime : "",
+      scheduledFor: type === "delivery" && deliveryTimeMode === "scheduled" ? reservationTime : "",
       user: userInfo,
       status: needsReview && dineInAction !== "add" ? "review_needed" : "pending",
       dineInAction,

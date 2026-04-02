@@ -17,17 +17,14 @@ function readAssignContext(orderId: string) {
   const hidden = document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null
     || document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null;
   const runtime = (window as typeof window & {
-    __adminRuntime?: { shopSlug?: string };
-    __adminDispatchCursor?: Record<string, string>;
+    __adminRuntime?: { shopSlug?: string; shopId?: string | number; shopName?: string; name?: string };
   }).__adminRuntime;
-  const cursorStore = ((window as typeof window & { __adminDispatchCursor?: Record<string, string> }).__adminDispatchCursor ||= {});
   const shopSlug = String(runtime?.shopSlug || '').trim();
-  const lastAssignedRiderId = String(cursorStore[shopSlug] || '').trim();
   return {
-    shopSlug,
-    lastAssignedRiderId,
     hidden,
-    cursorStore,
+    shopSlug,
+    shopId: String(runtime?.shopId || '').trim(),
+    shopName: String(runtime?.shopName || runtime?.name || '').trim(),
   };
 }
 
@@ -42,12 +39,6 @@ registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
   if (!orderId) return;
 
   try {
-    const pickupEtaMinutes = pickDispatchEtaMinutes();
-    if (!pickupEtaMinutes) {
-      showAdminToast('请选择预计取餐时间');
-      return;
-    }
-
     const riders = await fetchAvailableRiders();
     if (riders.length === 0) {
       showAdminToast('当前无可接单骑手');
@@ -64,9 +55,14 @@ registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
       return;
     }
 
-    const { shopSlug, cursorStore } = readAssignContext(orderId);
+    const pickupEtaMinutes = pickDispatchEtaMinutes();
+    if (!pickupEtaMinutes) {
+      showAdminToast('请选择预计取餐时间');
+      return;
+    }
+
+    const { shopSlug } = readAssignContext(orderId);
     await assignRider(orderId, String(target.id || ''), { shopSlug, pickupEtaMinutes });
-    if (shopSlug) cursorStore[shopSlug] = String(target.id || '').trim();
   } catch (error) {
     showAdminToast(getErrorMessage(error, '指派骑手失败'));
   }
@@ -83,8 +79,8 @@ registerAdminGlobal('auto-assign-rider', async (el: HTMLElement) => {
       return;
     }
 
-    const { shopSlug, lastAssignedRiderId } = readAssignContext(orderId);
-    await autoAssignRider(orderId, { shopSlug, lastAssignedRiderId, pickupEtaMinutes });
+    const { shopSlug } = readAssignContext(orderId);
+    await autoAssignRider(orderId, { shopSlug, pickupEtaMinutes });
   } catch (error) {
     showAdminToast(getErrorMessage(error, '自动派单失败'));
   }

@@ -36,9 +36,9 @@ export async function handleLocalizeImagesBatchRequest(options: {
       .map((p: any) => ({
         ...p,
         id: Number(p?.id || 0) || 0,
-        category_id: Number(p?.category_id || 0) || 0,
+        categoryId: Number(p?.categoryId || 0) || 0,
         name: String(p?.name || ''),
-        sub_name: String(p?.sub_name || ''),
+        subName: String(p?.subName || ''),
         price: Number(p?.price || 0) || 0,
         img: String(p?.img || ''),
       }))
@@ -92,9 +92,9 @@ export async function handleLocalizeImagesBatchRequest(options: {
 
       const body = JSON.stringify({
         id: Number(product?.id || 0) || 0,
-        category_id: Number(product?.category_id || 0) || 0,
+        categoryId: Number(product?.categoryId || 0) || 0,
         name: String(product?.name || ''),
-        sub_name: String(product?.sub_name || ''),
+        subName: String(product?.subName || ''),
         price: Number(product?.price || 0) || 0,
         img: newUrl,
       });

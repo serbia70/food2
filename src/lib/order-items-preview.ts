@@ -50,7 +50,7 @@ export function buildOrderItemsPreview(order: OrderLike | null | undefined, opts
 
   let arr: any[] = [];
   try {
-    const raw = (order as any)?.items_json;
+    const raw = (order as any)?.itemsJson;
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
     arr = toItemArray(parsed);
   } catch {
@@ -59,8 +59,8 @@ export function buildOrderItemsPreview(order: OrderLike | null | undefined, opts
 
   const normalized = arr
     .map((it: any) => {
-      const nameRaw = String((it && (it.name || it.product_name)) || '').trim();
-      const subRaw = String((it && (it.sub_name || it.subName)) || '').trim();
+      const nameRaw = String((it && (it.name || it.productName)) || '').trim();
+      const subRaw = String((it && (it.subName || '')) || '').trim();
       if (!nameRaw && !subRaw) return null;
 
       const { zh, sr } = pickZhSr(nameRaw, subRaw);

@@ -7,51 +7,51 @@ export interface Shop {
   category?: string;
   password?: string;
   settings?: string; // JSON string
-  mqtt_secret?: string;
-  expire_date?: string;
-  commission_type?: "per_order" | "percentage";
-  commission_value?: number;
-  last_paid_month?: string;
-  table_config?: string; // JSON string
+  mqttSecret?: string;
+  expireDate?: string;
+  commissionType?: "per_order" | "percentage";
+  commissionValue?: number;
+  lastPaidMonth?: string;
+  tableConfig?: string; // JSON string
   phone?: string;
   status?: "active" | "pending" | "banned";
-  enable_delivery?: number; // 0 or 1
-  enable_dine_in?: number; // 0 or 1
-  dine_in_billing_start_at?: string;
-  dine_in_expires_at?: string;
-  dine_in_grace_until?: string;
-  dine_in_disabled_at?: string;
-  dine_in_stop_reason?: "manual" | "auto_expired";
-  enable_reservation?: number; // 0 or 1
-  billing_plan_type?: "subscription" | "business";
-  billing_balance_rsd?: number;
-  delivery_charge_rsd?: number;
-  delivery_locked?: boolean;
-  delivery_lock_reason?: string;
-  owner_user_id?: number;
-  delivery_fee_settings?: string; // JSON string
+  enableDelivery?: number; // 0 or 1
+  enableDineIn?: number; // 0 or 1
+  dineInBillingStartAt?: string;
+  dineInExpiresAt?: string;
+  dineInGraceUntil?: string;
+  dineInDisabledAt?: string;
+  dineInStopReason?: "manual" | "auto_expired";
+  enableReservation?: number; // 0 or 1
+  billingPlanType?: "subscription" | "business";
+  billingBalanceRsd?: number;
+  deliveryChargeRsd?: number;
+  deliveryLocked?: boolean;
+  deliveryLockReason?: string;
+  ownerUserId?: number;
+  deliveryFeeSettings?: string; // JSON string
   city?: string;
   zone?: string;
-  delivery_type?: "merchant" | "platform";
+  deliveryType?: "merchant" | "platform";
   address?: string;
 }
 
 export interface Order {
   id: number;
-  order_no: string;
-  restaurant_id: number;
-  shop_name?: string;
-  shop_slug?: string;
-  restaurant_name?: string;
-  restaurant_slug?: string;
+  orderNo: string;
+  restaurantId: number;
+  shopName?: string;
+  shopSlug?: string;
+  restaurantName?: string;
+  restaurantSlug?: string;
   slug?: string;
   points?: number;
-  user_points?: number;
-  points_balance?: number;
-  is_vip?: boolean | number | string;
-  vip_level?: string;
-  table_info?: string;
-  order_type: "dine_in" | "delivery";
+  userPoints?: number;
+  pointsBalance?: number;
+  isVip?: boolean | number | string;
+  vipLevel?: string;
+  tableInfo?: string;
+  orderType: "dine_in" | "delivery";
   status:
     | "pending"
     | "confirmed"
@@ -61,30 +61,30 @@ export interface Order {
     | "cancelled"
     | "review_needed"
     | "archived";
-  total_amount: number;
-  items_json: string; // JSON string
-  original_items_json?: string; // JSON string
-  remarks_json?: string; // JSON string
-  user_phone?: string;
-  scheduled_for?: string;
-  created_at: string;
-  updated_at?: string;
-  is_deleted?: number; // 0 or 1
-  deleted_at?: string;
+  totalAmount: number;
+  itemsJson: string; // JSON string
+  originalItemsJson?: string; // JSON string
+  remarksJson?: string; // JSON string
+  userPhone?: string;
+  scheduledFor?: string;
+  createdAt: string;
+  updatedAt?: string;
+  isDeleted?: number; // 0 or 1
+  deletedAt?: string;
   archived?: number; // 0 or 1
-  archived_at?: string;
-  paid_at?: string;
-  courier_name?: string;
-  courier_phone?: string;
-  pickup_eta_minutes?: number;
-  pickup_ready_at?: string;
-  rider_broadcasted_at?: string;
-  rider_remind_count?: number;
-  rider_last_reminded_at?: string;
-  rider_contact_attempted_at?: string;
-  modification_count?: number;
-  delivery_fee_status?: "pending" | "paid";
-  allow_add?: number; // 0 or 1
+  archivedAt?: string;
+  paidAt?: string;
+  courierName?: string;
+  courierPhone?: string;
+  pickupEtaMinutes?: number;
+  pickupReadyAt?: string;
+  riderBroadcastedAt?: string;
+  riderRemindCount?: number;
+  riderLastRemindedAt?: string;
+  riderContactAttemptedAt?: string;
+  modificationCount?: number;
+  deliveryFeeStatus?: "pending" | "paid";
+  allowAdd?: number; // 0 or 1
 }
 
 export interface User {
@@ -92,9 +92,9 @@ export interface User {
   phone: string;
   name?: string;
   password?: string;
-  last_address?: string;
-  created_at: string;
-  google_id?: string;
+  lastAddress?: string;
+  createdAt: string;
+  googleId?: string;
   email?: string;
   avatar?: string;
   role?: "customer" | "merchant" | "admin";
@@ -106,21 +106,21 @@ export interface Rider {
   phone: string;
   password?: string;
   status: "offline" | "available" | "busy";
-  telegram_chat_id?: string;
-  telegram_username?: string;
-  created_at?: string;
+  telegramChatId?: string;
+  telegramUsername?: string;
+  createdAt?: string;
 }
 
 export interface Product {
   id: number | string;
-  category_id?: number;
-  restaurant_id?: number;
+  categoryId?: number;
+  restaurantId?: number;
   name: string;
-  sub_name?: string;
+  subName?: string;
   price: number;
   img?: string;
-  is_available?: number; // 0 or 1
-  sort_order?: number;
+  isAvailable?: number; // 0 or 1
+  sortOrder?: number;
   stock?: number;
   description?: string;
   // UI helper fields
@@ -131,11 +131,10 @@ export interface Product {
 
 export interface Category {
   id: number | string;
-  restaurant_id?: number;
+  restaurantId?: number;
   name: string;
-  sub_name?: string;
   subName?: string;
-  sort_order?: number;
+  sortOrder?: number;
   products: Product[];
   // UI helper fields
   icon?: string;

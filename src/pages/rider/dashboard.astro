@@ -96,7 +96,7 @@ import Layout from '../../layouts/Layout.astro';
 
   <script>
     import { getRiderTelegramBindingCopy, isValidRiderSession, normalizeRiderSession } from '../../lib/rider-session';
-    import { getRiderStatusHintCopy } from '../../lib/rider-dispatch';
+    import { getAdminDispatchStatusCopy, getRiderStatusHintCopy } from '../../lib/rider-dispatch.ts';
 
     let rider = null;
     let currentTab = 'active';
@@ -143,8 +143,8 @@ import Layout from '../../layouts/Layout.astro';
       if (!deepLinkOrderId) return false;
       const safeOrder = order || {};
       const orderId = String(safeOrder.id || '').trim();
-      const orderNo = String(safeOrder.order_no || '').trim();
-      const restaurantId = String(safeOrder.shop_slug || safeOrder.restaurant_slug || safeOrder.restaurant_id || safeOrder.shop_id || '').trim();
+      const orderNo = String(safeOrder.orderNo || '').trim();
+      const restaurantId = String(safeOrder.shopSlug || safeOrder.restaurantSlug || safeOrder.restaurantId || safeOrder.shopId || '').trim();
       const restaurantMatched = !deepLinkRestaurantId || restaurantId === deepLinkRestaurantId;
       return restaurantMatched && (orderId === deepLinkOrderId || orderNo === deepLinkOrderId);
     }
@@ -152,8 +152,8 @@ import Layout from '../../layouts/Layout.astro';
     function renderTelegramBindingPanel() {
       const panel = document.getElementById('telegram-binding-panel');
       if (!panel || !rider) return;
-      const bound = String(rider.telegram_chat_id || '').trim() !== '' && rider.telegram_chat_id !== '__pending_refresh__';
-      const copy = getRiderTelegramBindingCopy(bound ? rider : { telegram_chat_id: '' });
+      const bound = String(rider.telegramChatId || '').trim() !== '' && rider.telegramChatId !== '__pending_refresh__';
+      const copy = getRiderTelegramBindingCopy(bound ? rider : { telegramChatId: '' });
       panel.innerHTML = `
         <div class="telegram-binding-copy ${bound ? 'bound' : 'unbound'}">${copy}</div>
         ${bound ? '' : '<button id="bind-telegram-btn" class="btn-action btn-map" type="button">绑定 Telegram</button>'}
@@ -225,7 +225,7 @@ import Layout from '../../layouts/Layout.astro';
         showDeepLinkToast('Telegram 绑定成功');
         const pendingRider = {
           ...rider,
-          telegram_chat_id: rider.telegram_chat_id || '__pending_refresh__',
+          telegramChatId: rider.telegramChatId || '__pending_refresh__',
         };
         persistRiderSession(pendingRider);
       }
@@ -298,6 +298,7 @@ import Layout from '../../layouts/Layout.astro';
     };
 
     async function loadOrders() {
+      const container = document.getElementById('order-list');
       try {
         const view = currentTab === 'active' ? 'active' : 'history';
         const res = await fetch(`/api/rider/orders?phone=${encodeURIComponent(rider.phone || '')}&view=${view}`);
@@ -306,9 +307,24 @@ import Layout from '../../layouts/Layout.astro';
           refreshRiderSessionFromPayload(data);
           allOrders = Array.isArray(data.orders) ? data.orders : [];
           renderOrders();
+          return;
+        }
+
+        const error = String(data.error || 'load_orders_failed');
+        if (container) {
+          const failed = document.createElement('div');
+          failed.className = 'empty-tip';
+          failed.textContent = `加载失败: ${error}`;
+          container.replaceChildren(failed);
         }
       } catch (e) {
         console.error('Load orders failed', e);
+        if (container) {
+          const failed = document.createElement('div');
+          failed.className = 'empty-tip';
+          failed.textContent = '加载失败: network_error';
+          container.replaceChildren(failed);
+        }
       }
     }
 
@@ -340,13 +356,23 @@ import Layout from '../../layouts/Layout.astro';
         return;
       }
 
-      const cards = myOrders.map((o) => {
+      const createInfoRow = (iconText, contentNode) => {
+        const row = document.createElement('div');
+        row.className = 'info-row';
+        const icon = document.createElement('span');
+        icon.className = 'icon';
+        icon.textContent = iconText;
+        row.append(icon, contentNode);
+        return row;
+      };
+
+      const createCard = (o) => {
         const isDeepLinkTarget = matchesDeepLinkOrder(o);
-        const items = parseItems(o.items_json);
-        const address = o.table_info || '';
-        const phone = o.user_phone || '';
+        const items = parseItems(o.itemsJson);
+        const address = o.tableInfo || '';
+        const phone = o.userPhone || '';
         const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-        const canTake = rider.status === 'available' && o.status === 'awaiting_courier' && !o.courier_phone;
+        const canTake = rider.status === 'available' && o.status === 'awaiting_courier';
 
         const card = document.createElement('div');
         card.className = `order-card status-${o.status}`;
@@ -357,7 +383,7 @@ import Layout from '../../layouts/Layout.astro';
           }
         }
 
-        const etaMinutes = Number(o.pickup_eta_minutes || 0);
+        const etaMinutes = Number(o.pickupEtaMinutes || 0);
         if (etaMinutes > 0) {
           const eta = document.createElement('div');
           eta.className = 'pickup-eta';
@@ -369,26 +395,16 @@ import Layout from '../../layouts/Layout.astro';
         header.className = 'card-header';
         const orderNo = document.createElement('span');
         orderNo.className = 'order-no';
-        orderNo.textContent = `#${String(o.order_no || '').slice(-4)}`;
+        orderNo.textContent = `#${String(o.orderNo || '').slice(-4)}`;
         const orderTime = document.createElement('span');
         orderTime.className = 'order-time';
-        orderTime.textContent = String(o.created_at || '').slice(11, 16);
+        orderTime.textContent = String(o.createdAt || '').slice(11, 16);
         header.append(orderNo, orderTime);
-
-        const createInfoRow = (iconText, contentNode) => {
-          const row = document.createElement('div');
-          row.className = 'info-row';
-          const icon = document.createElement('span');
-          icon.className = 'icon';
-          icon.textContent = iconText;
-          row.append(icon, contentNode);
-          return row;
-        };
 
         const shop = document.createElement('span');
         shop.className = 'text';
         shop.style.fontWeight = 'bold';
-        shop.textContent = o.shop_name || 'Shop';
+        shop.textContent = o.shopName || 'Shop';
         const addr = document.createElement('span');
         addr.className = 'text address';
         addr.textContent = address;
@@ -414,11 +430,11 @@ import Layout from '../../layouts/Layout.astro';
         footer.className = 'card-footer';
         const total = document.createElement('span');
         total.className = 'total-price';
-        total.textContent = `${o.total_amount || 0} RSD`;
+        total.textContent = `${o.totalAmount || 0} RSD`;
         const status = document.createElement('span');
         status.style.fontSize = '12px';
         status.style.color = '#999';
-        status.textContent = o.status;
+        status.textContent = getAdminDispatchStatusCopy(o.status);
         footer.append(total, status);
 
         card.append(
@@ -442,7 +458,7 @@ import Layout from '../../layouts/Layout.astro';
           card.appendChild(actionWrap);
         }
 
-        if (o.status === 'delivering' && String(o.courier_phone || '').trim() === String(rider?.phone || '').trim()) {
+        if (o.status === 'delivering' && String(o.courierPhone || '').trim() === String(rider?.phone || '').trim()) {
           const actionWrap = document.createElement('div');
           actionWrap.className = 'action-btns';
           const call = document.createElement('a');
@@ -464,9 +480,50 @@ import Layout from '../../layouts/Layout.astro';
         }
 
         return card;
-      });
-      container.replaceChildren(...cards);
-      if (deepLinkOrderId && !cards.some((node) => node.classList.contains('deep-link-target'))) {
+      };
+
+      if (currentTab === 'active') {
+        const awaitingOrders = myOrders.filter((o) => o.status === 'awaiting_courier');
+        const deliveringOrders = myOrders.filter((o) => o.status === 'delivering' && String(o.courierPhone || '').trim() === String(rider?.phone || '').trim());
+
+        const sections = [];
+
+        const poolSection = document.createElement('section');
+        const poolTitle = document.createElement('h3');
+        poolTitle.textContent = '待接单池';
+        poolSection.appendChild(poolTitle);
+        if (awaitingOrders.length > 0) {
+          poolSection.append(...awaitingOrders.map(createCard));
+        } else {
+          const poolEmpty = document.createElement('div');
+          poolEmpty.className = 'empty-tip';
+          poolEmpty.textContent = '暂无待接单';
+          poolSection.appendChild(poolEmpty);
+        }
+        sections.push(poolSection);
+
+        const mineSection = document.createElement('section');
+        const mineTitle = document.createElement('h3');
+        mineTitle.textContent = '我的配送';
+        mineSection.appendChild(mineTitle);
+        if (deliveringOrders.length > 0) {
+          mineSection.append(...deliveringOrders.map(createCard));
+        } else {
+          const mineEmpty = document.createElement('div');
+          mineEmpty.className = 'empty-tip';
+          mineEmpty.textContent = '暂无我的配送';
+          mineSection.appendChild(mineEmpty);
+        }
+        sections.push(mineSection);
+
+        container.replaceChildren(...sections);
+      } else {
+        const cards = myOrders.map(createCard);
+        container.replaceChildren(...cards);
+      }
+
+      const renderedCards = Array.from(container.querySelectorAll('.order-card'));
+      if (deepLinkOrderId && !renderedCards.some((node) => node.classList.contains('deep-link-target'))) {
         maybeShowDeepLinkHint();
       }
     }
@@ -481,8 +538,8 @@ import Layout from '../../layouts/Layout.astro';
             id,
             expected_current_status: 'awaiting_courier',
             status: 'delivering',
-            courier_name: rider.name,
-            courier_phone: rider.phone,
+            courierName: rider.name,
+            courierPhone: rider.phone,
           }),
         });
         const data = await res.json();
@@ -511,7 +568,7 @@ import Layout from '../../layouts/Layout.astro';
         const res = await fetch('/api/order/update_status', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ id, status: 'completed', courier_name: rider.name, courier_phone: rider.phone }),
+          body: JSON.stringify({ id, status: 'completed', courierName: rider.name, courierPhone: rider.phone }),
         });
         const data = await res.json();
         if (data.success) {

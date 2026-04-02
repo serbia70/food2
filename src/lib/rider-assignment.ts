@@ -45,12 +45,15 @@ export function buildAssignedOrderStatusPayload({
   const riderName = String(rider?.name || '').trim();
   const riderPhone = String(rider?.phone || '').trim();
 
+  const etaMinutes = Number.isFinite(Number(pickupEtaMinutes)) ? Number(pickupEtaMinutes) : 0;
+
   return {
     status: 'delivering',
     courierName: riderName,
     courierPhone: riderPhone,
     courier_name: riderName,
     courier_phone: riderPhone,
-    pickupEtaMinutes: Number.isFinite(Number(pickupEtaMinutes)) ? Number(pickupEtaMinutes) : 0,
+    pickupEtaMinutes: etaMinutes,
+    pickup_eta_minutes: etaMinutes,
   };
 }

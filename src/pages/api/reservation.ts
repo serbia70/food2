@@ -4,15 +4,14 @@ import { API_BASE_URL } from '../../config.ts';
 export const prerender = false;
 
 type ReservationSettings = {
-  reservation_enabled?: number | string | boolean | null;
-  subscription_enabled?: number | string | boolean | null;
+  reservationEnabled?: number | string | boolean | null;
+  subscriptionEnabled?: number | string | boolean | null;
 };
 
 type ShopInfo = {
   settings?: string | ReservationSettings | null;
-  reservation_enabled?: number | string | boolean | null;
+  reservationEnabled?: number | string | boolean | null;
   enableReservation?: number | string | boolean | null;
-  enable_reservation?: number | string | boolean | null;
 };
 
 function parseSettings(raw: ShopInfo['settings']): ReservationSettings {
@@ -30,11 +29,10 @@ function parseSettings(raw: ShopInfo['settings']): ReservationSettings {
 function isReservationEnabled(shop: ShopInfo): boolean {
   const settings = parseSettings(shop.settings);
   const flag =
-    shop.reservation_enabled ??
-    settings.reservation_enabled ??
+    shop.reservationEnabled ??
+    settings.reservationEnabled ??
     shop.enableReservation ??
-    shop.enable_reservation ??
-    settings.subscription_enabled ??
+    settings.subscriptionEnabled ??
     1;
   return !(flag === 0 || flag === '0' || flag === false || flag === 'false');
 }
@@ -84,12 +82,12 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const payload = {
-      guest_count: Number(raw?.guest_count || 0),
-      reservation_time: String(raw?.reservation_time || ''),
-      customer_phone: String(raw?.customer_phone || ''),
-      dine_type: 'dine_in',
-      delivery_address: null,
-      customer_name: raw?.customer_name || null,
+      guestCount: Number(raw?.guestCount || 0),
+      reservationTime: String(raw?.reservationTime || ''),
+      customerPhone: String(raw?.customerPhone || ''),
+      dineType: 'dine_in',
+      deliveryAddress: null,
+      customerName: raw?.customerName || null,
       items: raw?.items || null,
       remarks: raw?.remarks || null,
     };

@@ -69,8 +69,8 @@ export const POST: APIRoute = async ({ request }) => {
         'x-telegram-claim-secret': requestSecret,
       },
       body: JSON.stringify({
-        callback_data: callbackData,
-        chat_id: callbackChatId,
+        callbackData,
+        chatId: callbackChatId,
       }),
     });
 
@@ -96,8 +96,8 @@ export const POST: APIRoute = async ({ request }) => {
         'x-telegram-bot-api-secret-token': requestSecret,
       },
       body: JSON.stringify({
-        bind_token: bindToken,
-        chat_id: chatId,
+        bindToken,
+        chatId,
       }),
     });
 

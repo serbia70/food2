@@ -183,18 +183,18 @@ interface Props {
   }
 
   function makeMessageKey(p) {
-    const created = String(p && p.created_at ? p.created_at : '').trim();
-    const role = String(p && p.sender_role ? p.sender_role : '').trim();
-    const phone = String(p && p.sender_phone ? p.sender_phone : '').trim();
+    const created = String(p && p.createdAt ? p.createdAt : '').trim();
+    const role = String(p && p.senderRole ? p.senderRole : '').trim();
+    const phone = String(p && p.senderPhone ? p.senderPhone : '').trim();
     const msg = String(p && p.message ? p.message : '').trim();
     return `${created}|${role}|${phone}|${msg}`;
   }
 
   function appendUserMessage(payload) {
     if (!payload || typeof payload !== 'object') return;
-    if (Number(payload.shop_id || 0) !== Number(shopId || 0)) return;
+    if (Number(payload.shopId || 0) !== Number(shopId || 0)) return;
     // Only append messages from the other side (shop/admin). Our own sends already refresh via HTTP.
-    const role = String(payload.sender_role || '').trim();
+    const role = String(payload.senderRole || '').trim();
     if (role === 'user') return;
     if (!payload.message) return;
 
@@ -208,8 +208,8 @@ interface Props {
     const container = document.getElementById('chat-messages');
     if (!container) return;
 
-    const isUser = String(payload.sender_role || '') === 'user';
-    const createdAt = payload.created_at ? new Date(payload.created_at) : new Date();
+    const isUser = String(payload.senderRole || '') === 'user';
+    const createdAt = payload.createdAt ? new Date(payload.createdAt) : new Date();
 
     const wrap = document.createElement('div');
     wrap.style.marginBottom = '10px';
@@ -275,14 +275,14 @@ interface Props {
     wrap.style.marginBottom = '10px';
     wrap.style.display = 'flex';
     wrap.style.flexDirection = 'column';
-    wrap.style.alignItems = message.sender_role === 'user' ? 'flex-end' : 'flex-start';
+    wrap.style.alignItems = message.senderRole === 'user' ? 'flex-end' : 'flex-start';
 
     const bubble = document.createElement('div');
     bubble.style.maxWidth = '80%';
     bubble.style.padding = '8px 12px';
     bubble.style.borderRadius = '12px';
-    bubble.style.background = message.sender_role === 'user' ? '#059669' : '#e5e7eb';
-    bubble.style.color = message.sender_role === 'user' ? '#fff' : '#1f2937';
+    bubble.style.background = message.senderRole === 'user' ? '#059669' : '#e5e7eb';
+    bubble.style.color = message.senderRole === 'user' ? '#fff' : '#1f2937';
     bubble.style.fontSize = '14px';
     bubble.textContent = String(message.message || '');
 
@@ -290,7 +290,7 @@ interface Props {
     time.style.fontSize = '10px';
     time.style.color = '#9ca3af';
     time.style.marginTop = '4px';
-    time.textContent = new Date(message.created_at).toLocaleString('zh-CN');
+    time.textContent = new Date(message.createdAt).toLocaleString('zh-CN');
 
     wrap.append(bubble, time);
     return wrap;
@@ -408,7 +408,7 @@ interface Props {
     }
     try {
       console.log('Loading chat for phone:', userPhone);
-      const res = await fetch(`/api/user/chat?sender_phone=${encodeURIComponent(userPhone)}&shop_id=${encodeURIComponent(shopId)}`);
+      const res = await fetch(`/api/user/chat?senderPhone=${encodeURIComponent(userPhone)}&shopId=${encodeURIComponent(shopId)}`);
       console.log('Response status:', res.status);
       const data = await res.json();
       console.log('Response data:', data);
@@ -456,7 +456,7 @@ interface Props {
       const res = await fetch('/api/user/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sender_phone: userPhone, message: message, shop_id: Number(shopId) })
+        body: JSON.stringify({ senderPhone: userPhone, message: message, shopId: Number(shopId) })
       });
       const data = await res.json();
       if (data.success) {

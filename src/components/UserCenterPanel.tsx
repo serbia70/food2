@@ -98,7 +98,7 @@ function renderStatus(order: any): ComponentChildren {
 
 function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onContactShop?: (order: any) => void): ComponentChildren {
   const orderView = buildUserOrderView(order, shopMap);
-  const addressSummary = String(order.table_info || '')
+  const addressSummary = String(order.tableInfo || '')
     .replace(/\s*\[货到付款\/Cash\].*$/u, '')
     .replace(/\s*\(备注:.*$/u, '')
     .trim();
@@ -106,11 +106,11 @@ function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onC
 
   let itemNodes: ComponentChildren = '商品解析失败';
   try {
-    const items = typeof order.items_json === 'string' ? JSON.parse(order.items_json) : order.items_json;
+    const items = typeof order.itemsJson === 'string' ? JSON.parse(order.itemsJson) : order.itemsJson;
     const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
     itemNodes = itemsArray.map((i: any, iIdx: number) => (
       <div key={iIdx} style={{ marginBottom: '4px' }}>
-        • {i.name} <span style={{ color: '#718096', fontSize: '11px' }}>({i.subName || i.sub_name})</span> x{i.quantity}
+        • {i.name} <span style={{ color: '#718096', fontSize: '11px' }}>({i.subName})</span> x{i.quantity}
       </div>
     ));
   } catch {
@@ -126,7 +126,7 @@ function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onC
         : 'status-closed';
 
   return (
-    <div key={`${order.order_no || idx}`} className={`history-order-card ${statusClass}`}>
+    <div key={`${order.orderNo || idx}`} className={`history-order-card ${statusClass}`}>
       <div className="order-top">
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
@@ -139,18 +139,18 @@ function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onC
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
               {renderStatus(order)}
-              <span style={{ color: '#e53e3e', fontSize: '20px', fontWeight: '900', lineHeight: 1 }}>{Number(order.total_amount || 0).toLocaleString()} RSD</span>
+              <span style={{ color: '#e53e3e', fontSize: '20px', fontWeight: '900', lineHeight: 1 }}>{Number(order.totalAmount || 0).toLocaleString()} RSD</span>
             </div>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', color: '#999' }}>#{order.order_no}</span>
+              <span style={{ fontSize: '12px', color: '#999' }}>#{order.orderNo}</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', background: '#eff6ff', color: '#1d4ed8', borderRadius: '999px', padding: '4px 10px', fontSize: '11px', fontWeight: 800 }}>
-                取餐号 {String(order.order_no || '').slice(-3)}
+                取餐号 {String(order.orderNo || '').slice(-3)}
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', background: '#fff7ed', color: '#9a3412', borderRadius: '999px', padding: '4px 10px', fontSize: '11px', fontWeight: 700 }}>
-                {new Date(order.created_at || '').toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                {new Date(order.createdAt || '').toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
             <button className="tool-link-btn" onClick={(e) => {
@@ -186,13 +186,13 @@ function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onC
 
 function buildOrderItemLines(order: any): string[] {
   try {
-    const items = typeof order?.items_json === 'string' ? JSON.parse(order.items_json) : order?.items_json;
+    const items = typeof order?.itemsJson === 'string' ? JSON.parse(order.itemsJson) : order?.itemsJson;
     const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
     return (itemsArray as any[])
       .filter(Boolean)
       .map((i: any) => {
         const name = String(i?.name || '').trim() || '商品';
-        const sub = String(i?.subName || i?.sub_name || '').trim();
+        const sub = String(i?.subName || '').trim();
         const qty = Number(i?.quantity || 0) || 0;
         const subText = sub ? ` (${sub})` : '';
         return `${name}${subText} x${qty || 1}`;
@@ -215,15 +215,15 @@ function renderOrderCardPage(order: any, idx: number, shopMap: UserOrderShopMap,
   const statusLabel = renderStatus(order);
   const statusClass = getStatusClass(order?.status);
 
-  const pickupNo = String(order?.order_no || order?.id || '').slice(-3);
+  const pickupNo = String(order?.orderNo || order?.id || '').slice(-3);
   const shopBadge = (view.shopName || '?').trim().charAt(0).toUpperCase();
   const cleanShopSlug = view.shopSlug && view.shopSlug !== view.shopName ? view.shopSlug : '';
 
-  const timeText = order?.created_at
-    ? new Date(order.created_at).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const timeText = order?.createdAt
+    ? new Date(order.createdAt).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
     : '-';
 
-  const addressSummary = String(order?.table_info || '')
+  const addressSummary = String(order?.tableInfo || '')
     .replace(/\s*\[货到付款\/Cash\].*$/u, '')
     .replace(/\s*\(备注:.*$/u, '')
     .trim();
@@ -232,7 +232,7 @@ function renderOrderCardPage(order: any, idx: number, shopMap: UserOrderShopMap,
   const itemPreview = buildOrderItemLines(order).slice(0, 2);
 
   return (
-    <article key={`${order?.order_no || idx}`} className={`order-card ${statusClass}`}>
+    <article key={`${order?.orderNo || idx}`} className={`order-card ${statusClass}`}>
       <div className="order-card-head">
         <div className="order-shop-block">
           <div className="shop-badge">{shopBadge || '店'}</div>
@@ -253,13 +253,13 @@ function renderOrderCardPage(order: any, idx: number, shopMap: UserOrderShopMap,
                 <span aria-hidden="true" style={{ fontSize: '20px', lineHeight: 1 }}>💬</span>
               </button>
             </div>
-            <div className="order-meta">#{order?.order_no || order?.id || '-'} · 取餐号 {pickupNo || '-'}</div>
+            <div className="order-meta">#{order?.orderNo || order?.id || '-'} · 取餐号 {pickupNo || '-'}</div>
           </div>
         </div>
 
         <div className="order-head-right">
           <span className={`status-chip ${statusClass}`}>{statusLabel}</span>
-          <div className="order-amount">{Number(order?.total_amount || 0).toLocaleString()} RSD</div>
+          <div className="order-amount">{Number(order?.totalAmount || 0).toLocaleString()} RSD</div>
         </div>
       </div>
 
@@ -400,8 +400,8 @@ export default function UserCenterPanel(props: Props) {
       alert('暂无订单，暂时无法联系商家');
       return;
     }
-    if (targetOrder?.shop_id) {
-      setChatShopId(Number(targetOrder.shop_id));
+    if (targetOrder?.shopId) {
+      setChatShopId(Number(targetOrder.shopId));
       const nextView = buildUserOrderView(targetOrder, shopMap);
       setChatShopName(nextView.shopName || currentShopName);
       setChatShopSlug(nextView.shopSlug || currentShopSlug);
@@ -445,7 +445,7 @@ export default function UserCenterPanel(props: Props) {
       shopId: chatContext.shopId,
       userPhone: chatContext.userPhone,
       onMessage(payload) {
-        if (!payload || Number(payload.shop_id || 0) !== Number(chatContext.shopId)) return;
+        if (!payload || Number(payload.shopId || 0) !== Number(chatContext.shopId)) return;
         setChatMessages((prev) => normalizeUserChatMessages([...(prev || []), payload], chatContext.shopId));
         requestAnimationFrame(() => {
           const el = document.getElementById('user-center-chat-messages');
@@ -1025,11 +1025,11 @@ export default function UserCenterPanel(props: Props) {
                   {chatMessages.length === 0 ? (
                     <div style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', padding: '20px 8px' }}>暂无聊天记录，先发第一条消息吧。</div>
                   ) : chatMessages.map((msg, idx) => (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.sender_role === 'user' ? 'flex-end' : 'flex-start' }}>
-                      <div style={{ maxWidth: '85%', background: msg.sender_role === 'user' ? '#ffedd5' : '#ffffff', color: '#334155', border: '1px solid #e2e8f0', borderRadius: msg.sender_role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px', padding: '10px 12px', boxShadow: '0 6px 14px rgba(15,23,42,.04)' }}>
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.senderRole === 'user' ? 'flex-end' : 'flex-start' }}>
+                      <div style={{ maxWidth: '85%', background: msg.senderRole === 'user' ? '#ffedd5' : '#ffffff', color: '#334155', border: '1px solid #e2e8f0', borderRadius: msg.senderRole === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px', padding: '10px 12px', boxShadow: '0 6px 14px rgba(15,23,42,.04)' }}>
                         <div style={{ fontSize: '13px', lineHeight: 1.6 }}>{msg.message}</div>
                       </div>
-                      <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px', padding: '0 4px' }}>{msg.created_at ? new Date(msg.created_at).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</div>
+                      <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px', padding: '0 4px' }}>{msg.createdAt ? new Date(msg.createdAt).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</div>
                     </div>
                   ))}
                 </div>
@@ -1042,7 +1042,7 @@ export default function UserCenterPanel(props: Props) {
                       const res = await fetch('/api/user/chat', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ shop_id: chatContext.shopId, sender_phone: chatContext.userPhone, message }),
+                        body: JSON.stringify({ shopId: chatContext.shopId, senderPhone: chatContext.userPhone, message }),
                       });
                       const data = await res.json();
                       if (data.success) {

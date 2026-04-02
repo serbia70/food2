@@ -38,7 +38,7 @@ export function getOrdersForTable(tableNum: string) {
         if (timeEl) time = timeEl.innerText;
       }
       tableOrders.push({
-        id: el.dataset.oid, order_no: el.dataset.orderNo, amount: el.dataset.total,
+        id: el.dataset.oid, orderNo: el.dataset.orderNo, amount: el.dataset.total,
         items, remarks, time, summary: items.map((i: any) => `${i.name} x${i.quantity}`).join(", "),
         element: el
       });

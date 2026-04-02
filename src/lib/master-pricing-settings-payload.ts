@@ -15,6 +15,7 @@ export function buildMasterPricingSettingsPayload(input: MasterPricingSettingsIn
   const deliveryEnabled = toNormalizedBoolean(input.deliveryEnabled, true);
   const deliveryCommissionType = toType(input.deliveryCommissionType, 'percentage');
   const deliveryCommissionValue = toNormalizedNumber(input.deliveryCommissionValue, 5);
+  const hasDefaultShopTier = input.defaultShopTier !== undefined && String(input.defaultShopTier ?? '').trim() !== '';
   const defaultShopTier = toDefaultShopTier(input.defaultShopTier);
 
   return {
@@ -25,15 +26,26 @@ export function buildMasterPricingSettingsPayload(input: MasterPricingSettingsIn
     delivery_enabled: deliveryEnabled ? 1 : 0,
     delivery_commission_type: deliveryCommissionType,
     delivery_commission_value: deliveryCommissionValue,
+    reservationCommissionType,
+    reservationCommissionValue,
+    deliveryCommissionType,
+    deliveryCommissionValue,
     subscriptionFeeRsd: reservationCommissionValue,
     businessFeeRsd: deliveryCommissionValue,
-    subscriptionDeliveryCommissionType: reservationCommissionType,
-    subscriptionDeliveryCommissionValue: reservationCommissionValue,
+    subscriptionDeliveryCommissionType: deliveryCommissionType,
+    subscription_delivery_commission_type: deliveryCommissionType,
+    subscriptionDeliveryCommissionValue: deliveryCommissionValue,
+    subscription_delivery_commission_value: deliveryCommissionValue,
     businessDeliveryCommissionType: deliveryCommissionType,
+    business_delivery_commission_type: deliveryCommissionType,
     businessDeliveryCommissionValue: deliveryCommissionValue,
+    business_delivery_commission_value: deliveryCommissionValue,
     reservationEnabled,
     deliveryEnabled,
-    default_shop_tier: defaultShopTier,
+    ...(hasDefaultShopTier ? {
+      defaultShopTier,
+      default_shop_tier: defaultShopTier,
+    } : {}),
   };
 }
 

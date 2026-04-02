@@ -8,6 +8,7 @@ import { fetchJSON } from '../../../lib/admin-fetch-json';
 import { buildAdminOrderChannelBillingView } from '../../../lib/admin-order-channel-billing-view.ts';
 import { buildDineInBillingState } from '../../../lib/dine-in-billing.ts';
 import { buildAdminTabVisibility, resolveShopTier, type ShopTierView } from '../../../lib/shop-tier.ts';
+import { resolveShopDisplaySettings } from '../../../lib/shop-display-settings';
 import AdminHeader from '../../../components/admin/AdminHeader.astro';
 import AdminTabs from '../../../components/admin/AdminTabs.astro';
 import TabOrders from '../../../components/admin/TabOrders.astro';
@@ -18,7 +19,6 @@ import TabSettings from '../../../components/admin/TabSettings.astro';
 import TabStats from '../../../components/admin/TabStats.astro';
 import TabMarketing from '../../../components/admin/TabMarketing.astro';
 import TabCustomers from '../../../components/admin/TabCustomers.astro';
-import TabData from '../../../components/admin/TabData.astro';
 import TabPassword from '../../../components/admin/TabPassword.astro';
 import TabRenew from '../../../components/admin/TabRenew.astro';
 import AdminModals from '../../../components/admin/AdminModals.astro';
@@ -39,13 +39,15 @@ if (!token) {
 
 const authHeaders = { Authorization: `Bearer ${token}` };
 
-const [statusResp, shopResp, menuResp, ordersResp, billingResp] = await Promise.all([
+const [statusResp, shopResp, menuResp, ordersResp, billingResp, homeResp] = await Promise.all([
   fetchJSON(`${API_BASE_URL}/api/admin/status`, { headers: authHeaders }),
   fetchJSON(`${API_BASE_URL}/${encodeURIComponent(slug)}/info`),
   fetchJSON(`${API_BASE_URL}/${encodeURIComponent(slug)}/menu`),
   fetchJSON(`${API_BASE_URL}/api/admin/orders?_=${Date.now()}`, { headers: authHeaders }),
   fetchJSON(`${API_BASE_URL}/api/admin/billing`, { headers: authHeaders }),
+  fetchJSON(`${API_BASE_URL}/api/home`),
 ]);
+const homeData = asObject(homeResp.data);
 
 const statusCode = Number(statusResp.status || 0);
 const statusIsAuthError = statusCode === 401 || statusCode === 403;
@@ -55,55 +57,77 @@ if (statusIsAuthError) {
   return Astro.redirect(`/admin/${encodeURIComponent(slug)}/login`, 302);
 }
 
-const rawShop = asObject(shopResp.data);
-if (!shopResp.ok || !rawShop?.id) {
-  return new Response('Not Found', { status: 404 });
-}
+const fallbackHomeShop = Array.isArray(homeData?.shops)
+  ? homeData.shops.find((entry: any) => String(entry?.slug || '') === String(slug))
+  : null;
+const rawShop = asObject(shopResp.data || fallbackHomeShop);
 
 const statusShopId = Number(statusResp.data?.shop_id || 0);
-if (statusResp.ok && statusShopId > 0 && statusShopId !== Number(rawShop.id)) {
+const canonicalShopId = Number(rawShop?.id || fallbackHomeShop?.id || 0);
+if (statusResp.ok && statusShopId > 0 && canonicalShopId > 0 && statusShopId !== canonicalShopId) {
   Astro.cookies.delete('admin_token', { path: '/' });
   return Astro.redirect(`/admin/${encodeURIComponent(slug)}/login`, 302);
 }
 
+const safeShopId = Number(rawShop?.id || fallbackHomeShop?.id || slug || 0);
+const rawTableConfig = rawShop.tableConfig ?? rawShop.table_config;
 const shop = {
   ...rawShop,
-  id: Number(rawShop.id || 0),
+  id: safeShopId,
   slug: String(rawShop.slug || slug),
   name: String(rawShop.name || slug),
   settings: typeof rawShop.settings === 'string' ? rawShop.settings : JSON.stringify(rawShop.settings || {}),
   table_config:
-    typeof rawShop.table_config === 'string'
-      ? rawShop.table_config
-      : JSON.stringify(rawShop.table_config || {}),
+    typeof rawTableConfig === 'string'
+      ? rawTableConfig
+      : JSON.stringify(rawTableConfig || {}),
+  tableConfig:
+    typeof rawTableConfig === 'string'
+      ? rawTableConfig
+      : JSON.stringify(rawTableConfig || {}),
 };
 
 const settings = asObject(parseMaybeJSON(shop.settings));
+const masterSettings = asObject(homeData?.settings || {});
+const mergedAdminSettings = { ...masterSettings, ...settings };
+const resolvedDisplaySettings = resolveShopDisplaySettings(shop, settings, masterSettings);
+
+const billingPlanTier = String(rawShop?.billingPlanType || rawShop?.billing_plan_type || '').trim();
+const hasTierMode = String(rawShop?.shopTierMode ?? '').trim() !== '';
+const hasTierOverride = String(rawShop?.shopTierOverride ?? '').trim() !== '';
+const shopTierView: ShopTierView = resolveShopTier({
+  defaultShopTier: mergedAdminSettings.defaultShopTier,
+  shopTierMode: hasTierMode || hasTierOverride ? rawShop?.shopTierMode : billingPlanTier ? 'override' : rawShop?.shopTierMode,
+  shopTierOverride: hasTierMode || hasTierOverride ? rawShop?.shopTierOverride : billingPlanTier || rawShop?.shopTierOverride,
+});
+const billingPlanType = shopTierView.effectiveTier;
+
+const shopCommissionMode = String(rawShop?.commissionMode ?? rawShop?.commission_mode ?? '').trim().toLowerCase();
+const settingsCommissionMode = String(settings?.commissionMode ?? settings?.commission_mode ?? '').trim().toLowerCase();
+const isGlobalCommissionMode = shopCommissionMode === 'global' || (!shopCommissionMode && settingsCommissionMode === 'global');
+const resolvedGlobalBillingSettings = isGlobalCommissionMode ? {
+  ...masterSettings,
+  reservationCommissionType: masterSettings.reservationCommissionType ?? masterSettings.reservation_commission_type ?? masterSettings.subscription_delivery_commission_type,
+  reservationCommissionValue: masterSettings.reservationCommissionValue ?? masterSettings.reservation_commission_value ?? masterSettings.subscription_delivery_commission_value,
+  deliveryCommissionType: (shopTierView.effectiveTier === 'business' ? masterSettings.business_delivery_commission_type : masterSettings.subscription_delivery_commission_type) ?? masterSettings.deliveryCommissionType ?? masterSettings.delivery_commission_type,
+  deliveryCommissionValue: (shopTierView.effectiveTier === 'business' ? masterSettings.business_delivery_commission_value : masterSettings.subscription_delivery_commission_value) ?? masterSettings.deliveryCommissionValue ?? masterSettings.delivery_commission_value,
+} : null;
+const billingSettings = resolvedGlobalBillingSettings || mergedAdminSettings;
 
 const billingData = asObject(billingResp.data?.billing);
 const adminBillingView = buildAdminOrderChannelBillingView({
   billing: billingData,
   shop,
-  settings,
+  settings: billingSettings,
 });
 const billingBalanceRSD = adminBillingView.billingBalanceRsd;
 const billingAlertLevel = adminBillingView.balanceReminderLevel;
 const dineInBilling = buildDineInBillingState(shop);
-const dineInToggleLabel = Number(shop.enable_dine_in ?? 1) !== 0 ? '堂食开关：开启' : '堂食开关：关闭';
+const dineInToggleLabel = Number(shop.enableDineIn ?? 1) !== 0 ? '堂食开关：开启' : '堂食开关：关闭';
 
 // 从后端获取真实的营业额（包含已清理的记录）
-const lastMonthRevenue = Number(billingData.last_month_revenue || 0);
-const thisMonthRevenue = Number(billingData.this_month_revenue || 0);
-
-const billingPlanTier = String(rawShop?.billing_plan_type || '').trim();
-const hasTierMode = String(rawShop?.shop_tier_mode ?? '').trim() !== '';
-const hasTierOverride = String(rawShop?.shop_tier_override ?? '').trim() !== '';
-const shopTierView: ShopTierView = resolveShopTier({
-  defaultShopTier: settings.default_shop_tier ?? settings.defaultShopTier,
-  shop_tier_mode: hasTierMode || hasTierOverride ? rawShop?.shop_tier_mode : billingPlanTier ? 'override' : rawShop?.shop_tier_mode,
-  shop_tier_override: hasTierMode || hasTierOverride ? rawShop?.shop_tier_override : billingPlanTier || rawShop?.shop_tier_override,
-});
-const billingPlanType = shopTierView.effectiveTier;
+const lastMonthRevenue = Number(billingData.lastMonthRevenue || 0);
+const thisMonthRevenue = Number(billingData.thisMonthRevenue || 0);
 const showReservationTab = adminBillingView.reservationPlan.enabled;
 const { showStatsTab, showMarketingTab, showCustomersTab } = buildAdminTabVisibility(shopTierView);
 
@@ -111,8 +135,8 @@ const rawMenu = Array.isArray(menuResp.data) ? menuResp.data : [];
 const categories = rawMenu.map((c: any) => ({
   id: Number(c?.id || 0),
   name: String(c?.name || ''),
-  sub_name: String(c?.sub_name || ''),
-  sort_order: Number(c?.sort_order || 0),
+  subName: String(c?.subName || ''),
+  sortOrder: Number(c?.sortOrder || 0),
 }));
 
 const normalizeMenuImageUrl = (raw: unknown): string => {
@@ -129,11 +153,11 @@ const products = rawMenu.flatMap((c: any) => {
   return list.map((p: any) => ({
     ...p,
     id: Number(p?.id || 0),
-    category_id: Number(p?.category_id || c?.id || 0),
+    categoryId: Number(p?.categoryId || c?.id || 0),
     price: Number(p?.price || 0),
-    sort_order: Number(p?.sort_order || 0),
+    sortOrder: Number(p?.sortOrder || 0),
     name: String(p?.name || ''),
-    sub_name: String(p?.sub_name || ''),
+    subName: String(p?.subName || ''),
     img: normalizeMenuImageUrl(p?.img || p?.imageUrl),
   }));
 });
@@ -142,25 +166,25 @@ const rawOrders = Array.isArray(ordersResp.data) ? ordersResp.data : [];
 const orders = rawOrders.map((o: any) => ({
   ...o,
   id: Number(o?.id || 0),
-  order_no: String(o?.order_no || o?.id || ''),
-  order_type: String(o?.order_type || 'dine_in'),
-  status: String(o?.status || 'pending'),
-  total_amount: Number(o?.total_amount || 0),
-  items_json: normalizeJSONString(o?.items_json, '{}'),
-  remarks_json: normalizeRemarkJSONString(o?.remarks_json),
-  table_info: String(o?.table_info || ''),
-  user_phone: String(o?.user_phone || ''),
-  scheduled_for: String(o?.scheduled_for || ''),
-  pickup_eta_minutes: Number(o?.pickup_eta_minutes || 0),
-  pickup_ready_at: String(o?.pickup_ready_at || ''),
-  rider_broadcasted_at: String(o?.rider_broadcasted_at || ''),
-  rider_remind_count: Number(o?.rider_remind_count || 0),
-  rider_last_reminded_at: String(o?.rider_last_reminded_at || ''),
-  rider_contact_attempted_at: String(o?.rider_contact_attempted_at || ''),
-  courier_name: String(o?.courier_name || ''),
-  courier_phone: String(o?.courier_phone || ''),
-  created_at: String(o?.created_at || ''),
-  is_deleted: Number(o?.is_deleted || 0),
+  orderNo: String(o?.orderNo || o?.order_no || o?.id || ''),
+  orderType: String(o?.orderType || o?.order_type || (String(o?.tableInfo || o?.table_info || '').trim() ? 'dine_in' : '')),
+  status: String(o?.status || (String(o?.tableInfo || o?.table_info || '').trim() ? 'pending' : '')),
+  totalAmount: Number(o?.totalAmount ?? o?.total_amount ?? 0),
+  itemsJson: normalizeJSONString(o?.itemsJson ?? o?.items_json, '{}'),
+  remarksJson: normalizeRemarkJSONString(o?.remarksJson ?? o?.remarks_json),
+  tableInfo: String(o?.tableInfo || o?.table_info || ''),
+  userPhone: String(o?.userPhone || o?.user_phone || ''),
+  scheduledFor: String(o?.scheduledFor || o?.scheduled_for || ''),
+  pickupEtaMinutes: Number(o?.pickupEtaMinutes ?? o?.pickup_eta_minutes ?? 0),
+  pickupReadyAt: String(o?.pickupReadyAt || o?.pickup_ready_at || ''),
+  riderBroadcastedAt: String(o?.riderBroadcastedAt || o?.rider_broadcasted_at || ''),
+  riderRemindCount: Number(o?.riderRemindCount ?? o?.rider_remind_count ?? 0),
+  riderLastRemindedAt: String(o?.riderLastRemindedAt || o?.rider_last_reminded_at || ''),
+  riderContactAttemptedAt: String(o?.riderContactAttemptedAt || o?.rider_contact_attempted_at || ''),
+  courierName: String(o?.courierName || o?.courier_name || ''),
+  courierPhone: String(o?.courierPhone || o?.courier_phone || ''),
+  createdAt: String(o?.createdAt || o?.created_at || ''),
+  isDeleted: Number(o?.isDeleted ?? o?.is_deleted ?? 0),
 }));
 
 const tableConfig = resolveTableConfig(shop, settings);
@@ -172,12 +196,12 @@ const useSimpleHallLabel =
 const tableCardsData = buildTableCards(orders, tableConfig);
 const unmatchedDineInOrders = orders
   .filter(isActiveDineInOrder)
-  .filter((o: any) => !orderMatchesAnyConfiguredTable(o.table_info, tableConfig));
+  .filter((o: any) => !orderMatchesAnyConfiguredTable(o.tableInfo, tableConfig));
 const activeDeliveryOrders = orders.filter(
   (o: any) =>
-    o.order_type === 'delivery' &&
+    o.orderType === 'delivery' &&
     (o.status === 'pending' || o.status === 'confirmed' || o.status === 'awaiting_courier' || o.status === 'delivering') &&
-    o.is_deleted !== 1,
+    o.isDeleted !== 1,
 );
 
 const commissionValue = adminBillingView.deliveryPlan.commissionValue;
@@ -189,7 +213,7 @@ const thisMonthCommission = Math.round(thisMonthRevenue * (commissionValue / 100
 // 如果余额为负，则视为“待付”
 const debtAmount = billingBalanceRSD < 0 ? Math.abs(billingBalanceRSD) : 0;
 
-const brokerIp = String(settings.mqtt_broker || 'mqtt.serbia70.com');
+const brokerIp = String(settings.mqttBroker || masterSettings.mqttBroker || masterSettings.mqtt_broker || 'mqtt.serbia70.com');
 
 let shopCategories = Array.isArray(settings.categories)
   ? settings.categories.filter((c: any) => c && c.id !== 'more')
@@ -301,11 +325,11 @@ const cities = {
         brokerIp={brokerIp}
         restaurantId={shop.id}
         cities={cities}
+        resolvedDisplaySettings={resolvedDisplaySettings}
       />
       {showStatsTab && <TabStats />}
       {showMarketingTab && <TabMarketing shopSlug={slug} shopSettings={settings} />}
       {showCustomersTab && <TabCustomers shopSlug={slug} />}
-      <TabData restaurantId={shop.id} />
       <TabPassword />
       <TabRenew
         lastMonthCommission={lastMonthCommission}
@@ -332,12 +356,12 @@ const cities = {
         class="hidden-data"
         data-oid={o.id}
         data-order-id={o.id}
-        data-order-no={o.order_no}
-        data-items={o.items_json}
-        data-total={o.total_amount}
-        data-table={o.table_info}
+        data-order-no={o.orderNo}
+        data-items={o.itemsJson}
+        data-total={o.totalAmount}
+        data-table={o.tableInfo}
         data-status={o.status}
-        data-remarks={o.remarks_json}
+        data-remarks={o.remarksJson}
       ></span>
     ))}
   </div>

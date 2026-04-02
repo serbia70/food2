@@ -1,5 +1,6 @@
 type ImportCategory = {
   category?: string;
+  categorySub?: string;
   category_sub?: string;
   items?: any[];
 };
@@ -26,12 +27,28 @@ function readEmbeddedJSON(id: string): any {
   }
 }
 
+function unwrapMenuPayload(payload: unknown) {
+  if (
+    payload
+    && typeof payload === 'object'
+    && 'ok' in payload
+    && (payload as { ok?: unknown }).ok === true
+    && 'data' in payload
+    && Array.isArray((payload as { data?: unknown }).data)
+  ) {
+    return (payload as { data: unknown[] }).data;
+  }
+
+  return Array.isArray(payload) ? payload : [];
+}
+
 async function fetchMenuFromServer() {
   const slug = getShopSlugFromPath();
   if (!slug) return [];
   const res = await fetch(`/${encodeURIComponent(slug)}/menu`, { cache: "no-store" });
   if (!res.ok) return [];
-  return res.json().catch(() => []);
+  const payload = await res.json().catch(() => []);
+  return unwrapMenuPayload(payload);
 }
 
 async function ensureCategoryIdByName(name: string, subName: string) {
@@ -42,8 +59,8 @@ async function ensureCategoryIdByName(name: string, subName: string) {
     body: JSON.stringify({ name, sub_name: subName || name }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data?.success === false) return 0;
-  return Number(data.id || 0) || 0;
+  if (!res.ok || data?.success === false || data?.ok === false) return 0;
+  return Number(data?.id || data?.data?.id || 0) || 0;
 }
 
 async function createProduct(payload: any) {
@@ -53,7 +70,7 @@ async function createProduct(payload: any) {
     body: JSON.stringify(payload),
   });
   const data = await res.json().catch(() => ({}));
-  return res.ok && data?.success !== false;
+  return res.ok && data?.success !== false && data?.ok !== false;
 }
 
 export async function exportData() {
@@ -64,13 +81,13 @@ export async function exportData() {
     categories = menu.map((c: any) => ({
       id: Number(c?.id || 0),
       name: String(c?.name || ""),
-      sub_name: String(c?.sub_name || ""),
+      subName: String(c?.subName || ""),
     }));
     products = menu.flatMap((c: any) =>
       Array.isArray(c?.products)
         ? c.products.map((p: any) => ({
             ...p,
-            category_id: Number(p?.category_id || c?.id || 0),
+            categoryId: Number(p?.categoryId || c?.id || 0),
           }))
         : [],
     );
@@ -88,19 +105,19 @@ export async function exportData() {
 
   const payload = categories.map((cat: any) => {
     const items = products
-      .filter((p: any) => Number(p?.category_id || 0) === Number(cat?.id || 0))
+      .filter((p: any) => Number(p?.categoryId || 0) === Number(cat?.id || 0))
       .map((p: any) => ({
         name: String(p?.name || ""),
-        sub_name: String(p?.sub_name || ""),
+        subName: String(p?.subName || ""),
         price: Number(p?.price || 0),
         img: String(p?.img || ""),
         description: String(p?.description || ""),
         stock: Number(p?.stock || 0),
-        is_available: Number(p?.is_available ?? 1),
+        isAvailable: Number(p?.isAvailable ?? 1),
       }));
     return {
       category: String(cat?.name || ""),
-      category_sub: String(cat?.sub_name || ""),
+      categorySub: String(cat?.subName || ""),
       items,
     };
   });
@@ -146,7 +163,7 @@ export async function importData() {
   let failed = 0;
   for (const c of data) {
     const name = String(c?.category || "").trim();
-    const subName = String(c?.category_sub || "").trim() || name;
+    const subName = String(c?.categorySub ?? c?.category_sub ?? '').trim() || name;
     if (!name) {
       failed++;
       continue;
@@ -167,12 +184,12 @@ export async function importData() {
       }
       const payload = {
         name: productName,
-        sub_name: String(item?.sub_name || "").trim() || productName,
+        sub_name: String(item?.subName ?? item?.sub_name ?? '').trim() || productName,
         price: Number(item?.price || 0),
         img: String(item?.img || ""),
         description: String(item?.description || ""),
         stock: Number(item?.stock || 0),
-        is_available: Number(item?.is_available ?? 1),
+        is_available: Number(item?.isAvailable ?? item?.is_available ?? 1),
         category_id: categoryId,
       };
 

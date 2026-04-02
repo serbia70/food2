@@ -30,13 +30,15 @@ function normalizeMode(value: unknown): ShopTierMode {
 export function resolveShopTier(
   input?: {
     defaultShopTier?: unknown;
+    shopTierMode?: unknown;
+    shopTierOverride?: unknown;
     shop_tier_mode?: unknown;
     shop_tier_override?: unknown;
   }
 ): ShopTierView {
   const defaultTier = normalizeTier(input?.defaultShopTier, 'subscription');
-  const mode = normalizeMode(input?.shop_tier_mode);
-  const originalOverride = input?.shop_tier_override;
+  const mode = normalizeMode(input?.shopTierMode ?? input?.shop_tier_mode);
+  const originalOverride = input?.shopTierOverride ?? input?.shop_tier_override;
   const overrideValid = originalOverride === 'business' || originalOverride === 'subscription';
 
   const overrideTier = normalizeTier(originalOverride, defaultTier);

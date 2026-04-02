@@ -27,6 +27,73 @@ function readRiderChatId(rider: AssignableRider): string {
   return String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
 }
 
+function readOrderShopSlug(payload: unknown, orderId: string): string {
+  const normalizedOrderId = String(orderId || '').trim();
+  if (!payload) return '';
+
+  const pickFromRow = (row: unknown): string => {
+    if (!row || typeof row !== 'object') return '';
+    const data = row as Record<string, unknown>;
+    const id = String(data.id || data.orderId || data.order_id || '').trim();
+    if (id && normalizedOrderId && id !== normalizedOrderId) return '';
+    return String(data.shopSlug || data.shop_slug || data.restaurantSlug || data.restaurant_slug || '').trim();
+  };
+
+  if (Array.isArray(payload)) {
+    for (const row of payload) {
+      const slug = pickFromRow(row);
+      if (slug) return slug;
+    }
+    return '';
+  }
+
+  if (typeof payload === 'object') {
+    const data = payload as Record<string, unknown>;
+    const direct = pickFromRow(data);
+    if (direct) return direct;
+
+    const nestedData = data.data;
+    if (Array.isArray(nestedData)) {
+      for (const row of nestedData) {
+        const slug = pickFromRow(row);
+        if (slug) return slug;
+      }
+    } else if (nestedData && typeof nestedData === 'object') {
+      const nested = nestedData as Record<string, unknown>;
+      const nestedDirect = pickFromRow(nested);
+      if (nestedDirect) return nestedDirect;
+      if (Array.isArray(nested.orders)) {
+        for (const row of nested.orders) {
+          const slug = pickFromRow(row);
+          if (slug) return slug;
+        }
+      }
+    }
+
+    if (Array.isArray(data.orders)) {
+      for (const row of data.orders) {
+        const slug = pickFromRow(row);
+        if (slug) return slug;
+      }
+    }
+  }
+
+  return '';
+}
+
+async function fetchOrderShopSlug(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies'], orderId: string): Promise<string> {
+  const res = await proxyAdminRequest({
+    request,
+    cookies,
+    url: `${API_BASE_URL}/api/admin/orders`,
+    method: 'GET',
+  });
+  const text = await res.text();
+  if (!res.ok || !text) return '';
+  const parsed = readJsonObject(text) ?? JSON.parse(text) as unknown;
+  return readOrderShopSlug(parsed, orderId);
+}
+
 async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies']): Promise<RiderFetchResult> {
   const res = await proxyAdminRequest({
     request,
@@ -53,12 +120,21 @@ async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRou
   };
 }
 
-async function notifyAssignedRider({ rider, shopSlug }: { rider: AssignableRider; shopSlug: string }) {
+async function notifyAssignedRider({
+  request,
+  rider,
+  shopSlug,
+}: {
+  request: Request;
+  rider: AssignableRider;
+  shopSlug: string;
+}): Promise<{ success: true } | { success: false; error: string }> {
   const chatId = readRiderChatId(rider);
-  if (!chatId) return;
+  if (!chatId) return { success: false, error: 'telegram_chat_id_missing' };
 
   try {
-    await fetch(`${API_BASE_URL}/api/telegram/send`, {
+    const telegramUrl = new URL('/api/telegram/send', request.url).toString();
+    const response = await fetch(telegramUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -67,8 +143,19 @@ async function notifyAssignedRider({ rider, shopSlug }: { rider: AssignableRider
         text: `订单已指派给你：${String(rider.name || '').trim()}`,
       }),
     });
-  } catch {
-    return;
+    const responseText = await response.text();
+    if (!response.ok) {
+      return {
+        success: false,
+        error: responseText.trim() || `telegram_send_http_${response.status}`,
+      };
+    }
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'telegram_send_failed',
+    };
   }
 }
 
@@ -76,7 +163,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const action = String(body.action || '').trim();
   const orderId = String(body.orderId || '').trim();
-  const shopSlug = String(body.shopSlug || '').trim();
+  const providedShopSlug = String(body.shopSlug || '').trim();
   const lastAssignedRiderId = String(body.lastAssignedRiderId || '').trim();
   const manualRiderId = String(body.riderId || '').trim();
   const pickupEtaMinutes = Number(body.pickupEtaMinutes || 0);
@@ -155,7 +242,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  await notifyAssignedRider({ rider: target, shopSlug });
+  const notifyShopSlug = providedShopSlug || await fetchOrderShopSlug(request, cookies, orderId);
+  const telegramNotification = await notifyAssignedRider({ request, rider: target, shopSlug: notifyShopSlug });
 
   return new Response(JSON.stringify({
     success: true,
@@ -164,6 +252,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       name: target.name,
       phone: target.phone,
     },
+    ...(telegramNotification.success ? {} : { telegram_notification: telegramNotification }),
   }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },

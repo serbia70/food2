@@ -59,11 +59,19 @@ export function initMasterSettingsForms({
       successText: 'MQTT / Telegram 配置已保存',
       buildPayload(currentForm) {
         const formData = new FormData(currentForm);
+        const mqttBroker = String(formData.get('mqttBroker') || '').trim();
+        const telegramWebhookSecret = String(formData.get('telegramWebhookSecret') || '').trim();
+        const telegramChatId = String(formData.get('telegramChatId') || '').trim();
+        const telegramBotToken = String(formData.get('telegramBotToken') || '').trim();
         return {
-          mqttBroker: String(formData.get('mqttBroker') || '').trim(),
-          telegramWebhookSecret: String(formData.get('telegramWebhookSecret') || '').trim(),
-          telegramChatId: String(formData.get('telegramChatId') || '').trim(),
-          telegramBotToken: String(formData.get('telegramBotToken') || '').trim(),
+          mqttBroker,
+          telegramWebhookSecret,
+          telegramChatId,
+          telegramBotToken,
+          mqtt_broker: mqttBroker,
+          telegram_webhook_secret: telegramWebhookSecret,
+          telegram_chat_id: telegramChatId,
+          telegram_bot_token: telegramBotToken,
         };
       },
     });
@@ -99,11 +107,11 @@ export function initMasterSettingsForms({
         buildPayload(currentForm) {
           const formData = new FormData(currentForm);
           return {
-            exchange_rate: readNumberField(formData, 'exchangeRate', '汇率'),
-            display_final_rate: readNumberField(formData, 'displayFinalRate', '展示最终费率'),
-            rate_base: readNumberField(formData, 'rateBase', '基础费率'),
-            rate_offset: readNumberField(formData, 'rateOffset', '费率偏移'),
-            rate_step: readNumberField(formData, 'rateStep', '费率步进'),
+            exchangeRate: readNumberField(formData, 'exchangeRate', '汇率'),
+            displayFinalRate: readNumberField(formData, 'displayFinalRate', '展示最终费率'),
+            rateBase: readNumberField(formData, 'rateBase', '基础费率'),
+            rateOffset: readNumberField(formData, 'rateOffset', '费率偏移'),
+            rateStep: readNumberField(formData, 'rateStep', '费率步进'),
           };
         },
       });
@@ -125,7 +133,7 @@ export function initMasterSettingsForms({
         const formData = new FormData(currentForm);
         return {
           wechatId: String(formData.get('wechatId') || '').trim(),
-          wechat_contact_qr: String(formData.get('wechatContactQr') || '').trim(),
+          wechatContactQr: String(formData.get('wechatContactQr') || '').trim(),
         };
       },
     });
@@ -141,8 +149,8 @@ export function initMasterSettingsForms({
       buildPayload(currentForm) {
         const formData = new FormData(currentForm);
         return {
-          alipay_payment_qr: String(formData.get('alipayPaymentQr') || '').trim(),
-          wechat_payment_qr: String(formData.get('wechatPaymentQr') || '').trim(),
+          alipayPaymentQr: String(formData.get('alipayPaymentQr') || '').trim(),
+          wechatPaymentQr: String(formData.get('wechatPaymentQr') || '').trim(),
         };
       },
     });
@@ -161,6 +169,34 @@ export function initMasterSettingsForms({
           imageStorage: String(formData.get('imageStorage') || 'local').trim(),
           r2PublicDomain: String(formData.get('r2PublicDomain') || '').trim(),
           uploadStrictR2: formData.get('uploadStrictR2') === 'on',
+        };
+      },
+    });
+    return false;
+  }
+
+  async function submitMasterShopDefaultsSettings(form: HTMLFormElement) {
+    await submitSettingsAction(form, {
+      endpoint: '/api/master/settings',
+      feedbackId: 'master-shop-defaults-settings-feedback',
+      loadingText: '保存店铺默认城市与营业时间中...',
+      successText: '店铺默认城市与营业时间已保存',
+      buildPayload(currentForm) {
+        const formData = new FormData(currentForm);
+        const city = String(formData.get('defaultCity') || '').trim();
+        const open = String(formData.get('defaultOpenTime') || '').trim();
+        const close = String(formData.get('defaultCloseTime') || '').trim();
+        return {
+          shopDefaults: {
+            city,
+            hours: {
+              open,
+              close,
+            },
+          },
+          default_city: city,
+          default_open_time: open,
+          default_close_time: close,
         };
       },
     });
@@ -194,6 +230,10 @@ export function initMasterSettingsForms({
     },
     submitMasterStorageSettings(form: HTMLFormElement) {
       void submitMasterStorageSettings(form);
+      return false;
+    },
+    submitMasterShopDefaultsSettings(form: HTMLFormElement) {
+      void submitMasterShopDefaultsSettings(form);
       return false;
     },
   };

@@ -171,7 +171,7 @@ function createAdminChatMessageNode(message: any) {
     color: '#9ca3af',
     marginTop: '4px',
   });
-  ts.textContent = new Date(message?.created_at).toLocaleString('zh-CN');
+  ts.textContent = new Date(message?.createdAt).toLocaleString('zh-CN');
 
   wrap.append(bubble, ts);
   return wrap;
@@ -216,7 +216,7 @@ function renderUserPicker(phones: string[]) {
     return;
   }
 
-  const conversations = buildConversationList(unique.map((phone) => ({ sender_phone: phone, created_at: '', message: '' })), unreadByPhone);
+  const conversations = buildConversationList(unique.map((phone) => ({ senderPhone: phone, createdAt: '', message: '' })), unreadByPhone);
 
   const wrap = document.createElement('div');
   wrap.style.padding = '6px';
@@ -344,7 +344,7 @@ async function loadCustomerSummary(phone: string) {
 
 		const orderTitle = document.createElement('div');
 		setStyles(orderTitle, { fontWeight: '700', color: '#0f172a' });
-		orderTitle.textContent = latestOrder ? `#${latestOrder.order_no}` : '暂无外卖订单 / Nema porudzbine';
+		orderTitle.textContent = latestOrder ? `#${latestOrder.orderNo}` : '暂无外卖订单 / Nema porudzbine';
 
 		orderCard.append(orderLabel, orderTitle);
 
@@ -385,7 +385,7 @@ async function loadCustomerSummary(phone: string) {
 
 			const amount = document.createElement('div');
 			setStyles(amount, { marginTop: '6px', fontSize: '12px', color: '#475569' });
-			amount.textContent = `金额 / Iznos: ${Number(latestOrder.total_amount || 0).toLocaleString()} RSD`;
+			amount.textContent = `金额 / Iznos: ${Number(latestOrder.totalAmount || 0).toLocaleString()} RSD`;
 
 			const address = document.createElement('div');
 			setStyles(address, {
@@ -394,7 +394,7 @@ async function loadCustomerSummary(phone: string) {
 				color: '#64748b',
 				lineHeight: '1.6',
 			});
-			address.textContent = `地址 / Adresa: ${cleanAddress(latestOrder.table_info)}`;
+			address.textContent = `地址 / Adresa: ${cleanAddress(latestOrder.tableInfo)}`;
 
 			const toggleBtn = document.createElement('button');
 			toggleBtn.id = 'admin-chat-recent-orders-toggle';
@@ -438,15 +438,15 @@ async function loadCustomerSummary(phone: string) {
 
 					const no = document.createElement('div');
 					setStyles(no, { fontWeight: '700', color: '#0f172a' });
-					no.textContent = `#${order.order_no || '-'}`;
+					no.textContent = `#${order.orderNo || '-'}`;
 
 					const price = document.createElement('div');
 					setStyles(price, { fontSize: '12px', color: '#475569' });
-					price.textContent = `${Number(order.total_amount || 0).toLocaleString()} RSD`;
+					price.textContent = `${Number(order.totalAmount || 0).toLocaleString()} RSD`;
 
 					const addr = document.createElement('div');
 					setStyles(addr, { fontSize: '12px', color: '#64748b', lineHeight: '1.6' });
-					addr.textContent = cleanAddress(order.table_info);
+					addr.textContent = cleanAddress(order.tableInfo);
 
 					card.append(no, price, addr);
 					return card;
@@ -483,7 +483,7 @@ async function loadCustomerSummary(phone: string) {
 		setStyles(reservationValue, { fontWeight: '700', color: '#0f172a' });
 		reservationValue.textContent = currentShopReservationEnabled
 			? summary.latestReservation
-				? String(summary.latestReservation.reservation_time || '有预约')
+				? String(summary.latestReservation.reservationTime || '有预约')
 				: '暂无预约记录 / Nema rezervacije'
 			: '当前店铺未开启预约 / Rezervacije nisu ukljucene';
 
@@ -552,7 +552,7 @@ function initAdminChatRealtime() {
   chatMqttClient.onMessageArrived = (m: any) => {
     try {
       const payload = JSON.parse(m?.payloadString || '{}');
-      if (Number(payload.shop_id || 0) !== Number(shopId)) return;
+      if (Number(payload.shopId || 0) !== Number(shopId)) return;
 
       const messageKey = makeAdminChatMessageKey(payload);
       if (processedChatMessageKeys.has(messageKey)) return;
@@ -562,7 +562,7 @@ function initAdminChatRealtime() {
         if (first) processedChatMessageKeys.delete(first);
       }
 
-      const phone = String(payload.sender_phone || '').trim();
+      const phone = String(payload.senderPhone || '').trim();
       if (!phone) return;
 
       const shouldRefresh = currentChatUserPhone && phone === currentChatUserPhone;
@@ -613,7 +613,12 @@ function initAdminChatRealtime() {
 export async function loadUserChat(userPhone: string) {
   if (!userPhone) return { success: false, error: "no phone" };
   try {
-    const res = await fetch(`/api/user/chat?user_phone=${encodeURIComponent(userPhone)}`);
+    const res = await fetch(`/api/user/chat?userPhone=${encodeURIComponent(userPhone)}`);
+    if (res.status === 401 || res.status === 403) {
+      window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+      return { success: false, error: 'auth_expired' };
+    }
+    if (!res.ok) return { success: false, error: 'request_failed' };
     return await res.json();
   } catch (e) {
     return { success: false, error: "network error" };
@@ -625,8 +630,13 @@ export async function sendUserChat(userPhone: string, message: string) {
     const res = await fetch("/api/user/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_phone: userPhone, message: message })
+      body: JSON.stringify({ userPhone: userPhone, message: message })
     });
+    if (res.status === 401 || res.status === 403) {
+      window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+      return { success: false, error: 'auth_expired' };
+    }
+    if (!res.ok) return { success: false, error: 'request_failed' };
     return await res.json();
   } catch (e) {
     return { success: false, error: "network error" };
@@ -638,6 +648,13 @@ export async function loadAdminChat() {
     renderUserPickerLoading();
     try {
       const res = await fetch('/api/admin/chat');
+      if (res.status === 401 || res.status === 403) {
+        window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+        return;
+      }
+      if (!res.ok) {
+        throw new Error('load_admin_chat_list_failed');
+      }
       const data = await res.json();
       if (data && data.success && Array.isArray(data.messages)) {
         const phones = buildRecentChatPhones(data.messages || [], unreadByPhone);
@@ -652,7 +669,14 @@ export async function loadAdminChat() {
     return;
   }
   try {
-    const res = await fetch(`/api/admin/chat?sender_phone=${encodeURIComponent(currentChatUserPhone)}`);
+    const res = await fetch(`/api/admin/chat?senderPhone=${encodeURIComponent(currentChatUserPhone)}`);
+    if (res.status === 401 || res.status === 403) {
+      window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+      return;
+    }
+    if (!res.ok) {
+      throw new Error('load_admin_chat_messages_failed');
+    }
     const data = await res.json();
     if (data.success) {
       renderAdminMessages(data.messages || []);
@@ -684,13 +708,20 @@ export async function sendAdminChat() {
   const input = document.getElementById('admin-chat-input') as HTMLInputElement;
   const message = input?.value.trim();
   if (!message) return;
-  
+
   try {
     const res = await fetch('/api/admin/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender_phone: currentChatUserPhone, message: message })
+      body: JSON.stringify({ senderPhone: currentChatUserPhone, message: message })
     });
+    if (res.status === 401 || res.status === 403) {
+      window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+      return;
+    }
+    if (!res.ok) {
+      throw new Error('send_admin_chat_failed');
+    }
     const data = await res.json();
     if (data.success) {
       input.value = '';
@@ -892,8 +923,8 @@ try {
   window.__adminChatOnMessage = (payload: any) => {
     const shopId = getShopId();
     if (!shopId) return;
-    if (Number(payload?.shop_id || 0) !== Number(shopId)) return;
-    const phone = String(payload?.sender_phone || '').trim();
+    if (Number(payload?.shopId || 0) !== Number(shopId)) return;
+    const phone = String(payload?.senderPhone || '').trim();
     if (!phone) return;
 
     const shouldRefresh = currentChatUserPhone && phone === currentChatUserPhone;

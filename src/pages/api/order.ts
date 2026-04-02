@@ -7,20 +7,19 @@ interface OrderProxyRequest {
   restaurantId?: string;
   items?: unknown[] | Record<string, unknown>;
   dineInAction?: string;
-  dine_in_action?: string;
   type?: string;
   info?: string;
   total?: number;
   note?: string;
-  scheduled_for?: string;
+  scheduledFor?: string;
   user?: {
     phone?: string;
   };
 }
 
 interface CreateOrderBackendResponse {
-  order_id?: number;
-  order_no?: string;
+  orderId?: number;
+  orderNo?: string;
   error?: string;
   [key: string]: unknown;
 }
@@ -38,7 +37,7 @@ export const POST: APIRoute = async ({ request }) => {
 
     const itemsObj = raw?.items || {};
     const items = Array.isArray(itemsObj) ? itemsObj : Object.values(itemsObj);
-    const dineInAction = String(raw?.dineInAction || raw?.dine_in_action || '').trim().toLowerCase();
+    const dineInAction = String(raw?.dineInAction || '').trim().toLowerCase();
     const isDineIn = raw?.type !== 'delivery';
     const payload = {
       table_info: String(raw?.info || ''),
@@ -47,7 +46,7 @@ export const POST: APIRoute = async ({ request }) => {
       items,
       remarks: String(raw?.note || ''),
       user_phone: String(raw?.user?.phone || ''),
-      scheduled_for: !isDineIn && String(raw?.scheduled_for || '').trim() ? String(raw?.scheduled_for || '').trim() : '',
+      scheduled_for: !isDineIn && String(raw?.scheduledFor || '').trim() ? String(raw?.scheduledFor || '').trim() : '',
       dine_in_action: isDineIn ? dineInAction : '',
       merge: isDineIn && dineInAction === 'add',
       checkout_existing: isDineIn && dineInAction === 'new',
@@ -70,8 +69,8 @@ export const POST: APIRoute = async ({ request }) => {
       return new Response(
         JSON.stringify({
           success: true,
-          orderId: data.order_id,
-          orderNo: data.order_no,
+          orderId: data.orderId,
+          orderNo: data.orderNo,
           ...data,
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },

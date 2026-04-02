@@ -54,15 +54,15 @@ test('shop payload keeps split plan fields and compatibility aliases', () => {
   assert.equal(payload.delivery_enabled, 0);
   assert.equal(payload.delivery_commission_value, 5);
   assert.equal(payload.subscription_enabled, 1);
-  assert.equal(payload.subscription_delivery_commission_type, 'percentage');
-  assert.equal(payload.subscription_delivery_commission_value, 0);
+  assert.equal(payload.subscription_delivery_commission_type, 'per_order');
+  assert.equal(payload.subscription_delivery_commission_value, 5);
   assert.equal(payload.business_enabled, 0);
   assert.equal(payload.business_delivery_commission_type, 'per_order');
   assert.equal(payload.business_delivery_commission_value, 5);
   assert.equal(payload.subscriptionFeeRsd, 0);
   assert.equal(payload.businessFeeRsd, 5);
-  assert.equal(payload.subscriptionDeliveryCommissionType, 'percentage');
-  assert.equal(payload.subscriptionDeliveryCommissionValue, 0);
+  assert.equal(payload.subscriptionDeliveryCommissionType, 'per_order');
+  assert.equal(payload.subscriptionDeliveryCommissionValue, 5);
   assert.equal(payload.businessDeliveryCommissionType, 'per_order');
   assert.equal(payload.businessDeliveryCommissionValue, 5);
   assert.equal(payload.commission_type, 'per_order');
@@ -276,4 +276,34 @@ test('shop edit payload should fallback invalid tier inputs to defaults', () => 
   assert.equal(payload.billing_plan_type, 'business');
   assert.equal(payload.planType, 'business');
   assert.equal(payload.plan_type, 'business');
+});
+
+test('shop edit payload should preserve existing business tier when pricing form omits tier fields', () => {
+  const payload = buildMasterShopEditPayload(
+    {
+      id: '14',
+      name: 'Business Shop',
+      slug: 'business-shop',
+      reservationEnabled: '1',
+      reservationCommissionType: 'percentage',
+      reservationCommissionValue: '3',
+      deliveryEnabled: '1',
+      deliveryCommissionType: 'percentage',
+      deliveryCommissionValue: '7',
+    },
+    {
+      defaults: {
+        defaultShopTier: 'subscription',
+      },
+    },
+  );
+
+  assert.equal('billingPlanType' in payload, false);
+  assert.equal('billing_plan_type' in payload, false);
+  assert.equal('planType' in payload, false);
+  assert.equal('plan_type' in payload, false);
+  assert.equal('shopTierMode' in payload, false);
+  assert.equal('shopTierOverride' in payload, false);
+  assert.equal('shop_tier_mode' in payload, false);
+  assert.equal('shop_tier_override' in payload, false);
 });

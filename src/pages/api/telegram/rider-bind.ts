@@ -26,6 +26,10 @@ function isTrustedTelegramRequest(request: Request): boolean {
   return expected !== '' && provided === expected;
 }
 
+function readApiBaseUrl(): string {
+  return process.env.PUBLIC_API_URL || API_BASE_URL;
+}
+
 export const POST: APIRoute = async ({ request }) => {
   if (!isTrustedTelegramRequest(request)) {
     return new Response(JSON.stringify({ success: false, error: 'unauthorized_telegram_request' }), {
@@ -35,8 +39,8 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const body = await request.json().catch(() => ({}));
-  const token = String((body as Record<string, unknown>)?.bind_token || '').trim();
-  const chatId = String((body as Record<string, unknown>)?.chat_id || '').trim();
+  const token = String((body as Record<string, unknown>)?.bindToken || '').trim();
+  const chatId = String((body as Record<string, unknown>)?.chatId || '').trim();
   const secret = readTelegramBindSecret();
   if (!token || !chatId || !secret) {
     return new Response(JSON.stringify({ success: false, error: 'invalid_bind_request' }), {
@@ -65,7 +69,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  const upstream = await fetch(`${API_BASE_URL}/api/rider/status`, {
+  const upstream = await fetch(`${readApiBaseUrl()}/api/rider/status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: payload.riderId, telegram_chat_id: chatId }),

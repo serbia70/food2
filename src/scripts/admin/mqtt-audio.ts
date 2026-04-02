@@ -157,12 +157,12 @@ function handleRealtimePayload(payload: any) {
   };
 
   // Chat realtime payload: forward to admin chat UI if installed.
-  // Expected shape: { shop_id, sender_role, sender_phone, message, created_at }
+  // Expected shape: { shopId, senderRole, senderPhone, message, createdAt }
   try {
     const maybeMessage = String(payload?.message || '').trim();
-    const maybePhone = String(payload?.sender_phone || '').trim();
-    const maybeRole = String(payload?.sender_role || '').trim();
-    const maybeShop = Number(payload?.shop_id || 0);
+    const maybePhone = String(payload?.senderPhone || '').trim();
+    const maybeRole = String(payload?.senderRole || '').trim();
+    const maybeShop = Number(payload?.shopId || 0);
     if (maybeMessage && maybePhone && maybeShop > 0 && (maybeRole === 'user' || maybeRole === 'shop' || maybeRole === 'admin')) {
       const cb = window.__adminChatOnMessage;
       if (typeof cb === 'function') {
@@ -198,9 +198,11 @@ function handleRealtimePayload(payload: any) {
   const isCreation = payload.event === 'new_order' || payload.event === 'order';
   const isReview = payload.status === 'review_needed';
   
+  const orderType = String(payload?.orderType || payload?.order_type || '').trim();
+
   if (isCreation || isReview) {
       toast(payload.status === 'review_needed' ? '有加菜请求，等待审核' : '新订单来了');
-      playAudio(payload.status, payload.order_type);
+      playAudio(payload.status, orderType);
   } else if (payload.event === 'status_update') {
       // Just refresh, no audio
       toast(`订单 #${payload.order_id || ''} 状态更新: ${payload.status}`);

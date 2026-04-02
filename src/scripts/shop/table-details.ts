@@ -151,12 +151,12 @@ export const createTableDetails = (deps: TableDetailsDeps) => {
       const lines = active
         .sort((a, b) => Number((b && b.id) || 0) - Number((a && a.id) || 0))
         .map((o, idx) => {
-          const raw = String((o && o.created_at) || '').replace(' ', 'T');
+          const raw = String((o && o.createdAt) || '').replace(' ', 'T');
           const d = new Date(raw.endsWith('Z') ? raw : `${raw}Z`);
-          const t = Number.isNaN(d.getTime()) ? String((o && o.created_at) || '--') : fmt.format(d);
+          const t = Number.isNaN(d.getTime()) ? String((o && o.createdAt) || '--') : fmt.format(d);
           let itemText = '';
           try {
-            const parsed = JSON.parse(String((o && o.items_json) || '[]'));
+            const parsed = JSON.parse(String((o && o.itemsJson) || '[]'));
             const arr = Array.isArray(parsed)
               ? parsed
               : parsed && typeof parsed === 'object'
@@ -164,8 +164,8 @@ export const createTableDetails = (deps: TableDetailsDeps) => {
                 : [];
             itemText = arr
               .map((it: any) => {
-                const n = String((it && (it.name || it.product_name)) || '').trim();
-                const sub = String((it && (it.sub_name || it.subName)) || '').trim();
+                const n = String((it && (it.name || it.productName)) || '').trim();
+                const sub = String((it && (it.subName)) || '').trim();
                 const q = Number((it && (it.quantity || it.qty)) || 1);
                 if (!n) return '';
                 return `${n}${sub ? `(${sub})` : ''}x${q}`;
@@ -174,11 +174,11 @@ export const createTableDetails = (deps: TableDetailsDeps) => {
               .join('、');
           } catch {}
 
-          const base = `${idx + 1}. #${(o && (o.order_no || o.id)) || ''} | ${(o && o.total_amount) || 0} RSD | ${t}`;
+          const base = `${idx + 1}. #${(o && (o.orderNo || o.id)) || ''} | ${(o && o.totalAmount) || 0} RSD | ${t}`;
           return itemText ? `${base}\n   菜品: ${itemText}` : base;
         });
 
-      const total = active.reduce((sum, o) => sum + Number((o && o.total_amount) || 0), 0);
+      const total = active.reduce((sum, o) => sum + Number((o && o.totalAmount) || 0), 0);
       showTableDetailsModal(`桌号 ${displayNum} 订单详情 / Sto ${displayNum}`, lines, total);
     } catch (error) {
       logDebug('[table-details] openTableDetails failed', tableValue, displayNum, error);

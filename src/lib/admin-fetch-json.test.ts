@@ -72,16 +72,42 @@ test('fetchJSON: ok response unwraps canonical envelope data payload', async () 
   }
 });
 
-test('fetchJSON: fetch throws returns 503', async () => {
+test('fetchJSON: retries one time for GET before returning 503', async () => {
   const originalFetch = globalThis.fetch;
 
   try {
+    let attempts = 0;
     globalThis.fetch = async () => {
-      throw new Error('boom');
+      attempts += 1;
+      if (attempts === 1) throw new TypeError('Failed to fetch');
+      return new Response(JSON.stringify({ ok: true, data: { shopId: 101 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     };
 
     const result = await fetchJSON('http://example.test/fail');
 
+    assert.equal(attempts, 2);
+    assert.deepEqual(result, { ok: true, status: 200, data: { shopId: 101 } });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('fetchJSON: repeated fetch failure returns 503', async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    let attempts = 0;
+    globalThis.fetch = async () => {
+      attempts += 1;
+      throw new Error('boom');
+    };
+
+    const result = await fetchJSON('http://example.test/fail-hard');
+
+    assert.equal(attempts, 2);
     assert.deepEqual(result, { ok: false, status: 503, data: null });
   } finally {
     globalThis.fetch = originalFetch;

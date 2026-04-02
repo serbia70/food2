@@ -1,0 +1,52 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
+const pagePath = resolve(process.cwd(), 'src/pages/rider/dashboard.astro');
+
+test('rider dashboard source uses canonical rider and order fields', async () => {
+  const source = await readFile(pagePath, 'utf8');
+
+  assert.match(source, /const orderNo = String\(safeOrder\.orderNo \|\| ''\)\.trim\(\);/);
+  assert.match(source, /const restaurantId = String\(safeOrder\.shopSlug \|\| safeOrder\.restaurantSlug \|\| safeOrder\.restaurantId \|\| safeOrder\.shopId \|\| ''\)\.trim\(\);/);
+  assert.match(source, /const bound = String\(rider\.telegramChatId \|\| ''\)\.trim\(\) !== '' && rider\.telegramChatId !== '__pending_refresh__';/);
+  assert.match(source, /getRiderTelegramBindingCopy\(bound \? rider : \{ telegramChatId: '' \}\)/);
+  assert.match(source, /telegramChatId: rider\.telegramChatId \|\| '__pending_refresh__',/);
+  assert.match(source, /const items = parseItems\(o\.itemsJson\);/);
+  assert.match(source, /const address = o\.tableInfo \|\| '';/);
+  assert.match(source, /const phone = o\.userPhone \|\| '';/);
+  assert.match(source, /const awaitingOrders = myOrders\.filter\(\(o\) => o\.status === 'awaiting_courier'\);/);
+  assert.match(source, /const deliveringOrders = myOrders\.filter\(\(o\) => o\.status === 'delivering' && String\(o\.courierPhone \|\| ''\)\.trim\(\) === String\(rider\?\.phone \|\| ''\)\.trim\(\)\);/);
+  assert.match(source, /poolTitle\.textContent = '待接单池';/);
+  assert.match(source, /mineTitle\.textContent = '我的配送';/);
+  assert.match(source, /const etaMinutes = Number\(o\.pickupEtaMinutes \|\| 0\);/);
+  assert.match(source, /const error = String\(data\.error \|\| 'load_orders_failed'\);/);
+  assert.match(source, /const failed = document\.createElement\('div'\);/);
+  assert.match(source, /failed\.className = 'empty-tip';/);
+  assert.match(source, /failed\.textContent = `加载失败: \$\{error\}`;/);
+  assert.match(source, /container\.replaceChildren\(failed\);/);
+  assert.match(source, /orderNo\.textContent = `#\$\{String\(o\.orderNo \|\| ''\)\.slice\(-4\)\}`;/);
+  assert.match(source, /orderTime\.textContent = String\(o\.createdAt \|\| ''\)\.slice\(11, 16\);/);
+  assert.match(source, /shop\.textContent = o\.shopName \|\| 'Shop';/);
+  assert.match(source, /total\.textContent = `\$\{o\.totalAmount \|\| 0\} RSD`;/);
+  assert.match(source, /status\.textContent = getAdminDispatchStatusCopy\(o\.status\);/);
+  assert.match(source, /import \{[^}]*getAdminDispatchStatusCopy[^}]*\} from '\.\.\/\.\.\/lib\/rider-dispatch\.ts';/);
+  assert.match(source, /String\(o\.courierPhone \|\| ''\)\.trim\(\) === String\(rider\?\.phone \|\| ''\)\.trim\(\)/);
+
+  assert.doesNotMatch(source, /status\.textContent = o\.status;/);
+  assert.match(source, /courierPhone: rider\.phone,/);
+  assert.match(source, /courierName: rider\.name, courierPhone: rider\.phone/);
+
+  assert.doesNotMatch(source, /order_no/);
+  assert.doesNotMatch(source, /telegram_chat_id/);
+  assert.doesNotMatch(source, /items_json/);
+  assert.doesNotMatch(source, /table_info/);
+  assert.doesNotMatch(source, /user_phone/);
+  assert.doesNotMatch(source, /pickup_eta_minutes/);
+  assert.doesNotMatch(source, /created_at/);
+  assert.doesNotMatch(source, /shop_name/);
+  assert.doesNotMatch(source, /total_amount/);
+  assert.doesNotMatch(source, /courier_phone/);
+  assert.doesNotMatch(source, /courier_name/);
+});

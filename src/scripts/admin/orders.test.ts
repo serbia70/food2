@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { assignRider, autoAssignRider } from './orders.ts';
-
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
@@ -38,7 +37,7 @@ test('assignRider posts manual_assign payload with eta', async () => {
   });
 });
 
-test('autoAssignRider posts auto_assign payload with cursor and eta', async () => {
+test('autoAssignRider posts auto_assign payload without frontend cursor and with eta', async () => {
   let capturedBody: Record<string, unknown> | null = null;
   globalThis.window = { showToast() {}, refreshOrderList() {} } as any;
 
@@ -50,18 +49,37 @@ test('autoAssignRider posts auto_assign payload with cursor and eta', async () =
     });
   };
 
-  await autoAssignRider('471', { shopSlug: 'demo-shop', lastAssignedRiderId: '7', pickupEtaMinutes: 20 });
+  await autoAssignRider('471', { shopSlug: 'demo-shop', pickupEtaMinutes: 20 });
 
   assert.deepEqual(capturedBody, {
     action: 'auto_assign',
     orderId: '471',
     shopSlug: 'demo-shop',
-    lastAssignedRiderId: '7',
     pickupEtaMinutes: 20,
   });
 });
 
-test('orders source removes legacy rider notify exports and keeps assign APIs', async () => {
+test('assignRider throws telegram notification failure details when assignment succeeded but notify failed', async () => {
+  globalThis.window = { showToast() {}, refreshOrderList() {} } as any;
+
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    success: true,
+    telegram_notification: {
+      success: false,
+      error: '{"success":false,"error":"telegram_bot_token_not_configured"}',
+    },
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  await assert.rejects(
+    () => assignRider('470', '7', { shopSlug: 'demo-shop', pickupEtaMinutes: 15 }),
+    /telegram_bot_token_not_configured/,
+  );
+});
+
+test('orders source keeps assign APIs and removes broadcast helper', async () => {
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
   const source = await readFile(resolve(process.cwd(), 'src/scripts/admin/orders.ts'), 'utf8');
@@ -70,11 +88,12 @@ test('orders source removes legacy rider notify exports and keeps assign APIs', 
   assert.match(source, /export async function fetchAvailableRiders\(\)/);
   assert.match(source, /export async function assignRider\(/);
   assert.match(source, /export async function autoAssignRider\(/);
+  assert.doesNotMatch(source, /export async function broadcastRiderDispatch\(/);
 
+  assert.doesNotMatch(source, /fetch\('\/api\/admin\/rider-dispatch'/);
+  assert.doesNotMatch(source, /lastAssignedRiderId/);
   assert.doesNotMatch(source, /publishRiderDispatch\s*\(/);
   assert.doesNotMatch(source, /remindRiders\s*\(/);
-  assert.doesNotMatch(source, /已通知骑手/);
-  assert.doesNotMatch(source, /已再次提醒骑手/);
 });
 
 test('order-actions source uses canonical dispatch and courier fields', async () => {
@@ -298,6 +317,9 @@ test('tab tables source uses canonical order surface fields', async () => {
   assert.match(source, /\(i\.subName\) && <span style="color:#666; font-size:12px; margin-left:4px;">\(\{i\.subName\}\)<\/span>/);
   assert.match(source, /\{o\.totalAmount\} RSD/);
   assert.match(source, /data-order-no=\{o\.orderNo\} data-items=\{o\.itemsJson\} data-total=\{o\.totalAmount\} data-table=\{o\.tableInfo\} data-status=\{o\.status\}/);
+  assert.match(source, /data-user-phone=\{o\.userPhone\}/);
+  assert.match(source, /data-rider-broadcasted-at=\{o\.riderBroadcastedAt\}/);
+  assert.match(source, /data-rider-remind-count=\{o\.riderRemindCount\}/);
 
   assert.doesNotMatch(source, /order_no/);
   assert.doesNotMatch(source, /table_info/);

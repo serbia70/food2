@@ -85,6 +85,22 @@ test('buildMasterDashboardView returns load_error page state with error notice a
   assert.deepEqual(view.actions, view.pageState.actions);
 });
 
+test('buildMasterDashboardView keeps dispatch and riders tabs in ready state when shops payload exists but init loadError is transient', () => {
+  for (const tab of ['dispatch', 'riders'] as const) {
+    const view = buildMasterDashboardView({
+      shops: [{ id: 1, name: 'A 店', slug: 'a' }],
+      settings: {},
+      activeTab: tab,
+      isUnauthorized: false,
+      loadError: '加载失败 (502)',
+    });
+
+    assert.equal(view.pageState.kind, 'ready');
+    assert.deepEqual(view.notices, []);
+    assert.deepEqual(view.actions, []);
+  }
+});
+
 test('buildMasterDashboardView exposes typed child models instead of raw shop/settings payloads', () => {
   const view = buildMasterDashboardView({
     shops: [{ id: 9, name: 'Typed Shop', slug: 'typed-shop' }],

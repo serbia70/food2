@@ -1,5 +1,3 @@
-import { API_BASE_URL } from '../config.ts';
-
 type ShopSummary = {
   id?: number;
   name?: string;
@@ -7,37 +5,34 @@ type ShopSummary = {
 
 type MasterDispatchOrderSummary = {
   id?: number;
-  order_no?: string;
-  shop_id?: number;
-  shop_name?: string;
+  orderNo?: string;
+  shopId?: number;
+  shopName?: string;
   status?: string;
-  dispatch_status?: string;
-  dispatch_round?: number;
-  current_pool_index?: number;
-  last_dispatched_rider_id?: number;
-  next_escalate_at?: string;
+  dispatch?: {
+    status?: string;
+    dispatchRound?: number;
+    currentPoolIndex?: number;
+    lastDispatchedRiderID?: number;
+    nextEscalateAt?: string;
+  };
 };
 
 type MasterDispatchPoolSummary = {
-  shop_id?: number;
-  shop_name?: string;
-  pool_count?: number;
-  available_count?: number;
-  busy_count?: number;
-  offline_count?: number;
+  shopId?: number;
+  shopName?: string;
+  poolCount?: number;
+  availableCount?: number;
+  busyCount?: number;
+  offlineCount?: number;
 };
 
-type MasterDispatchPayload = {
+export type MasterDispatchPayload = {
   awaiting: MasterDispatchOrderSummary[];
   delivering: MasterDispatchOrderSummary[];
   pools: MasterDispatchPoolSummary[];
 };
 
-type RiderStatus = 'available' | 'busy' | 'offline';
-
-type RiderSummary = {
-  status?: RiderStatus | string;
-};
 
 export type LoadMasterDispatchDataInput = {
   requestUrl: URL;
@@ -51,78 +46,154 @@ export type LoadMasterDispatchDataResult = {
   error: string;
 };
 
+export type MasterDispatchPageView = {
+  awaiting: Array<{
+    id?: number;
+    orderNo: string;
+    shopId: number;
+    shopName: string;
+    status: string;
+    dispatchStatus: string;
+    dispatchRound: number;
+    lastDispatchedRiderId: string;
+  }>;
+  delivering: Array<{
+    id?: number;
+    orderNo: string;
+    shopId: number;
+    shopName: string;
+    status: string;
+    lastDispatchedRiderId: string;
+  }>;
+  pools: Array<{
+    shopId: number;
+    shopName: string;
+    poolCount: number;
+    availableCount: number;
+    busyCount: number;
+    offlineCount: number;
+  }>;
+};
+
 const EMPTY_MASTER_DISPATCH_PAYLOAD: MasterDispatchPayload = {
   awaiting: [],
   delivering: [],
   pools: [],
 };
 
-async function loadDispatchPoolFallback(authHeader: string, shopRows: ShopSummary[]): Promise<MasterDispatchPoolSummary[]> {
-  const pools: MasterDispatchPoolSummary[] = [];
-  for (const shop of shopRows) {
-    const shopId = Number(shop?.id || 0);
-    if (!shopId) continue;
+function normalizeDispatchOrder(order: MasterDispatchOrderSummary): Record<string, unknown> {
+  const dispatch = order?.dispatch && typeof order.dispatch === 'object' ? order.dispatch : undefined;
+  const orderNo = String(order?.orderNo || '').trim();
+  const shopId = Number(order?.shopId || 0) || 0;
+  const shopName = String(order?.shopName || '').trim();
+  const dispatchStatus = String(dispatch?.status || '').trim();
+  const hasDispatchRound = dispatch?.dispatchRound !== undefined;
+  const dispatchRound = Number(dispatch?.dispatchRound ?? 0) || 0;
+  const hasCurrentPoolIndex = dispatch?.currentPoolIndex !== undefined;
+  const currentPoolIndex = Number(dispatch?.currentPoolIndex ?? 0) || 0;
+  const hasLastDispatchedRiderId = dispatch?.lastDispatchedRiderID !== undefined;
+  const lastDispatchedRiderId = Number(dispatch?.lastDispatchedRiderID ?? 0) || 0;
+  const nextEscalateAt = String(dispatch?.nextEscalateAt || '').trim();
 
+  return {
+    ...(typeof order?.id === 'number' ? { id: order.id } : {}),
+    ...(orderNo ? { order_no: orderNo } : {}),
+    ...(shopId ? { shop_id: shopId } : {}),
+    ...(shopName ? { shop_name: shopName } : {}),
+    ...(typeof order?.status === 'string' && order.status ? { status: order.status } : {}),
+    ...(dispatchStatus ? { dispatch_status: dispatchStatus } : {}),
+    ...(hasDispatchRound ? { dispatch_round: dispatchRound } : {}),
+    ...(hasCurrentPoolIndex ? { current_pool_index: currentPoolIndex } : {}),
+    ...(hasLastDispatchedRiderId ? { last_dispatched_rider_id: lastDispatchedRiderId } : {}),
+    ...(nextEscalateAt ? { next_escalate_at: nextEscalateAt } : {}),
+  };
+}
+
+function normalizeDispatchPool(pool: MasterDispatchPoolSummary): Record<string, unknown> {
+  const shopId = Number(pool?.shopId || 0) || 0;
+  const shopName = String(pool?.shopName || '').trim();
+  const hasPoolCount = pool?.poolCount !== undefined;
+  const poolCount = Number(pool?.poolCount ?? 0) || 0;
+  const hasAvailableCount = pool?.availableCount !== undefined;
+  const availableCount = Number(pool?.availableCount ?? 0) || 0;
+  const hasBusyCount = pool?.busyCount !== undefined;
+  const busyCount = Number(pool?.busyCount ?? 0) || 0;
+  const hasOfflineCount = pool?.offlineCount !== undefined;
+  const offlineCount = Number(pool?.offlineCount ?? 0) || 0;
+
+  return {
+    ...(shopId ? { shop_id: shopId } : {}),
+    ...(shopName ? { shop_name: shopName } : {}),
+    ...(hasPoolCount ? { pool_count: poolCount } : {}),
+    ...(hasAvailableCount ? { available_count: availableCount } : {}),
+    ...(hasBusyCount ? { busy_count: busyCount } : {}),
+    ...(hasOfflineCount ? { offline_count: offlineCount } : {}),
+  };
+}
+
+async function fetchDispatchProxyWithRetry(url: URL, init: RequestInit, attempts = 2): Promise<Response> {
+  let lastResponse: Response | null = null;
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const impersonateRes = await fetch(`${API_BASE_URL}/api/master/impersonate-shop`, {
-        method: 'POST',
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ id: shopId }),
-      });
-      const impersonateData = await impersonateRes.json().catch(() => ({}));
-      const isCanonicalImpersonate = impersonateData && typeof impersonateData === 'object' && (impersonateData as { ok?: unknown }).ok === true;
-      const impersonatePayload = isCanonicalImpersonate && 'data' in (impersonateData as Record<string, unknown>)
-        ? (impersonateData as { data?: unknown }).data
-        : null;
-      const hasImpersonated = impersonatePayload && typeof impersonatePayload === 'object'
-        && typeof (impersonatePayload as { slug?: unknown }).slug === 'string'
-        && String((impersonatePayload as { slug?: unknown }).slug || '').trim()
-        && (impersonatePayload as { impersonated?: unknown }).impersonated === true;
-      if (!impersonateRes.ok || !hasImpersonated) continue;
-
-      const ridersRes = await fetch(`${API_BASE_URL}/api/admin/riders`, {
-        method: 'GET',
-        headers: { Authorization: authHeader },
-      });
-      const ridersData = await ridersRes.json().catch(() => ({}));
-      const riders = ridersData && typeof ridersData === 'object' && (ridersData as { ok?: unknown }).ok === true
-        && (ridersData as { data?: unknown }).data
-        && typeof (ridersData as { data?: unknown }).data === 'object'
-        && Array.isArray(((ridersData as { data?: { riders?: unknown } }).data?.riders))
-        ? (((ridersData as { data?: { riders?: unknown } }).data?.riders) as RiderSummary[])
-        : [];
-      if (!ridersRes.ok || riders.length === 0) continue;
-
-      pools.push({
-        shop_id: shopId,
-        shop_name: String(shop?.name || '').trim() || `店铺 #${shopId}`,
-        pool_count: riders.length,
-        available_count: riders.filter((rider) => String(rider?.status || '').trim() === 'available').length,
-        busy_count: riders.filter((rider) => String(rider?.status || '').trim() === 'busy').length,
-        offline_count: riders.filter((rider) => {
-          const status = String(rider?.status || '').trim();
-          return !status || status === 'offline';
-        }).length,
-      });
-    } catch {
-      continue;
+      const response = await fetch(url, init);
+      const contentType = String(response.headers.get('content-type') || '');
+      const shouldRetry = attempt < attempts - 1
+        && response.status >= 500
+        && !contentType.includes('application/json');
+      if (!shouldRetry) return response;
+      lastResponse = response;
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts - 1) throw error;
     }
   }
-  return pools;
+
+  if (lastResponse) return lastResponse;
+  throw lastError instanceof Error ? lastError : new Error('dispatch_fetch_failed');
+}
+
+export function buildMasterDispatchPageView(payload: MasterDispatchPayload): MasterDispatchPageView {
+  return {
+    awaiting: payload.awaiting.map((order) => ({
+      id: order.id,
+      orderNo: String(order.order_no || order.id || '-'),
+      shopId: Number(order.shop_id || 0) || 0,
+      shopName: String(order.shop_name || '').trim(),
+      status: String(order.status || '').trim(),
+      dispatchStatus: String(order.dispatch_status || 'idle').trim() || 'idle',
+      dispatchRound: Number(order.dispatch_round || 0) || 0,
+      lastDispatchedRiderId: String(order.last_dispatched_rider_id || ''),
+    })),
+    delivering: payload.delivering.map((order) => ({
+      id: order.id,
+      orderNo: String(order.order_no || order.id || '-'),
+      shopId: Number(order.shop_id || 0) || 0,
+      shopName: String(order.shop_name || '').trim(),
+      status: String(order.status || 'delivering').trim() || 'delivering',
+      lastDispatchedRiderId: String(order.last_dispatched_rider_id || '-'),
+    })),
+    pools: payload.pools.map((pool) => ({
+      shopId: Number(pool.shop_id || 0) || 0,
+      shopName: String(pool.shop_name || '').trim(),
+      poolCount: Number(pool.pool_count || 0) || 0,
+      availableCount: Number(pool.available_count || 0) || 0,
+      busyCount: Number(pool.busy_count || 0) || 0,
+      offlineCount: Number(pool.offline_count || 0) || 0,
+    })),
+  };
 }
 
 export async function loadMasterDispatchData({
   requestUrl,
   authHeader,
   cookieHeader,
-  shopRows,
+  shopRows: _shopRows,
 }: LoadMasterDispatchDataInput): Promise<LoadMasterDispatchDataResult> {
   try {
     const dispatchUrl = new URL('/api/master/dispatch', requestUrl);
-    const res = await fetch(dispatchUrl, {
+    const res = await fetchDispatchProxyWithRetry(dispatchUrl, {
       method: 'GET',
       headers: {
         ...(authHeader ? { Authorization: authHeader } : {}),
@@ -137,16 +208,16 @@ export async function loadMasterDispatchData({
       };
     }
 
-    const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => null);
+    const isCanonicalEnvelope = !!data && typeof data === 'object' && 'ok' in data && data.ok === true;
+    const dispatchData = isCanonicalEnvelope && 'data' in data && data.data && typeof data.data === 'object'
+      ? data.data
+      : null;
     const payload: MasterDispatchPayload = {
-      awaiting: Array.isArray(data?.awaiting) ? data.awaiting : [],
-      delivering: Array.isArray(data?.delivering) ? data.delivering : [],
-      pools: Array.isArray(data?.pools) ? data.pools : [],
+      awaiting: Array.isArray(dispatchData?.awaiting) ? dispatchData.awaiting.map((order) => normalizeDispatchOrder(order)) : [],
+      delivering: Array.isArray(dispatchData?.delivering) ? dispatchData.delivering.map((order) => normalizeDispatchOrder(order)) : [],
+      pools: Array.isArray(dispatchData?.pools) ? dispatchData.pools.map((pool) => normalizeDispatchPool(pool)) : [],
     };
-
-    if (payload.pools.length === 0 && authHeader) {
-      payload.pools = await loadDispatchPoolFallback(authHeader, shopRows);
-    }
 
     return {
       payload,

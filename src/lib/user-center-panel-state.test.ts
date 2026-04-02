@@ -8,7 +8,7 @@ test('可将用户资料与店铺上下文聚合为共享面板状态', () => {
 		user: { name: '888', phone: '0613083889', login_account: '888' },
 		currentShopName: 'Pizza Grill 02',
 		currentShopSlug: '02',
-		orders: [{ order_no: 'A1' }, { order_no: 'A2' }],
+		orders: [{ orderNo: 'A1' }, { orderNo: 'A2' }],
 		addressSummary: 'hui chen · 0613083888 · veljka',
 		membershipLabel: 'VIP · 积分 80',
 	});

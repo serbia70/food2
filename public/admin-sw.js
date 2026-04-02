@@ -31,6 +31,11 @@ self.addEventListener('activate', (event) => {
             .map((key) => caches.delete(key))
         )
       )
+      .then(async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const staleNavigationKeys = [scopePath, `${scopePath}/`];
+        await Promise.all(staleNavigationKeys.map((key) => cache.delete(key)));
+      })
       .then(() => self.clients.claim())
   );
 });
@@ -55,8 +60,10 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const cloned = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned));
+          if (response.ok) {
+            const cloned = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned));
+          }
           return response;
         })
         .catch(async () => {

@@ -201,7 +201,7 @@ function getOrdersForTable(tableNum: string) {
 
       tableOrders.push({
         id: el.dataset.oid,
-        order_no: el.dataset.orderNo,
+        orderNo: el.dataset.orderNo,
         amount: el.dataset.total,
         items: items,
         remarks: remarks, // 保存备注
@@ -269,7 +269,7 @@ function showCheckoutModal(tableNum: string, orders: any[]) {
       const title = document.createElement('div');
       title.style.fontWeight = 'bold';
       title.append(document.createTextNode(String(order.time || '')));
-      const orderNo = createTextElement('span', ` (#${order.order_no})`, {
+      const orderNo = createTextElement('span', ` (#${order.orderNo})`, {
         fontWeight: 'normal',
         color: '#666',
       });
@@ -277,7 +277,7 @@ function showCheckoutModal(tableNum: string, orders: any[]) {
 
       const itemsDetail = order.items
         .filter((i: any) => i != null)
-        .map((i: any) => `${i.name} ${i.sub_name ? '(' + i.sub_name + ')' : ''} x${i.quantity}`)
+        .map((i: any) => `${i.name} ${i.subName ? '(' + i.subName + ')' : ''} x${i.quantity}`)
         .join(', ');
       const detail = createTextElement('div', itemsDetail, {
         fontSize: '12px',
@@ -566,7 +566,7 @@ function showDetailsModal(tableNum: string, orders: any[]) {
         paddingBottom: '5px',
       });
       header.append(
-        createTextElement('span', `订单 #${order.order_no}`, { fontWeight: 'bold' }),
+        createTextElement('span', `订单 #${order.orderNo}`, { fontWeight: 'bold' }),
         createTextElement('span', String(order.time || ''), { color: '#999' }),
       );
 

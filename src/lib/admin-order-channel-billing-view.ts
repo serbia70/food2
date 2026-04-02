@@ -94,7 +94,12 @@ function readCommissionMode(value: unknown): 'global' | 'override' | '' {
 }
 
 function resolveCommissionMode(shop: BillingInput, settings: BillingInput): 'global' | 'override' {
-  return readCommissionMode(shop.commission_mode) || readCommissionMode(settings.commission_mode) || 'global';
+  return readCommissionMode(shop.commissionMode ?? shop.commission_mode) || readCommissionMode(settings.commissionMode ?? settings.commission_mode) || 'override';
+}
+
+function resolveBillingPlanType(shop: BillingInput): 'subscription' | 'business' {
+  const raw = toStringValue(shop.billingPlanType ?? shop.billing_plan_type ?? shop.shopTierOverride ?? shop.shop_tier_override).toLowerCase();
+  return raw === 'business' ? 'business' : 'subscription';
 }
 
 function resolveBalanceReminderLevel(billing: BillingInput, billingBalanceRsd: number): string {
@@ -121,48 +126,59 @@ function resolveBalanceReminderText(level: string, billingBalanceRsd: number): s
 function buildReservationPlan(input: BillingInput, defaults?: AdminOrderChannelBillingDefaults): OrderChannelFeePlan {
   const { billing, shop, settings } = resolveSources(input);
   const defaultPlan = defaults?.reservationPlan || {};
+  const commissionMode = resolveCommissionMode(shop, settings);
+  const billingPlanType = resolveBillingPlanType(shop);
 
-  const enabledCandidate = firstCandidate(
-    { value: shop.reservation_enabled, source: 'new' },
-    { value: shop.enableReservation, source: 'new' },
-    { value: settings.reservation_enabled, source: 'new' },
-    { value: billing.reservation_enabled, source: 'new' },
-    { value: shop.enable_reservation, source: 'legacy' },
-    { value: shop.subscription_enabled, source: 'legacy' },
-    { value: settings.subscription_enabled, source: 'legacy' },
-    { value: billing.subscription_enabled, source: 'legacy' },
-  );
+  const enabledCandidate = commissionMode === 'override'
+    ? firstCandidate(
+        { value: shop.reservationEnabled, source: 'new' },
+        { value: shop.enableReservation, source: 'new' },
+        { value: settings.reservationEnabled, source: 'new' },
+        { value: settings.reservation_enabled, source: 'new' },
+        { value: billing.reservationEnabled, source: 'new' },
+      )
+    : firstCandidate(
+        { value: settings.reservationEnabled, source: 'new' },
+        { value: settings.reservation_enabled, source: 'new' },
+        { value: shop.reservationEnabled, source: 'new' },
+        { value: shop.enableReservation, source: 'new' },
+        { value: billing.reservationEnabled, source: 'new' },
+      );
 
-  const typeCandidate = firstCandidate(
-    { value: shop.reservation_commission_type, source: 'new' },
-    { value: shop.subscriptionDeliveryCommissionType, source: 'legacy' },
-    { value: shop.subscription_delivery_commission_type, source: 'legacy' },
-    { value: settings.reservation_commission_type, source: 'new' },
-    { value: settings.subscription_delivery_commission_type, source: 'legacy' },
-    { value: billing.reservation_commission_type, source: 'new' },
-    { value: billing.subscription_delivery_commission_type, source: 'legacy' },
-  );
+  const typeCandidate = commissionMode === 'override'
+    ? firstCandidate(
+        { value: shop.reservationCommissionType, source: 'new' },
+        { value: settings.reservationCommissionType, source: 'new' },
+        { value: settings.reservation_commission_type, source: 'new' },
+        { value: billing.reservationCommissionType, source: 'new' },
+      )
+    : firstCandidate(
+        { value: settings.reservationCommissionType, source: 'new' },
+        { value: settings.reservation_commission_type, source: 'new' },
+        { value: shop.reservationCommissionType, source: 'new' },
+        { value: billing.reservationCommissionType, source: 'new' },
+      );
 
-  const valueCandidate = firstCandidate(
-    { value: shop.reservation_commission_value, source: 'new' },
-    { value: shop.subscriptionDeliveryCommissionValue, source: 'legacy' },
-    { value: shop.subscriptionFeeRsd, source: 'legacy' },
-    { value: shop.subscription_delivery_commission_value, source: 'legacy' },
-    { value: settings.reservation_commission_value, source: 'new' },
-    { value: settings.subscription_delivery_commission_value, source: 'legacy' },
-    { value: billing.reservation_commission_value, source: 'new' },
-    { value: billing.subscription_delivery_commission_value, source: 'legacy' },
-  );
+  const valueCandidate = commissionMode === 'override'
+    ? firstCandidate(
+        { value: shop.reservationCommissionValue, source: 'new' },
+        { value: settings.reservationCommissionValue, source: 'new' },
+        { value: settings.reservation_commission_value, source: 'new' },
+        { value: billing.reservationCommissionValue, source: 'new' },
+      )
+    : firstCandidate(
+        { value: settings.reservationCommissionValue, source: 'new' },
+        { value: settings.reservation_commission_value, source: 'new' },
+        { value: shop.reservationCommissionValue, source: 'new' },
+        { value: billing.reservationCommissionValue, source: 'new' },
+      );
 
   return buildOrderChannelFeePlan({
     channel: 'reservation',
     scope: 'shop',
     enabled: currentValue(enabledCandidate),
-    legacyEnabled: legacyValue(enabledCandidate),
     commissionType: currentValue(typeCandidate),
-    legacyCommissionType: legacyValue(typeCandidate),
     commissionValue: currentValue(valueCandidate),
-    legacyCommissionValue: legacyValue(valueCandidate),
     defaultEnabled: defaultPlan.enabled ?? true,
     defaultCommissionType: defaultPlan.commissionType ?? 'percentage',
     defaultCommissionValue: defaultPlan.commissionValue ?? 3,
@@ -173,57 +189,69 @@ function buildDeliveryPlan(input: BillingInput, defaults?: AdminOrderChannelBill
   const { billing, shop, settings } = resolveSources(input);
   const defaultPlan = defaults?.deliveryPlan || {};
   const commissionMode = resolveCommissionMode(shop, settings);
+  const billingPlanType = resolveBillingPlanType(shop);
 
-  const enabledCandidate = firstCandidate(
-    { value: shop.delivery_enabled, source: 'new' },
-    { value: shop.enableDelivery, source: 'new' },
-    { value: settings.delivery_enabled, source: 'new' },
-    { value: billing.delivery_enabled, source: 'new' },
-    { value: shop.enable_delivery, source: 'legacy' },
-    { value: shop.business_enabled, source: 'legacy' },
-    { value: settings.business_enabled, source: 'legacy' },
-    { value: billing.business_enabled, source: 'legacy' },
-  );
+  const enabledCandidate = commissionMode === 'override'
+    ? firstCandidate(
+        { value: shop.deliveryEnabled, source: 'new' },
+        { value: shop.enableDelivery, source: 'new' },
+        { value: settings.deliveryEnabled, source: 'new' },
+        { value: settings.delivery_enabled, source: 'new' },
+        { value: billing.deliveryEnabled, source: 'new' },
+      )
+    : firstCandidate(
+        { value: settings.deliveryEnabled, source: 'new' },
+        { value: settings.delivery_enabled, source: 'new' },
+        { value: shop.deliveryEnabled, source: 'new' },
+        { value: shop.enableDelivery, source: 'new' },
+        { value: billing.deliveryEnabled, source: 'new' },
+      );
 
-  const typeCandidate = firstCandidate(
-    { value: shop.delivery_commission_type, source: 'new' },
-    { value: shop.businessDeliveryCommissionType, source: 'legacy' },
-    { value: shop.business_delivery_commission_type, source: 'legacy' },
-    { value: commissionMode === 'override' ? shop.commission_override_type : undefined, source: 'legacy' },
-    { value: commissionMode === 'override' ? shop.commission_type : undefined, source: 'legacy' },
-    { value: settings.delivery_commission_type, source: 'new' },
-    { value: settings.business_delivery_commission_type, source: 'legacy' },
-    { value: commissionMode === 'override' ? settings.commission_override_type : undefined, source: 'legacy' },
-    { value: commissionMode === 'override' ? settings.commission_type : undefined, source: 'legacy' },
-    { value: billing.delivery_commission_type, source: 'new' },
-    { value: billing.business_delivery_commission_type, source: 'legacy' },
-  );
+  const splitDeliveryType = billingPlanType === 'business'
+    ? settings.business_delivery_commission_type
+    : settings.subscription_delivery_commission_type;
+  const splitDeliveryValue = billingPlanType === 'business'
+    ? settings.business_delivery_commission_value
+    : settings.subscription_delivery_commission_value;
 
-  const valueCandidate = firstCandidate(
-    { value: shop.delivery_commission_value, source: 'new' },
-    { value: shop.businessDeliveryCommissionValue, source: 'legacy' },
-    { value: shop.business_delivery_commission_value, source: 'legacy' },
-    { value: commissionMode === 'override' ? shop.commission_override_value : undefined, source: 'legacy' },
-    { value: commissionMode === 'override' ? shop.commission_value : undefined, source: 'legacy' },
-    { value: commissionMode === 'override' ? shop.businessFeeRsd : undefined, source: 'legacy' },
-    { value: settings.delivery_commission_value, source: 'new' },
-    { value: settings.business_delivery_commission_value, source: 'legacy' },
-    { value: commissionMode === 'override' ? settings.commission_override_value : undefined, source: 'legacy' },
-    { value: commissionMode === 'override' ? settings.commission_value : undefined, source: 'legacy' },
-    { value: commissionMode === 'override' ? settings.businessFeeRsd : undefined, source: 'legacy' },
-    { value: billing.delivery_commission_value, source: 'new' },
-    { value: billing.business_delivery_commission_value, source: 'legacy' },
-  );
+  const typeCandidate = commissionMode === 'override'
+    ? firstCandidate(
+        { value: shop.deliveryCommissionType, source: 'new' },
+        { value: settings.deliveryCommissionType, source: 'new' },
+        { value: settings.delivery_commission_type, source: 'new' },
+        { value: splitDeliveryType, source: 'new' },
+        { value: billing.deliveryCommissionType, source: 'new' },
+      )
+    : firstCandidate(
+        { value: splitDeliveryType, source: 'new' },
+        { value: settings.deliveryCommissionType, source: 'new' },
+        { value: settings.delivery_commission_type, source: 'new' },
+        { value: shop.deliveryCommissionType, source: 'new' },
+        { value: billing.deliveryCommissionType, source: 'new' },
+      );
+
+  const valueCandidate = commissionMode === 'override'
+    ? firstCandidate(
+        { value: shop.deliveryCommissionValue, source: 'new' },
+        { value: settings.deliveryCommissionValue, source: 'new' },
+        { value: settings.delivery_commission_value, source: 'new' },
+        { value: splitDeliveryValue, source: 'new' },
+        { value: billing.deliveryCommissionValue, source: 'new' },
+      )
+    : firstCandidate(
+        { value: splitDeliveryValue, source: 'new' },
+        { value: settings.deliveryCommissionValue, source: 'new' },
+        { value: settings.delivery_commission_value, source: 'new' },
+        { value: shop.deliveryCommissionValue, source: 'new' },
+        { value: billing.deliveryCommissionValue, source: 'new' },
+      );
 
   return buildOrderChannelFeePlan({
     channel: 'delivery',
     scope: 'shop',
     enabled: currentValue(enabledCandidate),
-    legacyEnabled: legacyValue(enabledCandidate),
     commissionType: currentValue(typeCandidate),
-    legacyCommissionType: legacyValue(typeCandidate),
     commissionValue: currentValue(valueCandidate),
-    legacyCommissionValue: legacyValue(valueCandidate),
     defaultEnabled: defaultPlan.enabled ?? true,
     defaultCommissionType: defaultPlan.commissionType ?? 'percentage',
     defaultCommissionValue: defaultPlan.commissionValue ?? 5,

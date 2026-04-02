@@ -1,5 +1,19 @@
 import { registerAdminGlobal } from './globals';
 
+async function fetchJSONWithRetry(url: string, init?: RequestInit) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const res = await fetch(url, init);
+      const data = await res.json();
+      return { res, data };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 function setStyles(el: HTMLElement, styles: Record<string, string>) {
   Object.entries(styles).forEach(([key, value]) => {
     (el.style as any)[key] = value;
@@ -51,24 +65,29 @@ function buildRecordsTable(records: any[], compact = false) {
   const tbody = document.createElement('tbody');
   records.forEach((r: any) => {
     const row = document.createElement('tr');
-    const orderNo = String(r.order_no || '');
+    const orderNo = String(r.orderNo || '');
     const orderDisplay = orderNo.length > 9 ? orderNo.slice(-9) : orderNo;
+    const orderLabel = orderDisplay ? `#${orderDisplay}` : '-';
+    const totalAmount = Number.isFinite(Number(r.totalAmount)) ? String(r.totalAmount) : '-';
+    const commissionAmount = Number.isFinite(Number(r.commissionAmount)) ? `-${r.commissionAmount}` : '-';
+    const balanceAfter = Number.isFinite(Number(r.balanceAfter)) ? String(r.balanceAfter) : '-';
     if (compact) {
       setStyles(row, { borderBottom: '1px solid #f8fafc' });
       row.append(
-        createCell('td', `#${orderDisplay}`, { padding: '8px 10px', color: '#334155', fontWeight: '600' }),
-        createCell('td', String(r.total_amount ?? ''), { padding: '8px 10px', textAlign: 'right', color: '#64748b' }),
-        createCell('td', `-${r.commission_amount}`, { padding: '8px 10px', textAlign: 'right', color: '#d32f2f', fontWeight: '700' }),
-        createCell('td', String(r.balance_after ?? ''), { padding: '8px 10px', textAlign: 'right', color: '#1e293b', fontWeight: '600', background: '#f1f5f9' }),
+        createCell('td', orderLabel, { padding: '8px 10px', color: '#334155', fontWeight: '600' }),
+        createCell('td', totalAmount, { padding: '8px 10px', textAlign: 'right', color: '#64748b' }),
+        createCell('td', commissionAmount, { padding: '8px 10px', textAlign: 'right', color: '#d32f2f', fontWeight: '700' }),
+        createCell('td', balanceAfter, { padding: '8px 10px', textAlign: 'right', color: '#1e293b', fontWeight: '600', background: '#f1f5f9' }),
       );
     } else {
-      const date = new Date(r.created_at).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const createdAt = new Date(r.createdAt);
+      const date = Number.isNaN(createdAt.getTime()) ? '--' : createdAt.toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
       row.append(
         createCell('td', date, { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', color: '#64748b' }),
-        createCell('td', `#${orderDisplay}`, { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', fontFamily: 'monospace', fontWeight: '600' }),
-        createCell('td', String(r.total_amount ?? ''), { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', textAlign: 'right' }),
-        createCell('td', `-${r.commission_amount}`, { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#d32f2f', fontWeight: 'bold' }),
-        createCell('td', String(r.balance_after ?? ''), { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#1e293b', fontWeight: '600', background: '#f8fafc' }),
+        createCell('td', orderLabel, { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', fontFamily: 'monospace', fontWeight: '600' }),
+        createCell('td', totalAmount, { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', textAlign: 'right' }),
+        createCell('td', commissionAmount, { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#d32f2f', fontWeight: 'bold' }),
+        createCell('td', balanceAfter, { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#1e293b', fontWeight: '600', background: '#f8fafc' }),
       );
     }
     tbody.appendChild(row);
@@ -117,15 +136,20 @@ export async function showCommissionRecords() {
   modal.style.display = 'flex';
 
   try {
-    const res = await fetch('/api/admin/billing/records');
-    const data = await res.json();
+    const { res, data } = await fetchJSONWithRetry('/api/admin/billing');
     const body = document.getElementById('commission-list-body') as HTMLElement | null;
     if (!body) return;
-    if (!data.success || !data.records || data.records.length === 0) {
+    if (res.status === 401 || res.status === 403) {
+      setStateMessage(body, '登录已失效，请重新登录', '#ef4444');
+      window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+      return;
+    }
+    const records = Array.isArray(data?.billing?.records) ? data.billing.records : [];
+    if (!res.ok || !data.success || !records.length) {
       setStateMessage(body, '暂无扣费记录', '#999');
       return;
     }
-    body.replaceChildren(buildRecordsTable(data.records, false));
+    body.replaceChildren(buildRecordsTable(records, false));
   } catch {
     const body = document.getElementById('commission-list-body') as HTMLElement | null;
     if (body) setStateMessage(body, '加载失败，请刷新重试', '#ef4444');
@@ -136,9 +160,17 @@ export async function loadFeeDailySummary() {
   const container = document.getElementById('fee-daily-summary');
   if (!container || container.dataset.loaded === 'true') return;
   try {
-    const res = await fetch('/api/admin/billing/records');
-    const data = await res.json();
-    if (!data.success || !data.records || data.records.length === 0) {
+    const { res, data } = await fetchJSONWithRetry('/api/admin/billing');
+    if (res.status === 401 || res.status === 403) {
+      const error = document.createElement('div');
+      setStyles(error, { padding: '20px', textAlign: 'center', color: '#ef4444' });
+      error.textContent = '登录已失效，请重新登录';
+      container.replaceChildren(error);
+      window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+      return;
+    }
+    const records = Array.isArray(data?.billing?.records) ? data.billing.records : [];
+    if (!res.ok || !data.success || !records.length) {
       const empty = document.createElement('div');
       setStyles(empty, { padding: '20px', textAlign: 'center', color: '#94a3b8' });
       empty.textContent = '暂无历史扣费记录';
@@ -147,7 +179,7 @@ export async function loadFeeDailySummary() {
     }
     const wrap = document.createElement('div');
     setStyles(wrap, { border: '1px solid #f1f5f9', borderRadius: '8px', overflow: 'hidden' });
-    wrap.appendChild(buildRecordsTable(data.records.slice(0, 15), true));
+    wrap.appendChild(buildRecordsTable(records.slice(0, 15), true));
     const note = document.createElement('p');
     setStyles(note, { marginTop: '10px', fontSize: '11px', color: '#94a3b8', textAlign: 'center' });
     note.textContent = '* 仅显示最近 15 笔明细';

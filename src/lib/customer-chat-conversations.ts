@@ -1,6 +1,6 @@
 type ChatMessageLike = {
-	shop_id?: unknown;
-	created_at?: unknown;
+	shopId?: unknown;
+	createdAt?: unknown;
 	message?: unknown;
 };
 
@@ -18,9 +18,9 @@ function toTimestamp(value: unknown): number {
 export function buildCustomerConversationList(messages: ChatMessageLike[], shopMap: ShopMap = {}) {
 	const latestByShop = new Map<string, { shopId: string; preview: string; timestamp: number }>();
 	for (const message of messages || []) {
-		const shopId = String(message?.shop_id || '').trim();
+		const shopId = String(message?.shopId || '').trim();
 		if (!shopId) continue;
-		const timestamp = toTimestamp(message?.created_at);
+		const timestamp = toTimestamp(message?.createdAt);
 		const preview = String(message?.message || '').trim();
 		const previous = latestByShop.get(shopId);
 		if (!previous || timestamp >= previous.timestamp) {

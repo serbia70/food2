@@ -1,3 +1,4 @@
+process.env.PUBLIC_API_URL = 'http://localhost:3030';
 process.env.TELEGRAM_CALLBACK_SECRET = 'test-telegram-callback-secret';
 process.env.TELEGRAM_WEBHOOK_SECRET = 'test-telegram-callback-secret';
 process.env.TELEGRAM_BIND_SECRET = 'test-telegram-bind-secret';
@@ -16,8 +17,8 @@ test('POST rider-bind 在 secret 错误时返回 401', async () => {
       'x-telegram-bot-api-secret-token': 'wrong-secret',
     },
     body: JSON.stringify({
-      bind_token: 'ignored',
-      chat_id: 'chat-7',
+      bindToken: 'ignored',
+      chatId: 'chat-7',
     }),
   });
 
@@ -44,8 +45,8 @@ test('POST rider-bind 在 token 非法时返回统一错误码 400', async () =>
         'x-telegram-bot-api-secret-token': 'test-telegram-callback-secret',
       },
       body: JSON.stringify({
-        bind_token: 'bad.token',
-        chat_id: 'chat-7',
+        bindToken: 'bad.token',
+        chatId: 'chat-7',
       }),
     });
 
@@ -81,8 +82,8 @@ test('POST rider-bind 在 token 过期时返回 400', async () => {
         'x-telegram-bot-api-secret-token': 'test-telegram-callback-secret',
       },
       body: JSON.stringify({
-        bind_token: bindToken,
-        chat_id: 'chat-7',
+        bindToken: bindToken,
+        chatId: 'chat-7',
       }),
     });
 
@@ -105,7 +106,7 @@ test('POST rider-bind 在请求缺字段时返回 400', async () => {
       'x-telegram-bot-api-secret-token': 'test-telegram-callback-secret',
     },
     body: JSON.stringify({
-      chat_id: 'chat-7',
+      chatId: 'chat-7',
     }),
   });
 
@@ -148,8 +149,8 @@ test('POST rider-bind 在签名合法时写回 telegram_chat_id', async () => {
         'x-telegram-bot-api-secret-token': 'test-telegram-callback-secret',
       },
       body: JSON.stringify({
-        bind_token: bindToken,
-        chat_id: 'chat-7',
+        bindToken: bindToken,
+        chatId: 'chat-7',
       }),
     });
 
@@ -159,4 +160,16 @@ test('POST rider-bind 在签名合法时写回 telegram_chat_id', async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('rider-bind source uses canonical internal request fields', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/pages/api/telegram/rider-bind.ts'), 'utf8');
+
+  assert.match(source, /function readApiBaseUrl\(\): string \{/);
+  assert.match(source, /const token = String\(\(body as Record<string, unknown>\)\?\.bindToken \|\| ''\)\.trim\(\);/);
+  assert.match(source, /const chatId = String\(\(body as Record<string, unknown>\)\?\.chatId \|\| ''\)\.trim\(\);/);
+  assert.doesNotMatch(source, /\.bind_token/);
+  assert.doesNotMatch(source, /\.chat_id/);
 });

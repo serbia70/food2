@@ -1,6 +1,6 @@
 import type { AstroCookies } from 'astro';
-import { createApiError } from '../domain/api/api-envelope.ts';
-import { buildProxyFailureResponse, buildProxyJsonResponse } from '../infra/http/proxy-response.ts';
+import { buildProxyFailureResponse } from '../infra/http/proxy-response.ts';
+import { proxyFetch } from './api-proxy.ts';
 import { resolveMasterAuth } from './master-auth.ts';
 
 export async function proxyMasterRequest(options: {
@@ -29,14 +29,11 @@ export async function proxyMasterRequest(options: {
       Authorization: auth,
     };
 
-    const init: RequestInit = {
+    return proxyFetch(upstreamUrl, {
       method,
       headers,
       ...(options.body !== undefined ? { body: options.body } : {}),
-    };
-
-    const res = await fetch(upstreamUrl, init);
-    return buildProxyJsonResponse(res);
+    });
   } catch {
     return buildProxyFailureResponse({
       status: 500,

@@ -11,12 +11,12 @@ import {
   addToCart,
   cartItems,
   clearCart,
-} from '../store/cartStore.ts';
+} from '../../store/cartStore.ts';
 
 const shopPagePath = new URL('../../pages/[slug]/index.astro', import.meta.url);
-const menuListPath = new URL('../components/MenuList.tsx', import.meta.url);
-const cartModalPath = new URL('../components/CartModal.tsx', import.meta.url);
-const reservationModalPath = new URL('../components/ReservationModal.tsx', import.meta.url);
+const menuListPath = new URL('../../components/MenuList.tsx', import.meta.url);
+const cartModalPath = new URL('../../components/CartModal.tsx', import.meta.url);
+const reservationModalPath = new URL('../../components/ReservationModal.tsx', import.meta.url);
 
 function withCart<T>(fn: () => T): T {
   clearCart();
@@ -114,9 +114,9 @@ test('getActiveSpecialPromotionProducts returns only real promoted menu products
   assert.deepEqual(
     getActiveSpecialPromotionProducts(
       [
-        { id: 1, name: '商品1', sub_name: '子商品1', price: 100 },
-        { id: 2, name: '商品2', sub_name: '子商品2', price: 200 },
-        { id: 3, name: '商品3', sub_name: '子商品3', price: 300 },
+        { id: 1, name: '商品1', subName: '子商品1', price: 100 },
+        { id: 2, name: '商品2', subName: '子商品2', price: 200 },
+        { id: 3, name: '商品3', subName: '子商品3', price: 300 },
       ],
       promotions,
     ),
@@ -167,15 +167,20 @@ test('getSpendDiscountBannerCopy returns null without promo and formatted copy w
   );
 });
 
-test('shop page passes normalized promotion helpers to shell and cart-related consumers', async () => {
+test('shop page passes normalized promotion helpers and unified display settings to cart-related consumers', async () => {
   const file = await readFile(shopPagePath, 'utf8');
 
+  assert.match(file, /import \{ resolveShopDisplaySettings \} from ['"]\.\.\/\.\.\/lib\/shop-display-settings['"];?/);
   assert.match(file, /const specialPromotionMap = normalizeSpecialPromotions\(promotionsData\);/);
   assert.match(file, /const spendDiscountPromotion = normalizeSpendDiscountPromotions\(promotionsData\);/);
+  assert.match(file, /const resolvedDisplaySettings = resolveShopDisplaySettings\(shop, settings, publicMasterSettings\);/);
   assert.match(file, /<ShopMenuShell[\s\S]*specialPromotionMap=\{specialPromotionMap\}[\s\S]*spendDiscountPromotion=\{spendDiscountPromotion\}/);
-  assert.match(file, /<CartModal[\s\S]*specialPromotionMap=\{specialPromotionMap\}/);
+  assert.match(file, /<CartModal[\s\S]*specialPromotionMap=\{specialPromotionMap\}[\s\S]*resolvedDisplaySettings=\{resolvedDisplaySettings\}/);
   assert.match(file, /<UserModal[\s\S]*specialPromotionMap=\{specialPromotionMap\}/);
   assert.match(file, /<ReservationModal[\s\S]*specialPromotionMap=\{specialPromotionMap\}/);
+  assert.match(file, /🕒 \{resolvedDisplaySettings\.hours\.open\}-\{resolvedDisplaySettings\.hours\.close\}/);
+  assert.doesNotMatch(file, /settings\?\.hours\?\.open \|\| '08:00'/);
+  assert.doesNotMatch(file, /settings\?\.hours\?\.close \|\| '22:00'/);
 });
 
 test('MenuList source renders spend discount block only when active promo exists', async () => {
@@ -220,7 +225,7 @@ test('CartModal source passes specialPromotionMap through totals, submit, and li
   assert.match(file, /const \$total = useMemo\(\(\) => getCartTotals\(\$items, specialPromotionMap\), \[\$items, specialPromotionMap\]\);/);
   assert.match(file, /promotionMap: specialPromotionMap,/);
   assert.match(file, /getSpecialPriceDisplay\(item, specialPromotionMap\)/);
-  assert.match(file, /item\.subName \|\| item\.sub_name/);
+  assert.match(file, /\$\{i\.name\}\$\{i\.subName \? " " \+ i\.subName : ""\} x\$\{i\.quantity\}/);
 });
 
 test('ReservationModal source uses specialPromotionMap for menu pre-order prices', async () => {
@@ -228,8 +233,8 @@ test('ReservationModal source uses specialPromotionMap for menu pre-order prices
 
   assert.match(file, /specialPromotionMap\?: Record<string, SpecialPromotion>;/);
   assert.match(file, /specialPromotionMap = \{\},/);
-  assert.match(file, /item\.subName \|\| item\.sub_name \|\| ""/);
-  assert.match(file, /resolveCartItemUnitPrice\([\s\S]*item\.product_id[\s\S]*specialPromotionMap[\s\S]*\)/);
+  assert.match(file, /subName: item\.subName \|\| "",/);
+  assert.match(file, /resolveCartItemUnitPrice\([\s\S]*item\.productId[\s\S]*specialPromotionMap[\s\S]*\)/);
   assert.match(file, /resolveCartItemUnitPrice\([\s\S]*p\.id[\s\S]*specialPromotionMap[\s\S]*\)/);
 });
 
@@ -243,7 +248,7 @@ test('shop page source mounts ShopMenuShell for shared menu category state', asy
 });
 
 test('ShopMenuShell source owns shared active category state for sidebar and menu list', async () => {
-  const shellPath = new URL('../components/shop/ShopMenuShell.tsx', import.meta.url);
+  const shellPath = new URL('../../components/shop/ShopMenuShell.tsx', import.meta.url);
   const file = await readFile(shellPath, 'utf8');
 
   assert.match(file, /const \[activeCategoryId, setActiveCategoryId\] = useState<[^>]+>\([^)]*\);/);
@@ -253,7 +258,7 @@ test('ShopMenuShell source owns shared active category state for sidebar and men
 });
 
 test('Sidebar source uses controlled active category and offset-based scrolling', async () => {
-  const sidebarPath = new URL('../components/Sidebar.tsx', import.meta.url);
+  const sidebarPath = new URL('../../components/Sidebar.tsx', import.meta.url);
   const file = await readFile(sidebarPath, 'utf8');
 
   assert.match(file, /activeId\?: string;/);
@@ -277,7 +282,7 @@ test('MenuList source syncs active category from scroll without extra horizontal
 });
 
 test('ShopMenuShell source passes one scroll offset to Sidebar and change callback to MenuList', async () => {
-  const shellPath = new URL('../components/shop/ShopMenuShell.tsx', import.meta.url);
+  const shellPath = new URL('../../components/shop/ShopMenuShell.tsx', import.meta.url);
   const file = await readFile(shellPath, 'utf8');
 
   assert.match(file, /const categoryScrollOffset = \d+;/);

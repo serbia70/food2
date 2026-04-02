@@ -215,7 +215,7 @@ export function getActiveDeliveryOrders(shopId: number) {
       SELECT * FROM orders
       WHERE shop_id = ?
       AND order_type = 'delivery'
-      AND status IN ('pending', 'confirmed', 'delivering')
+      AND status IN ('pending', 'confirmed', 'awaiting_courier', 'delivering')
       `,
     )
     .all(shopId) as Order[];

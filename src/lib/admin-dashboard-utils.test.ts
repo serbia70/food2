@@ -91,6 +91,18 @@ test('resolveTableConfig: uses shop.table_config JSON zones when present (single
   assert.deepEqual(out, [{ name: '大厅', prefix: '', count: 3 }]);
 });
 
+test('resolveTableConfig: also accepts camelCase shop and settings table config', () => {
+  const shop = {
+    tableConfig: JSON.stringify({ zones: [{ name: '大厅', prefix: '大厅', count: 4 }] }),
+  };
+  const settings = {
+    tableConfig: { zones: [{ name: '包间', prefix: 'B', count: 2 }] },
+  };
+
+  assert.deepEqual(resolveTableConfig(shop, {}), [{ name: '大厅', prefix: '', count: 4 }]);
+  assert.deepEqual(resolveTableConfig({}, settings), [{ name: '包间', prefix: 'B', count: 2 }]);
+});
+
 test('resolveTableConfig: clamps count and trims strings', () => {
   const shop = {
     table_config: JSON.stringify([{ name: ' A ', prefix: ' B ', count: 999 }]),
@@ -135,21 +147,21 @@ test('buildTableCards: filters active dine-in and marks newest as isNew', () => 
     const orders = [
       {
         id: 1,
-        order_type: 'dine_in',
+        orderType: 'dine_in',
         status: 'pending',
-        is_deleted: 0,
-        table_info: '1号桌',
-        created_at: '2026-03-18 10:11:12',
-        total_amount: 10,
+        isDeleted: 0,
+        tableInfo: '1号桌',
+        createdAt: '2026-03-18 10:11:12',
+        totalAmount: 10,
       },
       {
         id: 2,
-        order_type: 'delivery',
+        orderType: 'delivery',
         status: 'pending',
-        is_deleted: 0,
-        table_info: '1号桌',
-        created_at: '2026-03-18 10:11:30',
-        total_amount: 20,
+        isDeleted: 0,
+        tableInfo: '1号桌',
+        createdAt: '2026-03-18 10:11:30',
+        totalAmount: 20,
       },
     ];
 
@@ -160,6 +172,25 @@ test('buildTableCards: filters active dine-in and marks newest as isNew', () => 
   } finally {
     Date.now = originalNow;
   }
+});
+
+test('admin dashboard utils source uses canonical order fields', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/lib/admin-dashboard-utils.ts'), 'utf8');
+
+  assert.match(source, /order\?\.orderType/);
+  assert.match(source, /order\?\.isDeleted/);
+  assert.match(source, /o\.tableInfo/);
+  assert.match(source, /o\.totalAmount/);
+  assert.match(source, /a\.createdAt/);
+  assert.match(source, /latestInTable\?\.orderNo/);
+  assert.doesNotMatch(source, /order_type/);
+  assert.doesNotMatch(source, /is_deleted/);
+  assert.doesNotMatch(source, /table_info/);
+  assert.doesNotMatch(source, /total_amount/);
+  assert.doesNotMatch(source, /created_at/);
+  assert.doesNotMatch(source, /order_no/);
 });
 
 test('orderMatchesAnyConfiguredTable: matches hall-like orders against simple hall table config', () => {

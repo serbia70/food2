@@ -26,3 +26,20 @@ test('admin service worker 使用版本化脚本与缓存名，避免长期命�
   assert.match(adminPageCode, /serviceWorker=\{`\/admin-sw\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`\}/);
   assert.match(adminLoginCode, /register\('\/admin-sw\.js\?v=' \+ encodeURIComponent\(appVersion\)/);
 });
+
+test('admin service worker 不缓存 404 导航页，避免刷新时反复命中坏页面', async () => {
+  const swCode = await readText(swPath);
+
+  assert.match(swCode, /if \(request\.mode === 'navigate' && inScope\)/);
+  assert.match(swCode, /if \(response\.ok\) \{/);
+  assert.match(swCode, /cache\.put\(request, cloned\)/);
+  assert.doesNotMatch(swCode, /fetch\(request\)\s*\.then\(\(response\) => \{\s*const cloned = response\.clone\(\);\s*caches\.open\(CACHE_NAME\)\.then\(\(cache\) => cache\.put\(request, cloned\)\);\s*return response;\s*\}\)/s);
+});
+
+test('admin service worker 激活时清理 scope 下旧导航缓存，避免继续回放历史 404 页面', async () => {
+  const swCode = await readText(swPath);
+
+  assert.match(swCode, /const staleNavigationKeys = \[scopePath, `\$\{scopePath\}\/`\];/);
+  assert.match(swCode, /cache\.delete\(key\)/);
+  assert.match(swCode, /Promise\.all\(staleNavigationKeys\.map\(\(key\) => cache\.delete\(key\)\)\)/);
+});

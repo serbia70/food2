@@ -166,6 +166,13 @@ function buildPageState(input: MasterDashboardBuildInput): MasterDashboardPageSt
     };
   }
 
+  const canKeepTabReadyOnTransientInitError = input.loadError
+    && (input.activeTab === 'dispatch' || input.activeTab === 'riders')
+    && input.shops.length > 0;
+  if (canKeepTabReadyOnTransientInitError) {
+    return { kind: 'ready' };
+  }
+
   if (input.loadError) {
     return {
       kind: 'load_error',

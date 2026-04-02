@@ -19,3 +19,10 @@ test('buildTableConfigPayloadFromRows: builds normalized zones', () => {
     },
   });
 });
+
+test('buildTableConfigPayloadFromRows: uses backend table_config contract', () => {
+  const payload = buildTableConfigPayloadFromRows([{ name: '大厅', prefix: '', count: 2 }]);
+
+  assert.ok('table_config' in payload);
+  assert.ok(!('tableConfig' in payload));
+});

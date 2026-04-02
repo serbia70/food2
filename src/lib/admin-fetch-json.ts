@@ -19,27 +19,34 @@ function unwrapCanonicalData<T>(value: unknown): T | null {
 }
 
 export async function fetchJSON<T = unknown>(url: string, init: RequestInit = {}): Promise<FetchJSONResult<T>> {
-  try {
-    const mergedInit: RequestInit = {
-      ...init,
-      cache: 'no-store',
-      headers: {
-        ...(init.headers || {}),
-        'Cache-Control': 'no-cache',
-        Pragma: 'no-cache',
-      },
-    };
-    const res = await fetch(url, mergedInit);
-    const text = await res.text();
-    let data: T | null = null;
+  const mergedInit: RequestInit = {
+    ...init,
+    cache: 'no-store',
+    headers: {
+      ...(init.headers || {}),
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
+    },
+  };
+  const method = String(mergedInit.method || 'GET').toUpperCase();
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const parsed = text ? JSON.parse(text) : null;
-      data = unwrapCanonicalData<T>(parsed);
+      const res = await fetch(url, mergedInit);
+      const text = await res.text();
+      let data: T | null = null;
+      try {
+        const parsed = text ? JSON.parse(text) : null;
+        data = unwrapCanonicalData<T>(parsed);
+      } catch {
+        data = null;
+      }
+      return { ok: res.ok, status: res.status, data };
     } catch {
-      data = null;
+      if (method === 'GET' && attempt === 0) continue;
+      return { ok: false, status: 503, data: null };
     }
-    return { ok: res.ok, status: res.status, data };
-  } catch {
-    return { ok: false, status: 503, data: null };
   }
+
+  return { ok: false, status: 503, data: null };
 }

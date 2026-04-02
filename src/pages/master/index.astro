@@ -19,10 +19,11 @@ import MasterShopManagementTable from '../../components/master/MasterShopManagem
 import MasterShopTopupPanel from '../../components/master/MasterShopTopupPanel.astro';
 import MasterShopDineInPanel from '../../components/master/MasterShopDineInPanel.astro';
 import MasterWechatSettingsCard from '../../components/master/MasterWechatSettingsCard.astro';
+import MasterShopDefaultsSettingsCard from '../../components/master/MasterShopDefaultsSettingsCard.astro';
 import { normalizeMasterTab } from '../../lib/master-active-tab';
 import { resolveMasterAuth } from '../../lib/master-auth';
 import { buildMasterDashboardView } from '../../lib/master-dashboard-view';
-import { loadMasterDispatchData } from '../../lib/master-dispatch-loader';
+import { buildMasterDispatchPageView, loadMasterDispatchData, type MasterDispatchPayload } from '../../lib/master-dispatch-loader';
 import { loadMasterRiderStatusData } from '../../lib/master-rider-status-loader';
 import { buildMasterRiderStatusView } from '../../lib/master-rider-status-view';
 
@@ -52,45 +53,11 @@ type ShopSummary = {
   total_order_count?: number;
 };
 
-type MasterDispatchPayload = {
-  awaiting: Array<{
-    id?: number;
-    order_no?: string;
-    shop_id?: number;
-    shop_name?: string;
-    status?: string;
-    dispatch_status?: string;
-    dispatch_round?: number;
-    current_pool_index?: number;
-    last_dispatched_rider_id?: number;
-    next_escalate_at?: string;
-  }>;
-  delivering: Array<{
-    id?: number;
-    order_no?: string;
-    shop_id?: number;
-    shop_name?: string;
-    status?: string;
-    dispatch_status?: string;
-    dispatch_round?: number;
-    current_pool_index?: number;
-    last_dispatched_rider_id?: number;
-    next_escalate_at?: string;
-  }>;
-  pools: Array<{
-    shop_id?: number;
-    shop_name?: string;
-    pool_count?: number;
-    available_count?: number;
-    busy_count?: number;
-    offline_count?: number;
-  }>;
-};
-
 let shops: ShopSummary[] = [];
 let loadError = '';
 let masterSettings: Record<string, unknown> = {};
 let masterDispatch: MasterDispatchPayload = { awaiting: [], delivering: [], pools: [] };
+let masterDispatchView: MasterDispatchPageView = { awaiting: [], delivering: [], pools: [] };
 let dispatchLoadError = '';
 let masterRiders = buildMasterRiderStatusView({ summary: {}, groups: { available: [], busy: [], offline: [] } });
 let ridersLoadError = '';
@@ -98,38 +65,90 @@ let ridersLoadError = '';
 const MASTER_INIT_PROXY_PATH = '/api/master/init';
 const MASTER_DISPATCH_PROXY_PATH = '/api/master/dispatch';
 const MASTER_INIT_COOKIE_HEADER = 'cookie';
+const activeTab = normalizeMasterTab(Astro.url.searchParams.get('tab'));
 
-try {
-  const auth = resolveMasterAuth(Astro.request, Astro.cookies);
-  const cookie = Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER) || '';
-  const initUrl = new URL(MASTER_INIT_PROXY_PATH, Astro.url);
-  const res = await fetch(initUrl, {
-    method: 'GET',
-    headers: {
-      ...(auth ? { Authorization: auth } : {}),
-      ...(cookie ? { cookie } : {}),
-    },
-  });
-  if (res.ok) {
-    const data = await res.json().catch(() => ({}));
-    const isOkEnvelope = data && typeof data === 'object' && 'ok' in data && data.ok === true;
-    const initData = isOkEnvelope && 'data' in data && data.data && typeof data.data === 'object' ? data.data : null;
-    const dataShops = initData && initData.shops;
-    shops = Array.isArray(dataShops) ? dataShops : [];
-    const dataSettings = initData && initData.settings;
-    masterSettings = dataSettings && typeof dataSettings === 'object' ? dataSettings : {};
-  } else {
-    loadError = `加载失败 (${res.status})`;
+if (activeTab !== 'dispatch') {
+  try {
+    const auth = resolveMasterAuth(Astro.request, Astro.cookies);
+    const cookie = Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER) || '';
+    const initUrl = new URL(MASTER_INIT_PROXY_PATH, Astro.url);
+    let res: Response | null = null;
+    let lastInitError: unknown = null;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        res = await fetch(initUrl, {
+          method: 'GET',
+          headers: {
+            ...(auth ? { Authorization: auth } : {}),
+            ...(cookie ? { cookie } : {}),
+          },
+        });
+        if (res.ok || res.status === 401 || res.status === 403) break;
+      } catch (error) {
+        lastInitError = error;
+      }
+    }
+
+    if (res?.ok) {
+      const data = await res.json().catch(() => ({}));
+      const isOkEnvelope = data && typeof data === 'object' && 'ok' in data && data.ok === true;
+      const isLegacyEnvelope = data && typeof data === 'object' && 'success' in data && data.success === true;
+      const initData = isOkEnvelope && 'data' in data && data.data && typeof data.data === 'object'
+        ? data.data
+        : isLegacyEnvelope && data && typeof data === 'object'
+          ? data
+          : null;
+      const dataShops = initData && (initData.shops || initData.rows || initData.items);
+      shops = Array.isArray(dataShops) ? dataShops : [];
+      const dataSettings = initData && initData.settings;
+      masterSettings = dataSettings && typeof dataSettings === 'object' ? dataSettings : {};
+    } else if (res) {
+      loadError = `加载失败 (${res.status})`;
+    } else if (lastInitError) {
+      throw lastInitError;
+    }
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : '加载失败';
   }
-} catch (error) {
-  loadError = error instanceof Error ? error.message : '加载失败';
 }
 
 const masterCookie = Astro.cookies.get('master_token');
 const hasMasterCookie = Boolean(masterCookie && masterCookie.value);
 const isUnauthorized = loadError === '加载失败 (401)';
-const activeTab = normalizeMasterTab(Astro.url.searchParams.get('tab'));
+const shouldKeepMasterTabVisible = activeTab === 'dispatch' || activeTab === 'riders';
 const canLoadProtectedMasterActions = hasMasterCookie && !isUnauthorized;
+
+if (activeTab === 'riders' && shops.length === 0 && !isUnauthorized) {
+  try {
+    const auth = resolveMasterAuth(Astro.request, Astro.cookies);
+    const cookie = Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER) || '';
+    const retryInitUrl = new URL(MASTER_INIT_PROXY_PATH, Astro.url);
+    const retryInitRes = await fetch(retryInitUrl, {
+      method: 'GET',
+      headers: {
+        ...(auth ? { Authorization: auth } : {}),
+        ...(cookie ? { cookie } : {}),
+      },
+    });
+    if (retryInitRes.ok) {
+      const retryInitData = await retryInitRes.json().catch(() => ({}));
+      const isRetryOkEnvelope = retryInitData && typeof retryInitData === 'object' && 'ok' in retryInitData && retryInitData.ok === true;
+      const isRetryLegacyEnvelope = retryInitData && typeof retryInitData === 'object' && 'success' in retryInitData && retryInitData.success === true;
+      const retryData = isRetryOkEnvelope && 'data' in retryInitData && retryInitData.data && typeof retryInitData.data === 'object'
+        ? retryInitData.data
+        : isRetryLegacyEnvelope && retryInitData && typeof retryInitData === 'object'
+          ? retryInitData
+          : null;
+      const retryDataShops = retryData && (retryData.shops || retryData.rows || retryData.items);
+      shops = Array.isArray(retryDataShops) ? retryDataShops : shops;
+      const retryDataSettings = retryData && retryData.settings;
+      masterSettings = retryDataSettings && typeof retryDataSettings === 'object' ? retryDataSettings : masterSettings;
+    }
+  } catch {
+    // keep original loadError and continue with tab-level fallbacks
+  }
+}
 
 if (!isUnauthorized && activeTab === 'dispatch') {
   const auth = resolveMasterAuth(Astro.request, Astro.cookies);
@@ -141,13 +160,17 @@ if (!isUnauthorized && activeTab === 'dispatch') {
     shopRows: shops,
   });
   masterDispatch = dispatchData.payload;
+  masterDispatchView = buildMasterDispatchPageView(dispatchData.payload);
   dispatchLoadError = dispatchData.error;
 }
 
 if (!isUnauthorized && activeTab === 'riders') {
   const auth = resolveMasterAuth(Astro.request, Astro.cookies);
+  const cookie = Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER) || '';
   const riderStatusData = await loadMasterRiderStatusData({
+    requestUrl: Astro.url,
     authHeader: auth,
+    cookieHeader: cookie,
     shopRows: shops,
   });
   masterRiders = buildMasterRiderStatusView(riderStatusData.payload);
@@ -166,12 +189,12 @@ const shopEditPanelData = JSON.stringify(dashboardView.panels.shopEdit);
 const shopTopupPanelData = JSON.stringify(dashboardView.panels.shopTopup);
 const shopDineInPanelData = JSON.stringify(dashboardView.panels.shopDineIn);
 
-const shouldShowMasterContent = dashboardView.pageState.kind === 'ready';
+const shouldShowMasterContent = dashboardView.pageState.kind === 'ready' || shouldKeepMasterTabVisible;
 const hasDashboardNotices = dashboardView.notices.length > 0;
 const activeNotice = hasDashboardNotices ? dashboardView.notices[0] : null;
 const dashboardActions = dashboardView.actions;
 const heroActions =
-  dashboardView.pageState.kind === 'ready'
+  shouldShowMasterContent
     ? [
         { key: 'login', kind: 'link' as const, label: hasMasterCookie ? '重新登录' : '登录', href: '/master/login', className: 'primary-btn' },
         ...(hasMasterCookie
@@ -383,13 +406,14 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
         line-height: 1.6;
       }
     </style>
-    <script define:vars={{ shopViewsData, shopEditPanelData, shopTopupPanelData, shopDineInPanelData, canLoadProtectedMasterActions }} is:inline>
+    <script define:vars={{ shopViewsData, shopEditPanelData, shopTopupPanelData, shopDineInPanelData, canLoadProtectedMasterActions, activeTab }} is:inline>
       window.__masterRuntime = {
         shopViewsData,
         shopEditPanelData,
         shopTopupPanelData,
         shopDineInPanelData,
         canLoadProtectedMasterActions,
+        activeTab,
       };
     </script>
     <script>
@@ -491,6 +515,7 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
         submitMasterWechatSettings: settingsFormBindings.submitMasterWechatSettings,
         submitMasterPaymentSettings: settingsFormBindings.submitMasterPaymentSettings,
         submitMasterStorageSettings: settingsFormBindings.submitMasterStorageSettings,
+        submitMasterShopDefaultsSettings: settingsFormBindings.submitMasterShopDefaultsSettings,
         submitMasterBackupSettings: backupActionBindings.submitMasterBackupSettings,
         createMasterCodeBackup: backupActionBindings.createMasterCodeBackup,
         deleteMasterCodeBackup: backupActionBindings.deleteMasterCodeBackup,
@@ -517,7 +542,7 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
 
       document.addEventListener('DOMContentLoaded', () => {
         shopTableBindings.handleDomContentLoaded();
-        backupActionBindings.handleDomContentLoaded();
+        if (runtimeState.activeTab === 'backup') backupActionBindings.handleDomContentLoaded();
         initMasterRiderStatusActions(document);
       });
     </script>
@@ -640,6 +665,7 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
 
       <div class="settings-grid" data-master-panel="settings" hidden={activeTab !== 'settings' || !shouldShowMasterContent}>
         <MasterPricingSettingsCard settings={dashboardView.settings} />
+        <MasterShopDefaultsSettingsCard settings={dashboardView.settings.shopDefaults} />
         <MasterCategoriesSettingsCard settings={dashboardView.settings.categories} />
         <MasterServerSettingsCard settings={dashboardView.settings.server} />
         <MasterFooterSettingsCard settings={dashboardView.settings.footer} />
@@ -659,32 +685,40 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
               <h3>待接单（{masterDispatch.awaiting.length}）</h3>
               {masterDispatch.awaiting.length > 0 ? (
                 <div class="dispatch-list">
-                  {masterDispatch.awaiting.map((order) => (
+                  {masterDispatchView.awaiting.map((order) => (
                     <div class="dispatch-item">
-                      <strong>{order.shop_name || `店铺 #${order.shop_id || 0}`}</strong>
-                      <div class="dispatch-meta">订单 #{order.order_no || order.id || '-'}</div>
-                      <div class="dispatch-meta">调度状态：{order.dispatch_status || 'idle'}</div>
-                      <div class="dispatch-meta">轮次：{order.dispatch_round || 0}</div>
+                      <strong>{order.shopName || `店铺 #${order.shopId || 0}`}</strong>
+                      <div class="dispatch-meta">订单 #{order.orderNo}</div>
+                      <div class="dispatch-meta">调度状态：{order.dispatchStatus}</div>
+                      <div class="dispatch-meta">轮次：{order.dispatchRound}</div>
                       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
                         <button
                           class="ghost-btn"
                           type="button"
                           data-master-dispatch-action="impersonate"
-                          data-master-dispatch-shop-id={String(order.shop_id || 0)}
+                          data-master-dispatch-shop-id={String(order.shopId || 0)}
                         >处理调度</button>
                         <button
                           class="ghost-btn"
                           type="button"
                           data-master-dispatch-action="assign"
                           data-master-dispatch-order-id={String(order.id || '')}
-                          data-master-dispatch-shop-id={String(order.shop_id || 0)}
+                          data-master-dispatch-shop-id={String(order.shopId || 0)}
                         >指派骑手</button>
+                        <button
+                          class="ghost-btn"
+                          type="button"
+                          data-master-dispatch-action="auto-assign"
+                          data-master-dispatch-order-id={String(order.id || '')}
+                          data-master-dispatch-shop-id={String(order.shopId || 0)}
+                          data-master-dispatch-last-rider-id={order.lastDispatchedRiderId}
+                        >自动派单</button>
                         <button
                           class="ghost-btn"
                           type="button"
                           data-master-dispatch-action="remind"
                           data-master-dispatch-order-id={String(order.id || '')}
-                          data-master-dispatch-shop-id={String(order.shop_id || 0)}
+                          data-master-dispatch-shop-id={String(order.shopId || 0)}
                         >再次催单</button>
                       </div>
                     </div>
@@ -699,12 +733,12 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
               <h3>配送中（{masterDispatch.delivering.length}）</h3>
               {masterDispatch.delivering.length > 0 ? (
                 <div class="dispatch-list">
-                  {masterDispatch.delivering.map((order) => (
+                  {masterDispatchView.delivering.map((order) => (
                     <div class="dispatch-item">
-                      <strong>{order.shop_name || `店铺 #${order.shop_id || 0}`}</strong>
-                      <div class="dispatch-meta">订单 #{order.order_no || order.id || '-'}</div>
-                      <div class="dispatch-meta">最近骑手：{order.last_dispatched_rider_id || '-'}</div>
-                      <div class="dispatch-meta">状态：{order.status || 'delivering'}</div>
+                      <strong>{order.shopName || `店铺 #${order.shopId || 0}`}</strong>
+                      <div class="dispatch-meta">订单 #{order.orderNo}</div>
+                      <div class="dispatch-meta">最近骑手：{order.lastDispatchedRiderId}</div>
+                      <div class="dispatch-meta">状态：{order.status}</div>
                     </div>
                   ))}
                 </div>
@@ -717,12 +751,12 @@ const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
               <h3>骑手池（{masterDispatch.pools.length}）</h3>
               {masterDispatch.pools.length > 0 ? (
                 <div class="dispatch-list">
-                  {masterDispatch.pools.map((pool) => (
+                  {masterDispatchView.pools.map((pool) => (
                     <div class="dispatch-item">
-                      <strong>{pool.shop_name || `店铺 #${pool.shop_id || 0}`}</strong>
-                      <div class="dispatch-meta">总人数：{pool.pool_count || 0}</div>
-                      <div class="dispatch-meta">可接单：{pool.available_count || 0}</div>
-                      <div class="dispatch-meta">忙碌：{pool.busy_count || 0}，离线：{pool.offline_count || 0}</div>
+                      <strong>{pool.shopName || `店铺 #${pool.shopId || 0}`}</strong>
+                      <div class="dispatch-meta">总人数：{pool.poolCount}</div>
+                      <div class="dispatch-meta">可接单：{pool.availableCount}</div>
+                      <div class="dispatch-meta">忙碌：{pool.busyCount}，离线：{pool.offlineCount}</div>
                     </div>
                   ))}
                 </div>

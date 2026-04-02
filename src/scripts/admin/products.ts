@@ -25,10 +25,10 @@ export async function saveEditProd() {
   const id = (document.getElementById("edit-id") as HTMLInputElement).value;
   const payload = {
     name: (document.getElementById("edit-name") as HTMLInputElement).value,
-    sub_name: (document.getElementById("edit-sub") as HTMLInputElement).value,
+    subName: (document.getElementById("edit-sub") as HTMLInputElement).value,
     price: parseInt((document.getElementById("edit-price") as HTMLInputElement).value, 10),
     img: (document.getElementById("edit-img") as HTMLInputElement).value,
-    category_id: parseInt((document.getElementById("edit-cat") as HTMLSelectElement).value, 10)
+    categoryId: parseInt((document.getElementById("edit-cat") as HTMLSelectElement).value, 10)
   };
 
   try {
@@ -87,10 +87,10 @@ export async function addProd(shopId: number | string, categoryId: number | stri
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        shop_id: Number.parseInt(String(shopId || '0'), 10) || 0,
-        category_id: cid,
+        shopId: Number.parseInt(String(shopId || '0'), 10) || 0,
+        categoryId: cid,
         name,
-        sub_name: sub,
+        subName: sub,
         price,
         img,
       }),
@@ -113,7 +113,7 @@ export async function moveProduct(productId: number | string, direction: string,
     const res = await fetch(`/api/admin/products/${encodeURIComponent(String(pid))}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ direction, category_id: cid }),
+      body: JSON.stringify({ direction, categoryId: cid }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.success === false) throw new Error(data.error || '移动失败');
@@ -210,13 +210,13 @@ export async function openCreateCategoryModal() {
   const rawName = prompt('新分类名称 (塞语)') || '';
   const name = String(rawName).trim();
   if (!name) return;
-  const sub_name = prompt('新分类名称 (中文)') || '';
-  const finalSub = String(sub_name).trim() || name;
+  const subName = prompt('新分类名称 (中文)') || '';
+  const finalSub = String(subName).trim() || name;
   try {
     const res = await fetch('/api/admin/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, sub_name: finalSub }),
+      body: JSON.stringify({ name, subName: finalSub }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.success === false) throw new Error(data.error || '创建失败');

@@ -40,32 +40,32 @@ export function buildAdminSettingsPayload(formData: FormData, options: BuildSett
     city: String(options.city || '').trim(),
     zone: String(options.zone || '').trim(),
     address: String(options.address || '').trim(),
-    mqtt_secret: String(options.mqttSecret || '').trim(),
-    menu_text_mode: options.menuTextMode === true,
+    mqttSecret: String(options.mqttSecret || '').trim(),
+    menuTextMode: options.menuTextMode === true,
     currency: {
-      wechat_qr: String(options.wechatQr || '').trim(),
+      wechatQr: String(options.wechatQr || '').trim(),
     },
     contact: {
       phone: String(options.contactPhone || '').trim(),
-      map_url: String(options.mapUrl || '').trim(),
+      mapUrl: String(options.mapUrl || '').trim(),
     },
     telegram: {
       token: String(options.telegramToken || '').trim(),
-      chat_id: String(options.telegramChatId || '').trim(),
+      chatId: String(options.telegramChatId || '').trim(),
     },
     hours: { open: formData.get('open'), close: formData.get('close') },
     holidays: {
       enabled: formData.get('holiday_enabled') === 'on',
-      closed_dates: formData.get('closed_dates'),
+      closedDates: formData.get('closed_dates'),
       message: formData.get('holiday_message'),
     },
-    delivery_type: deliveryType,
+    deliveryType: deliveryType,
     delivery: {
       zones: formData.get('zones'),
       fee: toNumber(formData.get('fee')),
-      free_threshold: toNumber(formData.get('free_threshold')),
+      freeThreshold: toNumber(formData.get('freeThreshold')),
     },
-    print_on_checkout: formData.get('print_on_checkout') === 'on',
+    printOnCheckout: formData.get('print_on_checkout') === 'on',
     drivers,
   };
 }

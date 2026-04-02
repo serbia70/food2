@@ -4,6 +4,8 @@ import { proxyAdminRequest } from '../../../lib/admin-api-route.ts';
 import { buildContactableRiderRows } from '../../../lib/rider-dispatch.ts';
 import type { Rider } from '../../../types/index.ts';
 
+const apiBaseUrl = process.env.PUBLIC_API_URL || API_BASE_URL;
+
 export const prerender = false;
 
 function normalizeRiderRows(payload: unknown): Rider[] {
@@ -38,7 +40,7 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
     const upstream = await proxyAdminRequest({
       request,
       cookies,
-      url: `${API_BASE_URL}/api/admin/riders`,
+      url: `${apiBaseUrl}/api/admin/riders`,
       method: 'GET',
     });
 
@@ -91,11 +93,11 @@ export const POST: APIRoute = async ({ request }) => {
     parsed = null;
   }
 
-  const upstreamBody = parsed && 'telegram_chat_id' in parsed
+  const upstreamBody = parsed && 'telegramChatId' in parsed
     ? JSON.stringify(parsed)
     : body;
 
-  const res = await fetch(`${API_BASE_URL}/api/rider/status`, {
+  const res = await fetch(`${apiBaseUrl}/api/rider/status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: upstreamBody,

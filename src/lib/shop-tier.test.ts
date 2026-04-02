@@ -127,3 +127,28 @@ test('buildAdminTabVisibility shows stats marketing and customers for business',
     showCustomersTab: true,
   });
 });
+
+test('resolveShopTier accepts camelCase shop tier fields from admin page', () => {
+  const view = resolveShopTier({
+    defaultShopTier: 'subscription',
+    shopTierMode: 'override',
+    shopTierOverride: 'business',
+  } as never);
+
+  assert.equal(view.effectiveTier, 'business');
+  assert.equal(view.source, 'override');
+  assert.equal(view.displayText, '商务版');
+  assert.equal(view.sourceLabel, '店铺覆盖');
+});
+
+test('resolveShopTier keeps global business tier when admin page passes merged master default', () => {
+  const view = resolveShopTier({
+    defaultShopTier: 'business',
+    shopTierMode: '',
+    shopTierOverride: '',
+  } as never);
+
+  assert.equal(view.effectiveTier, 'business');
+  assert.equal(view.source, 'global');
+  assert.equal(view.displayText, '商务版');
+});

@@ -1,6 +1,6 @@
 type ChatMessageLike = {
-  sender_phone?: unknown;
-  created_at?: unknown;
+  senderPhone?: unknown;
+  createdAt?: unknown;
 };
 
 type UnreadMap = Record<string, number>;
@@ -26,9 +26,9 @@ export function buildRecentChatPhones(messages: ChatMessageLike[], unreadByPhone
   const latestByPhone = new Map<string, number>();
 
   for (const message of messages || []) {
-    const phone = toPhone(message?.sender_phone);
+    const phone = toPhone(message?.senderPhone);
     if (!phone) continue;
-    const timestamp = toTimestamp(message?.created_at);
+    const timestamp = toTimestamp(message?.createdAt);
     const previous = latestByPhone.get(phone) || 0;
     if (timestamp >= previous) latestByPhone.set(phone, timestamp);
   }

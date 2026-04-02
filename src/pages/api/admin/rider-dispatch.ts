@@ -7,27 +7,28 @@ export const prerender = false;
 
 interface DispatchOrderSnapshot {
   id: number | string;
-  shop_slug?: string | null;
-  restaurant_slug?: string | null;
-  restaurant_id?: number | string | null;
-  shop_id?: number | string | null;
-  shop_name?: string | null;
-  restaurant_name?: string | null;
-  table_info?: string | null;
-  total_amount?: number | string | null;
-  pickup_eta_minutes?: number | string | null;
-  user_phone?: string | null;
+  shopSlug?: string | null;
+  restaurantSlug?: string | null;
+  restaurantId?: number | string | null;
+  shopId?: number | string | null;
+  shopName?: string | null;
+  restaurantName?: string | null;
+  tableInfo?: string | null;
+  totalAmount?: number | string | null;
+  pickupEtaMinutes?: number | string | null;
+  userPhone?: string | null;
   status?: string | null;
-  pickup_ready_at?: string | null;
-  rider_broadcasted_at?: string | null;
-  rider_remind_count?: number | string | null;
-  rider_last_reminded_at?: string | null;
+  pickupReadyAt?: string | null;
+  riderBroadcastedAt?: string | null;
+  riderRemindCount?: number | string | null;
+  riderLastRemindedAt?: string | null;
 }
 
 interface TelegramRiderRow {
   id?: number | string | null;
   name?: string | null;
   phone?: string | null;
+  telegramChatId?: string | null;
   telegram_chat_id?: string | null;
 }
 
@@ -91,33 +92,33 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
   const directOrder = extractDispatchOrder(payload, orderId);
   if (directOrder) return directOrder;
 
-  const shopSlug = String(payload.shop_slug || payload.restaurant_slug || '').trim();
-  const shopId = String(payload.shop_id || payload.restaurant_id || '').trim();
-  const shopName = String(payload.shop_name || payload.restaurant_name || '').trim();
-  const tableInfo = String(payload.table_info || '').trim();
-  const totalAmount = String(payload.total_amount || '').trim();
-  const userPhone = String(payload.user_phone || '').trim();
+  const shopSlug = String(payload.shopSlug || payload.restaurantSlug || '').trim();
+  const shopId = String(payload.shopId || payload.restaurantId || '').trim();
+  const shopName = String(payload.shopName || payload.restaurantName || '').trim();
+  const tableInfo = String(payload.tableInfo || '').trim();
+  const totalAmount = String(payload.totalAmount || '').trim();
+  const userPhone = String(payload.userPhone || '').trim();
   const status = String(payload.status || '').trim();
   const hasSnapshotFields = !!(shopSlug || shopId || shopName || tableInfo || totalAmount || userPhone);
   if (!hasSnapshotFields) return null;
 
   return {
     id: orderId,
-    shop_slug: shopSlug || undefined,
-    restaurant_slug: String(payload.restaurant_slug || '').trim() || undefined,
-    shop_id: shopId || undefined,
-    restaurant_id: String(payload.restaurant_id || '').trim() || undefined,
-    shop_name: shopName || undefined,
-    restaurant_name: String(payload.restaurant_name || '').trim() || undefined,
-    table_info: tableInfo || undefined,
-    total_amount: totalAmount || undefined,
-    user_phone: userPhone || undefined,
+    shopSlug: shopSlug || undefined,
+    restaurantSlug: String(payload.restaurantSlug || '').trim() || undefined,
+    shopId: shopId || undefined,
+    restaurantId: String(payload.restaurantId || '').trim() || undefined,
+    shopName: shopName || undefined,
+    restaurantName: String(payload.restaurantName || '').trim() || undefined,
+    tableInfo: tableInfo || undefined,
+    totalAmount: totalAmount || undefined,
+    userPhone: userPhone || undefined,
     status: status || undefined,
-    pickup_eta_minutes: payload.pickup_eta_minutes != null ? String(payload.pickup_eta_minutes) : undefined,
-    pickup_ready_at: String(payload.pickup_ready_at || '').trim() || undefined,
-    rider_broadcasted_at: String(payload.rider_broadcasted_at || '').trim() || undefined,
-    rider_remind_count: payload.rider_remind_count != null ? String(payload.rider_remind_count) : undefined,
-    rider_last_reminded_at: String(payload.rider_last_reminded_at || '').trim() || undefined,
+    pickupEtaMinutes: payload.pickupEtaMinutes != null ? String(payload.pickupEtaMinutes) : undefined,
+    pickupReadyAt: String(payload.pickupReadyAt || '').trim() || undefined,
+    riderBroadcastedAt: String(payload.riderBroadcastedAt || '').trim() || undefined,
+    riderRemindCount: payload.riderRemindCount != null ? String(payload.riderRemindCount) : undefined,
+    riderLastRemindedAt: String(payload.riderLastRemindedAt || '').trim() || undefined,
   };
 }
 
@@ -147,7 +148,8 @@ async function notifyTelegramRecipients(
 ): Promise<TelegramDispatchSummary> {
   const riders = await fetchAvailableRiders(request, cookies);
   const availableRiderCount = riders.length;
-  const telegramRiders = riders.filter((rider) => String(rider.telegram_chat_id || '').trim() !== '');
+  const readRiderChatId = (rider: TelegramRiderRow) => String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
+  const telegramRiders = riders.filter((rider) => readRiderChatId(rider) !== '');
   const telegramBoundCount = telegramRiders.length;
 
   const baseSummary: TelegramDispatchSummary = {
@@ -159,9 +161,9 @@ async function notifyTelegramRecipients(
       riderId: String(rider.id || '').trim(),
       riderName: String(rider.name || '未命名骑手').trim(),
       riderPhone: String(rider.phone || '').trim(),
-      telegramChatIdBound: String(rider.telegram_chat_id || '').trim() !== '',
+      telegramChatIdBound: readRiderChatId(rider) !== '',
       delivered: false,
-      error: String(rider.telegram_chat_id || '').trim() !== '' ? undefined : 'telegram_not_bound',
+      error: readRiderChatId(rider) !== '' ? undefined : 'telegram_not_bound',
     })),
   };
 
@@ -180,7 +182,7 @@ async function notifyTelegramRecipients(
     };
   }
 
-  const restaurantId = String(order.shop_slug || order.restaurant_slug || order.restaurant_id || order.shop_id || '').trim();
+  const restaurantId = String(order.shopSlug || order.restaurantSlug || order.restaurantId || order.shopId || '').trim();
   if (!restaurantId) {
     return {
       ...baseSummary,
@@ -196,11 +198,11 @@ async function notifyTelegramRecipients(
 
   const requestUrl = new URL(request.url);
   const dashboardBaseUrl = requestUrl.origin;
-  const shopName = String(order.shop_name || order.restaurant_name || '店铺');
-  const address = String(order.table_info || '');
-  const totalAmount = Number(order.total_amount || 0);
-  const pickupEtaMinutes = Number(order.pickup_eta_minutes || 0);
-  const phone = String(order.user_phone || '');
+  const shopName = String(order.shopName || order.restaurantName || '店铺');
+  const address = String(order.tableInfo || '');
+  const totalAmount = Number(order.totalAmount || 0);
+  const pickupEtaMinutes = Number(order.pickupEtaMinutes || 0);
+  const phone = String(order.userPhone || '');
 
   const attempts = await Promise.all(telegramRiders.map(async (rider): Promise<TelegramDispatchAttempt> => {
     const dashboardLink = buildTelegramDeepLink({
@@ -210,7 +212,7 @@ async function notifyTelegramRecipients(
     });
     const riderId = Number(rider.id || 0);
     const riderPhone = String(rider.phone || '').trim();
-    const riderChatId = String(rider.telegram_chat_id || '').trim();
+    const riderChatId = readRiderChatId(rider);
     let claimCallbackData: string | undefined;
     if (riderId > 0 && String(rider.name || '').trim() && riderPhone && riderChatId) {
       try {
@@ -239,14 +241,14 @@ async function notifyTelegramRecipients(
     });
 
     try {
-      const sendRes = await fetch(`${API_BASE_URL}/api/telegram/send`, {
+      const sendRes = await fetch(new URL('/api/telegram/send', request.url).toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          shop_slug: String(order.shop_slug || order.restaurant_slug || '').trim(),
-          chat_id: rider.telegram_chat_id,
+          shopSlug: String(order.shopSlug || order.restaurantSlug || '').trim(),
+          chat_id: riderChatId,
           ...message,
         }),
       });
@@ -364,19 +366,22 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       }
     }
 
+    const currentStatus = String(order.status || '').trim();
+    const publishStatus = String(parsedBody.status || '').trim() || (currentStatus === 'awaiting_courier' ? currentStatus : 'awaiting_courier');
+
     const updatePayload = action === 'publish'
       ? {
-          status: parsedBody.status,
-          pickup_eta_minutes: parsedBody.pickup_eta_minutes,
-          pickup_ready_at: parsedBody.pickup_ready_at,
-          rider_broadcasted_at: parsedBody.rider_broadcasted_at,
-          rider_remind_count: parsedBody.rider_remind_count,
-          rider_last_reminded_at: parsedBody.rider_last_reminded_at,
+          status: publishStatus,
+          pickupEtaMinutes: parsedBody.pickupEtaMinutes,
+          pickupReadyAt: parsedBody.pickupReadyAt,
+          riderBroadcastedAt: parsedBody.riderBroadcastedAt,
+          riderRemindCount: parsedBody.riderRemindCount,
+          riderLastRemindedAt: parsedBody.riderLastRemindedAt,
         }
       : {
-          status: String(order.status || '').trim(),
-          rider_remind_count: parsedBody.rider_remind_count,
-          rider_last_reminded_at: parsedBody.rider_last_reminded_at,
+          status: currentStatus || 'awaiting_courier',
+          riderRemindCount: parsedBody.riderRemindCount,
+          riderLastRemindedAt: parsedBody.riderLastRemindedAt,
         };
 
     const updateRes = await proxyAdminRequest({
@@ -410,35 +415,22 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       });
     }
 
-    if (action === 'publish') {
-      const mergedOrder = {
-        ...order,
-        status: String(parsedBody.status || order.status || ''),
-        pickup_eta_minutes: parsedBody.pickup_eta_minutes ?? order.pickup_eta_minutes,
-        pickup_ready_at: parsedBody.pickup_ready_at ?? order.pickup_ready_at,
-        rider_broadcasted_at: parsedBody.rider_broadcasted_at ?? order.rider_broadcasted_at,
-        rider_remind_count: parsedBody.rider_remind_count ?? order.rider_remind_count,
-        rider_last_reminded_at: parsedBody.rider_last_reminded_at ?? order.rider_last_reminded_at,
-      } satisfies DispatchOrderSnapshot;
+    const mergedOrder = {
+      ...order,
+      status: action === 'publish' ? publishStatus : (currentStatus || 'awaiting_courier'),
+      pickupEtaMinutes: parsedBody.pickupEtaMinutes ?? order.pickupEtaMinutes,
+      pickupReadyAt: parsedBody.pickupReadyAt ?? order.pickupReadyAt,
+      riderBroadcastedAt: parsedBody.riderBroadcastedAt ?? order.riderBroadcastedAt,
+      riderRemindCount: parsedBody.riderRemindCount ?? order.riderRemindCount,
+      riderLastRemindedAt: parsedBody.riderLastRemindedAt ?? order.riderLastRemindedAt,
+    } satisfies DispatchOrderSnapshot;
 
-      const telegram_dispatch = await notifyTelegramRecipients(request, cookies, mergedOrder);
-      return new Response(JSON.stringify({
-        success: true,
-        order: mergedOrder,
-        telegram_dispatch,
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
+    const telegram_dispatch = await notifyTelegramRecipients(request, cookies, mergedOrder);
     return new Response(JSON.stringify({
       success: true,
-      order: {
-        ...order,
-        rider_remind_count: parsedBody.rider_remind_count ?? order.rider_remind_count,
-        rider_last_reminded_at: parsedBody.rider_last_reminded_at ?? order.rider_last_reminded_at,
-      },
+      action,
+      order: mergedOrder,
+      telegram_dispatch,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

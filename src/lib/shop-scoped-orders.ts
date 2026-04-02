@@ -2,7 +2,7 @@ type MaybeOrder = Record<string, any>;
 type ShopContext = { id?: string; slug?: string };
 
 function pickPoints(order: MaybeOrder) {
-  const candidates = [order?.points, order?.user_points, order?.points_balance];
+  const candidates = [order?.points, order?.userPoints, order?.pointsBalance];
   for (const raw of candidates) {
     if (raw === undefined || raw === null || raw === '') continue;
     const value = Number(raw);
@@ -12,8 +12,8 @@ function pickPoints(order: MaybeOrder) {
 }
 
 function pickVip(order: MaybeOrder) {
-  if (order?.is_vip === true || order?.is_vip === 1 || order?.is_vip === '1') return true;
-  const vipLevel = String(order?.vip_level || '').trim();
+  if (order?.isVip === true || order?.isVip === 1 || order?.isVip === '1') return true;
+  const vipLevel = String(order?.vipLevel || '').trim();
   return Boolean(vipLevel && vipLevel !== '0' && vipLevel.toLowerCase() !== 'none');
 }
 
@@ -29,10 +29,10 @@ export function filterOrdersForCurrentShop<T extends MaybeOrder>(orders: T[], sh
   const currentSlug = String(shopContext?.slug || '').trim();
 
   return (orders || []).filter((order) => {
-    if (String(order?.order_type || '').trim() !== 'delivery') return false;
+    if (String(order?.orderType || '').trim() !== 'delivery') return false;
 
-    const orderShopId = String(order?.shop_id || order?.restaurant_id || '').trim();
-    const orderSlug = String(order?.shop_slug || order?.slug || order?.restaurant_slug || '').trim();
+    const orderShopId = String(order?.shopId || order?.restaurantId || '').trim();
+    const orderSlug = String(order?.shopSlug || order?.slug || order?.restaurantSlug || '').trim();
 
     if (currentShopId && orderShopId && currentShopId === orderShopId) return true;
     if (currentSlug && orderSlug && currentSlug === orderSlug) return true;
@@ -59,10 +59,10 @@ export function buildCurrentShopMembershipSummary(orders: MaybeOrder[]) {
 }
 
 export function splitOrdersByCurrentShop<T extends MaybeOrder>(orders: T[], shopContext: ShopContext) {
-	const visibleOrders = (orders || []).filter((order) => String(order?.order_type || '').trim() === 'delivery');
+	const visibleOrders = (orders || []).filter((order) => String(order?.orderType || '').trim() === 'delivery');
 	const currentShopOrders = filterOrdersForCurrentShop(visibleOrders, shopContext);
-	const currentShopKeys = new Set(currentShopOrders.map((order) => String(order?.order_no || order?.id || '')));
-	const otherOrders = visibleOrders.filter((order) => !currentShopKeys.has(String(order?.order_no || order?.id || '')));
+	const currentShopKeys = new Set(currentShopOrders.map((order) => String(order?.orderNo || order?.id || '')));
+	const otherOrders = visibleOrders.filter((order) => !currentShopKeys.has(String(order?.orderNo || order?.id || '')));
 
 	return {
 		currentShopOrders,

@@ -1,13 +1,13 @@
 export type VipPayloadInput = {
-  user_phone?: unknown;
-  is_vip?: unknown;
-  vip_discount_percent?: unknown;
+  userPhone?: unknown;
+  isVip?: unknown;
+  vipDiscountPercent?: unknown;
 };
 
 export type VipPayload = {
-  user_phone: string;
-  is_vip: 0 | 1;
-  vip_discount_percent: number;
+  userPhone: string;
+  isVip: 0 | 1;
+  vipDiscountPercent: number;
 };
 
 function toVipFlag(v: unknown): 0 | 1 {
@@ -30,15 +30,15 @@ function toDiscountPercent(v: unknown, fallback: number): number {
 }
 
 export function normalizeVipPayload(input: VipPayloadInput): VipPayload {
-  const phone = String(input?.user_phone ?? '').trim();
-  const isVip = toVipFlag(input?.is_vip);
+  const phone = String(input?.userPhone ?? '').trim();
+  const isVip = toVipFlag(input?.isVip);
 
   // Default discount: 95% when enabling VIP, 100% when disabling.
   const defaultDiscount = isVip === 1 ? 95 : 100;
 
   return {
-    user_phone: phone,
-    is_vip: isVip,
-    vip_discount_percent: isVip === 1 ? toDiscountPercent(input?.vip_discount_percent, defaultDiscount) : 100,
+    userPhone: phone,
+    isVip: isVip,
+    vipDiscountPercent: isVip === 1 ? toDiscountPercent(input?.vipDiscountPercent, defaultDiscount) : 100,
   };
 }

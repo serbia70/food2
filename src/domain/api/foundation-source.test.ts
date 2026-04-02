@@ -18,7 +18,6 @@ const MIGRATED_FOUNDATION_FILES = [
   '../../pages/api/master/login.ts',
   '../../pages/api/master/logout.ts',
   '../../pages/api/master/dispatch.ts',
-  '../../pages/api/master/riders.ts',
   '../../pages/api/master/shops/[id].ts',
   '../../pages/api/shop/list.ts',
 ] as const;

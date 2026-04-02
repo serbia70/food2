@@ -2,7 +2,7 @@ import { hasMeaningfulValue } from './master-value-selection.ts';
 
 export type OrderChannel = 'reservation' | 'delivery';
 export type OrderChannelFeeType = 'percentage' | 'per_order';
-export type OrderChannelFeeSource = 'new' | 'legacy' | 'default';
+export type OrderChannelFeeSource = 'new' | 'default';
 
 export type OrderChannelFeePlan = {
   channel: OrderChannel;
@@ -54,7 +54,7 @@ function toCommissionType(value: unknown, fallback: OrderChannelFeeType): OrderC
 }
 
 function sourceLabel(source: OrderChannelFeeSource): string {
-  if (source === 'new' || source === 'legacy') return '店铺覆盖';
+  if (source === 'new') return '店铺覆盖';
   return '全局默认';
 }
 
@@ -83,33 +83,15 @@ export function formatOrderChannelFeeRule(type: unknown, value: unknown): string
 
 export function buildOrderChannelFeePlan(input: OrderChannelFeePlanInput): OrderChannelFeePlan {
   const hasNewInput = hasMeaningfulValue(input.enabled) || hasMeaningfulValue(input.commissionType) || hasMeaningfulValue(input.commissionValue);
-  const hasLegacyInput = hasMeaningfulValue(input.legacyEnabled) || hasMeaningfulValue(input.legacyCommissionType) || hasMeaningfulValue(input.legacyCommissionValue);
 
   const enabledFallback = input.scope === 'global' ? false : true;
-  const enabledValue = hasMeaningfulValue(input.enabled)
-    ? input.enabled
-    : hasMeaningfulValue(input.legacyEnabled)
-      ? input.legacyEnabled
-      : input.defaultEnabled;
-  const typeValue = hasMeaningfulValue(input.commissionType)
-    ? input.commissionType
-    : hasMeaningfulValue(input.legacyCommissionType)
-      ? input.legacyCommissionType
-      : input.defaultCommissionType;
-  const commissionValue = hasMeaningfulValue(input.commissionValue)
-    ? input.commissionValue
-    : hasMeaningfulValue(input.legacyCommissionValue)
-      ? input.legacyCommissionValue
-      : input.defaultCommissionValue;
+  const enabledValue = hasMeaningfulValue(input.enabled) ? input.enabled : input.defaultEnabled;
+  const typeValue = hasMeaningfulValue(input.commissionType) ? input.commissionType : input.defaultCommissionType;
+  const commissionValue = hasMeaningfulValue(input.commissionValue) ? input.commissionValue : input.defaultCommissionValue;
   const enabled = toBoolean(enabledValue, enabledFallback);
   const commissionType = toCommissionType(typeValue, 'percentage');
   const commissionValueNumber = toNumber(commissionValue, input.scope === 'global' ? 0 : 3);
-  const normalizedDefaultType = toCommissionType(input.defaultCommissionType, 'percentage');
-  const normalizedDefaultValue = toNumber(input.defaultCommissionValue, input.scope === 'global' ? 0 : 3);
-  const matchesDefault =
-    commissionType === normalizedDefaultType &&
-    commissionValueNumber === normalizedDefaultValue;
-  const source: OrderChannelFeeSource = hasNewInput ? 'new' : hasLegacyInput && !matchesDefault ? 'legacy' : 'default';
+  const source: OrderChannelFeeSource = hasNewInput ? 'new' : 'default';
 
   return {
     channel: input.channel,

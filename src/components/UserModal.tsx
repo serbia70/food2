@@ -321,22 +321,22 @@ export default function UserModal({ specialPromotionMap = {} }: UserModalProps) 
 
   const handleAddToCart = (order: Order, idx: number) => {
     try {
-      const items = typeof (order as any).items_json === 'string' 
-        ? JSON.parse((order as any).items_json) 
-        : (order as any).items_json;
-      
+      const items = typeof (order as any).itemsJson === 'string'
+        ? JSON.parse((order as any).itemsJson)
+        : (order as any).itemsJson;
+
       const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
-      
+
       itemsArray.forEach((i: any) => {
         addToCart({
           id: i.id || Math.random(),
           name: i.name,
-          sub_name: i.subName || i.sub_name || "",
+          subName: i.subName || "",
           price: i.price,
           img: i.img || "",
         });
       });
-      
+
       setOrderQty((prev) => ({ ...prev, [idx]: (prev[idx] || 0) + 1 }));
     } catch (e) {
       console.error("Add order items failed", e);

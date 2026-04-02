@@ -3,8 +3,8 @@ interface Props {
   shopSlug: string;
   shopSettings?: {
     points?: {
-      points_per_spend?: number;
-      points_value?: number;
+      pointsPerSpend?: number;
+      pointsValue?: number;
     };
   };
 }
@@ -12,8 +12,8 @@ interface Props {
 const { shopSlug, shopSettings } = Astro.props;
 
 const pointsSettings = (shopSettings && shopSettings.points) || {};
-const pointsPerSpend = pointsSettings.points_per_spend || 20;
-const pointsValue = pointsSettings.points_value || 1;
+const pointsPerSpend = pointsSettings.pointsPerSpend || 20;
+const pointsValue = pointsSettings.pointsValue || 1;
 ---
 
 <div id="tab-marketing" class="tab-content" style="display: none">
@@ -297,46 +297,73 @@ const pointsValue = pointsSettings.points_value || 1;
     specialSelectionState = Array.isArray(selectedIds) ? [...selectedIds] : [];
   }
 
-  async function loadPromotions() {
-    try {
-      const res = await fetch('/api/admin/promotions');
-      const data = await res.json();
-      if (data.success) {
-        promotionsData = data.promotions || [];
-        renderPromotions();
+  async function fetchJSONWithRetry(url, init) {
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const res = await fetch(url, init);
+        const data = await res.json();
+        return { res, data };
+      } catch (error) {
+        lastError = error;
       }
+    }
+    throw lastError;
+  }
+
+  async function loadPromotions() {
+    const container = document.getElementById('promotions-list');
+    try {
+      const { res, data } = await fetchJSONWithRetry('/api/admin/promotions');
+      if (res.status === 401 || res.status === 403) {
+        window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+        return;
+      }
+      if (!res.ok || !data.success) {
+        throw new Error('load_promotions_failed');
+      }
+      promotionsData = data.promotions || [];
+      renderPromotions();
     } catch (e) {
       console.error('Failed to load promotions:', e);
+      if (container) renderInfo(container, '加载促销失败', { textAlign: 'center', color: '#ef4444', padding: '40px' });
     }
   }
 
   async function loadProducts() {
+    const container = document.getElementById('promotions-list');
     try {
-      const res = await fetch(`/${encodeURIComponent(shopSlug)}/menu`);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        productsData = [];
-        data.forEach(cat => {
-          (cat.products || []).forEach(p => {
-            productsData.push({
-              id: Number(p.id || 0),
-              name: String(p.name || ''),
-              sub_name: String(p.sub_name || ''),
-              price: Number(p.price || 0),
-              displayNamePrimary: String(p.name || ''),
-              displayNameSecondary: String(p.sub_name || ''),
-            });
+      const { res, data } = await fetchJSONWithRetry(`/${encodeURIComponent(shopSlug)}/menu`);
+      if (res.status === 401 || res.status === 403) {
+        window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+        return;
+      }
+      const menuCategories = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : Array.isArray(data?.data) ? data.data : [];
+      if (!res.ok || !menuCategories.length) {
+        throw new Error('load_products_failed');
+      }
+      productsData = [];
+      menuCategories.forEach(cat => {
+        (cat.products || []).forEach(p => {
+          productsData.push({
+            id: Number(p.id || 0),
+            name: String(p.name || ''),
+            subName: String(p.subName || ''),
+            price: Number(p.price || 0),
+            displayNamePrimary: String(p.name || ''),
+            displayNameSecondary: String(p.subName || ''),
           });
         });
-        renderPromotions();
-        const promotionTypeNode = document.getElementById('promotion-type');
-        const type = promotionTypeNode && 'value' in promotionTypeNode ? promotionTypeNode.value : '';
-        if (type === 'special') {
-          syncSpecialProductUI();
-        }
+      });
+      renderPromotions();
+      const promotionTypeNode = document.getElementById('promotion-type');
+      const type = promotionTypeNode && 'value' in promotionTypeNode ? promotionTypeNode.value : '';
+      if (type === 'special') {
+        syncSpecialProductUI();
       }
     } catch (e) {
       console.error('Failed to load products:', e);
+      if (container) renderInfo(container, '加载菜品失败', { textAlign: 'center', color: '#ef4444', padding: '40px' });
     }
   }
 
@@ -348,7 +375,7 @@ const pointsValue = pointsSettings.points_value || 1;
     const normalizeValues = (values) => values
       .map((value) => {
         if (typeof value === 'object' && value !== null) {
-          return Number(value.id || value.product_id || value.value || 0);
+          return Number(value.id || value.productId || value.value || 0);
         }
         return Number(value || 0);
       })
@@ -372,12 +399,12 @@ const pointsValue = pointsSettings.points_value || 1;
 
   function getPromotionStartValue(promotion) {
     const safePromotion = promotion || {};
-    return safePromotion.starts_at || safePromotion.start_at || safePromotion.start_time || '';
+    return safePromotion.startsAt || safePromotion.startAt || safePromotion.startTime || '';
   }
 
   function getPromotionEndValue(promotion) {
     const safePromotion = promotion || {};
-    return safePromotion.ends_at || safePromotion.end_at || safePromotion.end_time || '';
+    return safePromotion.endsAt || safePromotion.endAt || safePromotion.endTime || '';
   }
 
   function normalizePromotionDatetimeValue(raw) {
@@ -452,10 +479,10 @@ const pointsValue = pointsSettings.points_value || 1;
   }
 
   function renderPromoDesc(p) {
-    if (p.promo_type === 'spend_discount') {
-      return `满 ${p.min_spend_rsd || 0} RSD 减 ${p.discount_amount_rsd || 0} RSD ${p.stackable ? '(可叠加)' : ''}`;
-    } else if (p.promo_type === 'special') {
-      const ids = parsePromotionProductIds(p.selected_products);
+    if (p.promoType === 'spend_discount') {
+      return `满 ${p.minSpendRsd || 0} RSD 减 ${p.discountAmountRsd || 0} RSD ${p.stackable ? '(可叠加)' : ''}`;
+    } else if (p.promoType === 'special') {
+      const ids = parsePromotionProductIds(p.selectedProducts);
       let productNames = ids.length === 1 ? '单个菜品' : '多个菜品';
       const names = productsData
         .filter((prod) => ids.includes(prod.id))
@@ -471,7 +498,7 @@ const pointsValue = pointsSettings.points_value || 1;
       if (startText) timeParts.push(`开始: ${startText}`);
       if (endText) timeParts.push(`结束: ${endText}`);
       const timeText = timeParts.length ? ` · ${timeParts.join(' · ')}` : '';
-      return `今日特价: ${productNames} → ${p.special_price_rsd || 0} RSD${timeText}`;
+      return `今日特价: ${productNames} → ${p.specialPriceRsd || 0} RSD${timeText}`;
     }
     return '';
   }
@@ -497,14 +524,14 @@ const pointsValue = pointsSettings.points_value || 1;
     document.getElementById('promotion-modal-title').innerText = '编辑促销';
     document.getElementById('promotion-id').value = p.id;
     document.getElementById('promotion-name').value = p.name;
-    document.getElementById('promotion-type').value = p.promo_type;
-    document.getElementById('promotion-min-spend').value = p.min_spend_rsd || '';
-    document.getElementById('promotion-discount').value = p.discount_amount_rsd || '';
+    document.getElementById('promotion-type').value = p.promoType;
+    document.getElementById('promotion-min-spend').value = p.minSpendRsd || '';
+    document.getElementById('promotion-discount').value = p.discountAmountRsd || '';
     document.getElementById('promotion-stackable').checked = p.stackable === 1;
-    document.getElementById('promotion-special-price').value = p.special_price_rsd || '';
+    document.getElementById('promotion-special-price').value = p.specialPriceRsd || '';
 
     resetSpecialSelectionState();
-    hydrateSpecialSelection(parsePromotionProductIds(p.selected_products));
+    hydrateSpecialSelection(parsePromotionProductIds(p.selectedProducts));
     setPromotionProductSearch('');
 
     document.getElementById('promotion-start').value = normalizePromotionDatetimeValue(getPromotionStartValue(p));
@@ -542,22 +569,22 @@ const pointsValue = pointsSettings.points_value || 1;
     const id = document.getElementById('promotion-id').value;
     const payload = {
       name: document.getElementById('promotion-name').value,
-      promo_type: document.getElementById('promotion-type').value,
+      promoType: document.getElementById('promotion-type').value,
       stackable: document.getElementById('promotion-stackable').checked,
     };
 
-    const type = payload.promo_type;
+    const type = payload.promoType;
     if (type === 'spend_discount') {
-      payload.min_spend_rsd = parseInt(document.getElementById('promotion-min-spend').value) || 0;
-      payload.discount_amount_rsd = parseInt(document.getElementById('promotion-discount').value) || 0;
+      payload.minSpendRsd = parseInt(document.getElementById('promotion-min-spend').value) || 0;
+      payload.discountAmountRsd = parseInt(document.getElementById('promotion-discount').value) || 0;
     } else if (type === 'special') {
-      payload.selected_products = getSelectedProductIds();
-      payload.special_price_rsd = parseInt(document.getElementById('promotion-special-price').value) || 0;
-      if (!payload.selected_products.length) {
+      payload.selectedProducts = getSelectedProductIds();
+      payload.specialPriceRsd = parseInt(document.getElementById('promotion-special-price').value) || 0;
+      if (!payload.selectedProducts.length) {
         alert('请至少选择一个菜品作为今日特价');
         return;
       }
-      if (payload.special_price_rsd <= 0) {
+      if (payload.specialPriceRsd <= 0) {
         alert('请设置特价金额');
         return;
       }
@@ -566,14 +593,10 @@ const pointsValue = pointsSettings.points_value || 1;
     const startVal = document.getElementById('promotion-start').value;
     const endVal = document.getElementById('promotion-end').value;
     if (startVal) {
-      payload.starts_at = startVal;
-      payload.start_at = startVal;
-      payload.start_time = startVal;
+      payload.startsAt = startVal;
     }
     if (endVal) {
-      payload.ends_at = endVal;
-      payload.end_at = endVal;
-      payload.end_time = endVal;
+      payload.endsAt = endVal;
     }
 
     try {
@@ -635,8 +658,8 @@ const pointsValue = pointsSettings.points_value || 1;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           points: {
-            points_per_spend: pointsPerSpend,
-            points_value: pointsValue
+            pointsPerSpend: pointsPerSpend,
+            pointsValue: pointsValue
           }
         })
       });
@@ -651,6 +674,6 @@ const pointsValue = pointsSettings.points_value || 1;
     }
   };
 
-  loadPromotions();
-  loadProducts();
+  window.loadPromotions = loadPromotions;
+  window.loadMarketingProducts = loadProducts;
 </script>

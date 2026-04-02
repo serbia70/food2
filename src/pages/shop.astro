@@ -102,7 +102,7 @@
       name.textContent = String(product.name || '');
       const sub = document.createElement('div');
       sub.className = 'product-sub';
-      sub.textContent = String(product.sub_name || '');
+      sub.textContent = String(product.subName || '');
       const price = document.createElement('div');
       price.className = 'product-price';
       price.textContent = `RSD ${product.price}`;
@@ -431,7 +431,7 @@
         cat.products.forEach(p => {
           if (p && cart[p.id]) {
             items.push({
-              product_id: p.id,
+              productId: p.id,
               name: p.name,
               price: p.price,
               quantity: cart[p.id],
@@ -446,19 +446,19 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            table_info: tableInfo,
-            order_type: 'dine_in',
-            total_amount: getTotal(),
+            tableInfo: tableInfo,
+            orderType: 'dine_in',
+            totalAmount: getTotal(),
             items: items,
             remarks: remarks,
-            user_phone: phone
+            userPhone: phone
           })
         });
         
         if (!res.ok) throw new Error('下单失败');
         
         const result = await res.json();
-        alert('下单成功！订单号: ' + result.order_no);
+        alert('下单成功！订单号: ' + result.orderNo);
         cart = {};
         document.getElementById('checkout-modal').style.display = 'none';
         renderProducts();

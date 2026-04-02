@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { POST } from '../../pages/api/reservation.ts';
+import { POST } from '../../../pages/api/reservation.ts';
 
 const originalFetch = globalThis.fetch;
 
@@ -19,8 +19,8 @@ test('reservation api allows submit when shop settings enable reservation', asyn
       return new Response(
         JSON.stringify({
           slug: '102',
-          settings: JSON.stringify({ reservation_enabled: 1 }),
-          enable_reservation: 0,
+          settings: JSON.stringify({ reservationEnabled: 1 }),
+          enableReservation: 0,
           billing_plan_type: '<nil>',
         }),
         {
@@ -46,9 +46,9 @@ test('reservation api allows submit when shop settings enable reservation', asyn
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         restaurantId: '102',
-        guest_count: 2,
-        reservation_time: '2026-03-28T18:00:00',
-        customer_phone: '381600000000',
+        guestCount: 2,
+        reservationTime: '2026-03-28T18:00:00',
+        customerPhone: '381600000000',
       }),
     }),
   } as any);
@@ -69,7 +69,7 @@ test('reservation api rejects submit when shop settings disable reservation', as
       return new Response(
         JSON.stringify({
           slug: '102',
-          settings: JSON.stringify({ reservation_enabled: 0 }),
+          settings: JSON.stringify({ reservationEnabled: 0 }),
         }),
         {
           status: 200,
@@ -92,9 +92,9 @@ test('reservation api rejects submit when shop settings disable reservation', as
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         restaurantId: '102',
-        guest_count: 2,
-        reservation_time: '2026-03-28T18:00:00',
-        customer_phone: '381600000000',
+        guestCount: 2,
+        reservationTime: '2026-03-28T18:00:00',
+        customerPhone: '381600000000',
       }),
     }),
   } as any);
@@ -121,9 +121,9 @@ test('reservation api returns 502 when shop info is unavailable', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         restaurantId: '102',
-        guest_count: 2,
-        reservation_time: '2026-03-28T18:00:00',
-        customer_phone: '381600000000',
+        guestCount: 2,
+        reservationTime: '2026-03-28T18:00:00',
+        customerPhone: '381600000000',
       }),
     }),
   } as any);
@@ -143,7 +143,7 @@ test('reservation api falls back to subscription_enabled when reservation_enable
       return new Response(
         JSON.stringify({
           slug: '102',
-          settings: JSON.stringify({ subscription_enabled: 0 }),
+          settings: JSON.stringify({ subscriptionEnabled: 0 }),
         }),
         {
           status: 200,
@@ -166,9 +166,9 @@ test('reservation api falls back to subscription_enabled when reservation_enable
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         restaurantId: '102',
-        guest_count: 2,
-        reservation_time: '2026-03-28T18:00:00',
-        customer_phone: '381600000000',
+        guestCount: 2,
+        reservationTime: '2026-03-28T18:00:00',
+        customerPhone: '381600000000',
       }),
     }),
   } as any);
@@ -214,9 +214,9 @@ test('reservation api defaults to enabled when reservation settings are missing'
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         restaurantId: '102',
-        guest_count: 2,
-        reservation_time: '2026-03-28T18:00:00',
-        customer_phone: '381600000000',
+        guestCount: 2,
+        reservationTime: '2026-03-28T18:00:00',
+        customerPhone: '381600000000',
       }),
     }),
   } as any);
@@ -238,7 +238,7 @@ test('reservation api rejects submit when legacy enable_reservation disables res
         JSON.stringify({
           slug: '102',
           settings: JSON.stringify({}),
-          enable_reservation: 0,
+          enableReservation: 0,
         }),
         {
           status: 200,
@@ -261,9 +261,9 @@ test('reservation api rejects submit when legacy enable_reservation disables res
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         restaurantId: '102',
-        guest_count: 2,
-        reservation_time: '2026-03-28T18:00:00',
-        customer_phone: '381600000000',
+        guestCount: 2,
+        reservationTime: '2026-03-28T18:00:00',
+        customerPhone: '381600000000',
       }),
     }),
   } as any);
@@ -273,4 +273,28 @@ test('reservation api rejects submit when legacy enable_reservation disables res
   assert.equal(data.success, false);
   assert.equal(data.error, 'reservation disabled');
   assert.equal(forwarded, false);
+});
+
+test('reservation api source uses canonical request payload fields', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/pages/api/reservation.ts'), 'utf8');
+
+  assert.match(source, /reservationEnabled\?: number \| string \| boolean \| null;/);
+  assert.match(source, /shop\.reservationEnabled \?\?/);
+  assert.match(source, /settings\.reservationEnabled \?\?/);
+  assert.match(source, /guestCount: Number\(raw\?\.guestCount \|\| 0\),/);
+  assert.match(source, /reservationTime: String\(raw\?\.reservationTime \|\| ''\),/);
+  assert.match(source, /customerPhone: String\(raw\?\.customerPhone \|\| ''\),/);
+  assert.match(source, /dineType: 'dine_in',/);
+  assert.match(source, /deliveryAddress: null,/);
+  assert.match(source, /customerName: raw\?\.customerName \|\| null,/);
+
+  assert.doesNotMatch(source, /reservation_enabled/);
+  assert.doesNotMatch(source, /guest_count/);
+  assert.doesNotMatch(source, /reservation_time/);
+  assert.doesNotMatch(source, /customer_phone/);
+  assert.doesNotMatch(source, /dine_type/);
+  assert.doesNotMatch(source, /delivery_address/);
+  assert.doesNotMatch(source, /customer_name/);
 });

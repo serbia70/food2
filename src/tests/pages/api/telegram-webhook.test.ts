@@ -25,8 +25,8 @@ test('POST telegram webhook 在 /start bind token 时转发到 rider-bind', asyn
       assert.equal(init?.method, 'POST');
       assert.equal((init?.headers as Record<string, string>)['x-telegram-bot-api-secret-token'], 'test-telegram-callback-secret');
       assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
-        bind_token: bindToken,
-        chat_id: 'chat-7',
+        bindToken: bindToken,
+        chatId: 'chat-7',
       });
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -76,8 +76,8 @@ test('POST telegram webhook 在 callback_query 时转发到 rider-claim', async 
       assert.equal(init?.method, 'POST');
       assert.equal((init?.headers as Record<string, string>)['x-telegram-claim-secret'], 'test-telegram-callback-secret');
       assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
-        callback_data: callbackData,
-        chat_id: 'chat-3',
+        callbackData: callbackData,
+        chatId: 'chat-3',
       });
       return new Response(JSON.stringify({ success: true }), {
         status: 200,

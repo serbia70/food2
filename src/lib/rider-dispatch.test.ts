@@ -28,9 +28,10 @@ test('isAwaitingCourierOrder 仅识别 awaiting_courier', () => {
   assert.equal(isAwaitingCourierOrder({ status: 'pending' }), false);
 });
 
-test('isRiderClaimableOrder 仅允许 awaiting_courier 且未绑定骑手', () => {
+test('isRiderClaimableOrder 仅按 awaiting_courier 判断可抢单', () => {
   assert.equal(isRiderClaimableOrder({ status: 'awaiting_courier', courier_phone: '' }), true);
-  assert.equal(isRiderClaimableOrder({ status: 'awaiting_courier', courier_phone: '06123' }), false);
+  assert.equal(isRiderClaimableOrder({ status: 'awaiting_courier', courier_phone: '06123' }), true);
+  assert.equal(isRiderClaimableOrder({ status: 'awaiting_courier', courierPhone: '06123' }), true);
   assert.equal(isRiderClaimableOrder({ status: 'pending', courier_phone: '' }), false);
 });
 
@@ -63,8 +64,8 @@ test('shouldEscalateUnclaimedOrder 按时间阈值判断二次提醒', () => {
     shouldEscalateUnclaimedOrder(
       {
         status: 'awaiting_courier',
-        rider_broadcasted_at: '2026-03-29T10:00:00.000Z',
-        rider_last_reminded_at: '',
+        riderBroadcastedAt: '2026-03-29T10:00:00.000Z',
+        riderLastRemindedAt: '',
       },
       '2026-03-29T10:06:00.000Z',
       5,
@@ -76,8 +77,8 @@ test('shouldEscalateUnclaimedOrder 按时间阈值判断二次提醒', () => {
     shouldEscalateUnclaimedOrder(
       {
         status: 'awaiting_courier',
-        rider_broadcasted_at: '2026-03-29T10:00:00.000Z',
-        rider_last_reminded_at: '2026-03-29T10:04:00.000Z',
+        riderBroadcastedAt: '2026-03-29T10:00:00.000Z',
+        riderLastRemindedAt: '2026-03-29T10:04:00.000Z',
       },
       '2026-03-29T10:06:00.000Z',
       5,
@@ -89,7 +90,7 @@ test('shouldEscalateUnclaimedOrder 按时间阈值判断二次提醒', () => {
     shouldEscalateUnclaimedOrder(
       {
         status: 'pending',
-        rider_broadcasted_at: '2026-03-29T10:00:00.000Z',
+        riderBroadcastedAt: '2026-03-29T10:00:00.000Z',
       },
       '2026-03-29T10:06:00.000Z',
       5,
@@ -102,11 +103,11 @@ test('buildDispatchPublishPayload stores awaiting_courier state and eta metadata
   const payload = buildDispatchPublishPayload(15, '2026-03-29T10:00:00.000Z');
   assert.deepEqual(payload, {
     status: 'awaiting_courier',
-    pickup_eta_minutes: 15,
-    pickup_ready_at: '2026-03-29T10:15:00.000Z',
-    rider_broadcasted_at: '2026-03-29T10:00:00.000Z',
-    rider_remind_count: 0,
-    rider_last_reminded_at: '',
+    pickupEtaMinutes: 15,
+    pickupReadyAt: '2026-03-29T10:15:00.000Z',
+    riderBroadcastedAt: '2026-03-29T10:00:00.000Z',
+    riderRemindCount: 0,
+    riderLastRemindedAt: '',
   });
 });
 
@@ -170,11 +171,11 @@ test('getRiderStatusHintCopy explains available status', () => {
 });
 
 test('buildReminderPayload 递增提醒次数并更新时间戳', () => {
-  const order = { rider_remind_count: 1 };
+  const order = { riderRemindCount: 1 };
   const payload = buildReminderPayload(order, '2026-03-29T10:00:00.000Z');
   assert.deepEqual(payload, {
-    rider_remind_count: 2,
-    rider_last_reminded_at: '2026-03-29T10:00:00.000Z',
+    riderRemindCount: 2,
+    riderLastRemindedAt: '2026-03-29T10:00:00.000Z',
   });
 });
 
@@ -193,4 +194,14 @@ test('history view only keeps completed rider orders', () => {
 test('filterRiderDashboardOrders 在 history 视图且 riderPhone 为空时返回空数组', () => {
   const orders = [{ id: 1, status: 'completed', courier_phone: '123' }];
   assert.deepEqual(filterRiderDashboardOrders(orders, '', 'history'), []);
+});
+
+test('filterRiderDashboardOrders 兼容 canonical courierPhone 字段', () => {
+  const orders = [
+    { id: 1, status: 'awaiting_courier', courierPhone: '' },
+    { id: 2, status: 'delivering', courierPhone: '123' },
+    { id: 3, status: 'completed', courierPhone: '123' },
+  ];
+  assert.deepEqual(filterRiderDashboardOrders(orders, '123', 'active').map((o) => o.id), [1, 2]);
+  assert.deepEqual(filterRiderDashboardOrders(orders, '123', 'history').map((o) => o.id), [3]);
 });

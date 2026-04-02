@@ -1,25 +1,8 @@
 
 import { registerAdminGlobal, showAdminToast } from './globals';
-import { fetchAvailableRiders, remindRiders, assignRider, autoAssignRider } from './orders';
+import { fetchAvailableRiders, assignRider, autoAssignRider } from './orders';
 
 const DELIVERY_ETA_OPTIONS = [10, 15, 20, 30, 45];
-
-function getReminderCountFromDataset(orderId: string): number {
-  const candidates = [
-    document.querySelector(`.order-card[data-oid="${orderId}"]`) as HTMLElement | null,
-    document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null,
-    document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null,
-  ];
-
-  for (const node of candidates) {
-    const raw = String(node?.dataset?.riderRemindCount || '').trim();
-    if (!raw) continue;
-    const count = Number(raw);
-    if (Number.isFinite(count) && count >= 0) return Math.floor(count);
-  }
-
-  return 0;
-}
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === 'object' && 'message' in error) {
@@ -29,69 +12,6 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-export async function remindAwaitingOrder(orderId: string) {
-  if (!orderId) return;
-  const riderRemindCount = getReminderCountFromDataset(orderId);
-
-  try {
-    await remindRiders(orderId, { riderRemindCount });
-  } catch (error: unknown) {
-    showAdminToast(getErrorMessage(error, '提醒失败'));
-  }
-}
-
-export async function contactRidersForOrder(orderId: string) {
-  if (!orderId) return;
-
-  try {
-    const riders = await fetchAvailableRiders();
-    const hasRiders = riders.length > 0;
-    const selection = prompt(hasRiders
-      ? '输入 1 再次提醒骑手；输入 2 联系在线骑手。'
-      : '当前无可联系骑手。输入 1 再次提醒骑手。');
-    if (!selection) return;
-
-    if (selection.trim() === '1') {
-      await remindAwaitingOrder(orderId);
-      return;
-    }
-
-    if (!hasRiders) {
-      showAdminToast('当前无可联系骑手，仅支持再次提醒');
-      return;
-    }
-
-    if (selection.trim() !== '2') {
-      showAdminToast('请输入 1 或 2');
-      return;
-    }
-
-    const lines = riders.map((rider, idx) => `${idx + 1}. ${rider.name} (${rider.phone})`);
-    const selected = prompt(`可联系骑手：\n${lines.join('\n')}\n\n输入序号可拨号联系，取消则不操作。`);
-    if (!selected) return;
-
-    const selectedIdx = Number(selected) - 1;
-    const target = riders[selectedIdx];
-    if (!target) {
-      showAdminToast('序号无效');
-      return;
-    }
-
-    window.location.href = `tel:${target.phone}`;
-  } catch (error: unknown) {
-    showAdminToast(getErrorMessage(error, '联系骑手失败'));
-  }
-}
-
-registerAdminGlobal('contact-riders', async (el: HTMLElement) => {
-  const orderId = String(el?.dataset?.orderId || '').trim();
-  await contactRidersForOrder(orderId);
-}, false);
-
-registerAdminGlobal('remind-riders', async (el: HTMLElement) => {
-  const orderId = String(el?.dataset?.orderId || '').trim();
-  await remindAwaitingOrder(orderId);
-}, false);
 
 function readAssignContext(orderId: string) {
   const hidden = document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null

@@ -8,10 +8,6 @@ const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
 const originalLocation = globalThis.location;
 
-async function loadModule() {
-  return import('./orders.ts');
-}
-
 test.afterEach(() => {
   globalThis.fetch = originalFetch;
   globalThis.window = originalWindow;
@@ -65,82 +61,20 @@ test('autoAssignRider posts auto_assign payload with cursor and eta', async () =
   });
 });
 
-test('publishRiderDispatch: 非 JSON 错误响应时抛出原始文本', async () => {
-  const hiddenNode = {
-    dataset: {
-      table: 'addr',
-      total: '905',
-      status: 'pending',
-      riderRemindCount: '2',
-    },
-    closest() {
-      return { textContent: 'Tel: 0613083888' };
-    },
-  };
-
-  globalThis.document = {
-    querySelector(selector: string) {
-      if (selector.includes('.hidden-data')) return hiddenNode as any;
-      return null;
-    },
-  } as any;
-
-  globalThis.window = {
-    __adminRuntime: {
-      shopId: 21,
-      shopSlug: 'demo-shop',
-      shop: { name: 'Demo Shop' },
-    },
-    __adminHandlers: {},
-    dispatchEvent() {},
-  } as any;
-
-  globalThis.location = { reload() {} } as any;
-
-  globalThis.fetch = (async () => new Response('Internal Server Error', {
-    status: 500,
-    headers: { 'Content-Type': 'text/plain' },
-  })) as typeof fetch;
-
-  const mod = await loadModule();
-
-  await assert.rejects(
-    () => mod.publishRiderDispatch('463', 15),
-    (error: unknown) => {
-      assert.equal(error instanceof Error, true);
-      assert.equal((error as Error).message, 'Internal Server Error');
-      return true;
-    },
-  );
-});
-
-test('orders source uses canonical dispatch snapshot and courier fields', async () => {
+test('orders source removes legacy rider notify exports and keeps assign APIs', async () => {
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
   const source = await readFile(resolve(process.cwd(), 'src/scripts/admin/orders.ts'), 'utf8');
 
-  assert.match(source, /shopId: runtime\?\.shopId,/);
-  assert.match(source, /shopSlug: runtime\?\.shopSlug,/);
-  assert.match(source, /shopName: runtime\?\.shop\?\.name,/);
-  assert.match(source, /tableInfo: hidden\?\.dataset\?\.table \|\| undefined,/);
-  assert.match(source, /totalAmount: hidden\?\.dataset\?\.total \|\| undefined,/);
-  assert.match(source, /userPhone: phoneButton\?\.dataset\?\.phone \|\| inlinePhoneText \|\| undefined,/);
-  assert.match(source, /riderRemindCount: hidden\?\.dataset\?\.riderRemindCount \? Number\(hidden\.dataset\.riderRemindCount\) : undefined,/);
-  assert.match(source, /import \{[^}]*buildDispatchPublishPayload[^}]*\} from '\.\.\/\.\.\/lib\/rider-dispatch\.ts';/);
-  assert.match(source, /\.\.\.buildDispatchPublishPayload\(etaMinutes, new Date\(\)\.toISOString\(\)\),/);
-  assert.match(source, /order: \{ riderRemindCount\?: number \| null \} = \{\}/);
-  assert.match(source, /payload\.courierName = driverInfo\.name;/);
-  assert.match(source, /payload\.courierPhone = driverInfo\.phone;/);
+  assert.match(source, /import \{ buildContactableRiderRows \} from '\.\.\/\.\.\/lib\/rider-dispatch\.ts';/);
+  assert.match(source, /export async function fetchAvailableRiders\(\)/);
+  assert.match(source, /export async function assignRider\(/);
+  assert.match(source, /export async function autoAssignRider\(/);
 
-  assert.doesNotMatch(source, /shop_id:/);
-  assert.doesNotMatch(source, /shop_slug:/);
-  assert.doesNotMatch(source, /shop_name:/);
-  assert.doesNotMatch(source, /table_info:/);
-  assert.doesNotMatch(source, /total_amount:/);
-  assert.doesNotMatch(source, /user_phone:/);
-  assert.doesNotMatch(source, /rider_remind_count:/);
-  assert.doesNotMatch(source, /courier_name/);
-  assert.doesNotMatch(source, /courier_phone/);
+  assert.doesNotMatch(source, /publishRiderDispatch\s*\(/);
+  assert.doesNotMatch(source, /remindRiders\s*\(/);
+  assert.doesNotMatch(source, /已通知骑手/);
+  assert.doesNotMatch(source, /已再次提醒骑手/);
 });
 
 test('order-actions source uses canonical dispatch and courier fields', async () => {
@@ -148,8 +82,8 @@ test('order-actions source uses canonical dispatch and courier fields', async ()
   const { resolve } = await import('node:path');
   const source = await readFile(resolve(process.cwd(), 'src/scripts/admin/order-actions.ts'), 'utf8');
 
-  assert.match(source, /const riderRemindCount = getReminderCountFromDataset\(orderId\);/);
-  assert.match(source, /await remindRiders\(orderId, \{ riderRemindCount \}\);/);
+  assert.doesNotMatch(source, /getReminderCountFromDataset\(/);
+  assert.doesNotMatch(source, /remindRiders\(/);
   assert.match(source, /payload\.courierName = driverInfo\.name;/);
   assert.match(source, /payload\.courierPhone = driverInfo\.phone;/);
   assert.match(source, /registerAdminGlobal\('assign-rider'/);

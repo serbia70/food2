@@ -6,6 +6,20 @@ type SettingsSubmitOptions = {
   reload?: boolean;
 };
 
+async function fetchJSONWithRetry(url: string, init?: RequestInit) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const res = await fetch(url, init);
+      const data = await res.json();
+      return { res, data };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 function createZoneField(className: string, placeholder: string, value: string, flex: string, type = 'text') {
   const input = document.createElement('input');
   input.type = type;
@@ -61,7 +75,8 @@ export function initSettingsUI(onSaved: () => void) {
         body: JSON.stringify(mergedPayload),
       });
       const data = await res.json().catch(() => ({}));
-      if (data && data.success) {
+      const saveSucceeded = Boolean(data && (data.success || data.ok === true));
+      if (saveSucceeded) {
         runtime.currentSettings = mergedPayload;
         onSaved();
         showAdminToast(options.successMessage || '保存成功');
@@ -202,7 +217,7 @@ export function initSettingsUI(onSaved: () => void) {
       zone: zoneNode?.value || '',
       address: addressNode?.value || '',
       contact: {
-        map_url: mapUrlNode?.value || '',
+        mapUrl: mapUrlNode?.value || '',
       },
     }, { successMessage: '位置信息已保存' });
   });
@@ -228,7 +243,7 @@ export function initSettingsUI(onSaved: () => void) {
   registerAdminGlobal('update-mqtt-secret', async () => {
     const mqttSecretNode = document.getElementById('mqttSecretInput') as HTMLInputElement | null;
     await submitPayload({
-      mqtt_secret: mqttSecretNode?.value || '',
+      mqttSecret: mqttSecretNode?.value || '',
     }, { successMessage: '打印机 Secret 已保存' });
   });
 
@@ -238,7 +253,7 @@ export function initSettingsUI(onSaved: () => void) {
     const rateNode = document.getElementById('rate-input') as HTMLInputElement | null;
     await submitPayload({
       currency: {
-        wechat_qr: wechatNode?.value || '',
+        wechatQr: wechatNode?.value || '',
         rate: rateNode?.value || '',
       },
     }, { successMessage: '汇率与支付已保存' });
@@ -254,7 +269,7 @@ export function initSettingsUI(onSaved: () => void) {
       name: shopNameNode?.value || '',
       category: shopCategoryNode?.value || '',
       logo: logoPreviewNode?.getAttribute('src') || '',
-      menu_text_mode: menuTextModeNode?.checked === true,
+      menuTextMode: menuTextModeNode?.checked === true,
       contact: {
         phone: phoneNode?.value || '',
       },
@@ -264,7 +279,7 @@ export function initSettingsUI(onSaved: () => void) {
   registerAdminGlobal('save-print-settings', async () => {
     const printOnCheckoutNode = document.getElementById('print-on-checkout') as HTMLInputElement | null;
     await submitPayload({
-      print_on_checkout: printOnCheckoutNode?.checked === true,
+      printOnCheckout: printOnCheckoutNode?.checked === true,
     }, { successMessage: '打印设置已保存' });
   });
 
@@ -275,7 +290,7 @@ export function initSettingsUI(onSaved: () => void) {
     await submitPayload({
       telegram: {
         token: tokenNode?.value || '',
-        chat_id: chatIdNode?.value || '',
+        chatId: chatIdNode?.value || '',
       },
     }, { successMessage: 'Telegram 设置已保存' });
   });
@@ -286,10 +301,10 @@ export function initSettingsUI(onSaved: () => void) {
     const zonesNode = document.querySelector('textarea[name="zones"]') as HTMLTextAreaElement | null;
     const deliveryTypeNode = document.getElementById('delivery-type') as HTMLSelectElement | null;
     await submitPayload({
-      delivery_type: String(deliveryTypeNode?.value || 'merchant') === 'platform' ? 'platform' : 'merchant',
+      deliveryType: String(deliveryTypeNode?.value || 'merchant') === 'platform' ? 'platform' : 'merchant',
       delivery: {
         fee: Number(feeNode?.value || 0),
-        free_threshold: Number(freeThresholdNode?.value || 0),
+        freeThreshold: Number(freeThresholdNode?.value || 0),
         zones: zonesNode?.value || '',
       },
     }, { successMessage: '配送设置已保存' });
@@ -304,9 +319,17 @@ export function initSettingsUI(onSaved: () => void) {
     if (summaryEl) summaryEl.innerHTML = '';
 
     try {
-      const res = await fetch('/api/rider/status?action=list_available');
-      const data = await res.json().catch(() => ({}));
-      type RiderInfo = { name?: string; phone?: string; status?: string; telegram_chat_id?: string };
+      const { res, data } = await fetchJSONWithRetry('/api/rider/status?action=list_available');
+      if (res.status === 401 || res.status === 403) {
+        if (summaryEl) summaryEl.innerHTML = '';
+        listEl.innerHTML = '<div style="color:#d32f2f; font-size:13px;">登录已失效，请重新登录</div>';
+        window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+        return;
+      }
+      if (!res.ok) {
+        throw new Error('load_drivers_failed');
+      }
+      type RiderInfo = { name?: string; phone?: string; status?: string; telegramChatId?: string };
       const riders: RiderInfo[] = Array.isArray(data?.riders)
         ? data.riders.map((r) => {
             const rider = typeof r === 'object' && r !== null ? r as Record<string, unknown> : {};
@@ -314,13 +337,13 @@ export function initSettingsUI(onSaved: () => void) {
               name: typeof rider.name === 'string' ? rider.name : undefined,
               phone: typeof rider.phone === 'string' ? rider.phone : undefined,
               status: typeof rider.status === 'string' ? rider.status : undefined,
-              telegram_chat_id: typeof rider.telegram_chat_id === 'string' ? rider.telegram_chat_id : undefined,
+              telegramChatId: typeof rider.telegramChatId === 'string' ? rider.telegramChatId : undefined,
             };
           })
         : [];
       listEl.replaceChildren();
 
-      const eligibleCount = riders.filter((rider) => String(rider?.telegram_chat_id || '').trim() !== '').length;
+      const eligibleCount = riders.filter((rider) => String(rider?.telegramChatId || '').trim() !== '').length;
       const blockedCount = riders.length - eligibleCount;
       if (summaryEl) {
         const summaryColor = blockedCount > 0 ? '#e65100' : '#2e7d32';
@@ -346,14 +369,14 @@ export function initSettingsUI(onSaved: () => void) {
 
         const meta = document.createElement('div');
         const status = String(rider?.status || 'offline');
-        const tgBound = String(rider?.telegram_chat_id || '').trim() !== '';
+        const tgBound = String(rider?.telegramChatId || '').trim() !== '';
         meta.style.cssText = 'margin-top:4px; font-size:12px; color:#666;';
         meta.textContent = `状态: ${status} · Telegram: ${tgBound ? '已绑定' : '未绑定'}`;
 
         if (!tgBound) {
           const warn = document.createElement('div');
           warn.style.cssText = 'margin-top:6px; font-size:12px; color:#d32f2f; font-weight:700;';
-          warn.textContent = '阻断原因：未绑定 Telegram，骑手需先在骑手端完成绑定，点击“通知骑手”也不会收到消息';
+          warn.textContent = '阻断原因：未绑定 Telegram，骑手需先在骑手端完成绑定后才可接收派单消息';
           row.append(name, meta, warn);
         } else {
           const ok = document.createElement('div');
@@ -405,12 +428,6 @@ export function initSettingsUI(onSaved: () => void) {
 
   const logoInput = document.getElementById('shop-logo-input') as HTMLInputElement | null;
   const logoPreview = document.getElementById('shop-logo-preview') as HTMLImageElement | null;
-  if (typeof window !== 'undefined') {
-    const loadDrivers = (window as any)['load-drivers'];
-    if (typeof loadDrivers === 'function') {
-      void loadDrivers();
-    }
-  }
   if (logoInput && logoPreview) {
     logoInput.addEventListener('change', async () => {
       const file = logoInput.files && logoInput.files[0];

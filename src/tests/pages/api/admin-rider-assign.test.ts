@@ -108,6 +108,69 @@ test('auto_assign picks next available rider when cursor is present', async () =
   assert.equal((await response.json()).success, true);
 });
 
+test('returns invalid_action for unsupported action values', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === 'http://localhost:3030/api/admin/riders') {
+      return new Response(JSON.stringify({ riders: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('http://localhost:3000/api/admin/rider-assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: 'admin_token=test-token' },
+      body: JSON.stringify({ action: 'bad_action', orderId: '472', shopSlug: 'demo-shop' }),
+    }),
+    cookies: createCookies(),
+  } as any);
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    success: false,
+    error: 'invalid_action',
+  });
+});
+
+test('preserves riders upstream failure semantics instead of masking as no_available_riders', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === 'http://localhost:3030/api/admin/riders') {
+      return new Response(JSON.stringify({ success: false, error: 'admin_auth_required' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('http://localhost:3000/api/admin/rider-assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: 'admin_token=test-token' },
+      body: JSON.stringify({ action: 'auto_assign', orderId: '472', shopSlug: 'demo-shop' }),
+    }),
+    cookies: createCookies(),
+  } as any);
+
+  assert.equal(response.status, 401);
+  const payload = await response.json() as Record<string, unknown>;
+  assert.equal(payload.success, false);
+  assert.equal(payload.error, 'admin_auth_required');
+  assert.equal(payload.upstream_status, 401);
+  assert.equal(payload.upstream_body, '{"success":false,"error":"admin_auth_required"}');
+});
+
 test('returns no_available_riders when no available rider exists', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -127,7 +190,7 @@ test('returns no_available_riders when no available rider exists', async () => {
     request: new Request('http://localhost:3000/api/admin/rider-assign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', cookie: 'admin_token=test-token' },
-      body: JSON.stringify({ action: 'auto_assign', orderId: '472', shopSlug: 'demo-shop' }),
+      body: JSON.stringify({ action: 'auto_assign', orderId: '473', shopSlug: 'demo-shop' }),
     }),
     cookies: createCookies(),
   } as any);
@@ -136,5 +199,53 @@ test('returns no_available_riders when no available rider exists', async () => {
   assert.deepEqual(await response.json(), {
     success: false,
     error: 'no_available_riders',
+  });
+});
+
+test('keeps assignment successful when telegram notification fails', async () => {
+  let telegramCalled = false;
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === 'http://localhost:3030/api/admin/riders') {
+      return new Response(JSON.stringify({
+        riders: [
+          { id: 9, name: '骑手C', phone: '063', status: 'available', telegramChatId: 'tg-9' },
+        ],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url === 'http://localhost:3030/api/admin/orders/474/status') {
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url === 'http://localhost:3030/api/telegram/send') {
+      telegramCalled = true;
+      throw new Error('telegram unavailable');
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('http://localhost:3000/api/admin/rider-assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: 'admin_token=test-token' },
+      body: JSON.stringify({ action: 'manual_assign', orderId: '474', riderId: '9', shopSlug: 'demo-shop' }),
+    }),
+    cookies: createCookies(),
+  } as any);
+
+  assert.equal(telegramCalled, true);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    success: true,
+    rider: {
+      id: 9,
+      name: '骑手C',
+      phone: '063',
+    },
   });
 });

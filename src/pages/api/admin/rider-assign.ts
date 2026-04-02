@@ -10,7 +10,24 @@ import {
 
 export const prerender = false;
 
-async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies']) {
+type RiderFetchResult =
+  | { success: true; riders: AssignableRider[] }
+  | { success: false; status: number; error: string; upstreamBody?: string };
+
+function readJsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function readRiderChatId(rider: AssignableRider): string {
+  return String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
+}
+
+async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies']): Promise<RiderFetchResult> {
   const res = await proxyAdminRequest({
     request,
     cookies,
@@ -18,29 +35,41 @@ async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRou
     method: 'GET',
   });
   const text = await res.text();
-  if (!res.ok) return [] as AssignableRider[];
+  const parsed = readJsonObject(text);
 
-  try {
-    const parsed = JSON.parse(text) as { riders?: unknown };
-    return readOnlineRiders(parsed.riders);
-  } catch {
-    return [] as AssignableRider[];
+  if (!res.ok) {
+    const error = typeof parsed?.error === 'string' && parsed.error.trim() ? parsed.error.trim() : 'riders_upstream_failed';
+    return {
+      success: false,
+      status: res.status || 502,
+      error,
+      upstreamBody: text || undefined,
+    };
   }
+
+  return {
+    success: true,
+    riders: readOnlineRiders(parsed?.riders),
+  };
 }
 
 async function notifyAssignedRider({ rider, shopSlug }: { rider: AssignableRider; shopSlug: string }) {
-  const chatId = String((rider as { telegramChatId?: unknown; telegram_chat_id?: unknown }).telegramChatId || (rider as { telegram_chat_id?: unknown }).telegram_chat_id || '').trim();
+  const chatId = readRiderChatId(rider);
   if (!chatId) return;
 
-  await fetch(`${API_BASE_URL}/api/telegram/send`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      shopSlug,
-      chat_id: chatId,
-      text: `订单已指派给你：${String(rider.name || '').trim()}`,
-    }),
-  });
+  try {
+    await fetch(`${API_BASE_URL}/api/telegram/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopSlug,
+        chat_id: chatId,
+        text: `订单已指派给你：${String(rider.name || '').trim()}`,
+      }),
+    });
+  } catch {
+    return;
+  }
 }
 
 export const POST: APIRoute = async ({ request, cookies }) => {
@@ -51,6 +80,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const lastAssignedRiderId = String(body.lastAssignedRiderId || '').trim();
   const manualRiderId = String(body.riderId || '').trim();
 
+  if (action !== 'manual_assign' && action !== 'auto_assign') {
+    return new Response(JSON.stringify({ success: false, error: 'invalid_action' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   if (!orderId) {
     return new Response(JSON.stringify({ success: false, error: 'order_id_required' }), {
       status: 400,
@@ -58,7 +94,20 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  const riders = await fetchAvailableRiders(request, cookies);
+  const ridersResult = await fetchAvailableRiders(request, cookies);
+  if (!ridersResult.success) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: ridersResult.error,
+      upstream_status: ridersResult.status,
+      ...(ridersResult.upstreamBody ? { upstream_body: ridersResult.upstreamBody } : {}),
+    }), {
+      status: ridersResult.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const riders = ridersResult.riders;
   let target: AssignableRider | null = null;
 
   if (action === 'manual_assign') {

@@ -1,17 +1,21 @@
 import type { Rider } from '../types/index.ts';
 
-export type AssignableRider = Pick<Rider, 'id' | 'name' | 'phone' | 'status'>;
+export type AssignableRider = Pick<Rider, 'id' | 'name' | 'phone' | 'status' | 'telegramChatId'> & {
+  telegram_chat_id?: string;
+};
 
 export function readOnlineRiders(input: unknown): AssignableRider[] {
   if (!Array.isArray(input)) return [];
 
   return input
-    .filter((row): row is AssignableRider => !!row && typeof row === 'object')
+    .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
     .map((row) => ({
-      id: (row as AssignableRider).id,
-      name: String((row as AssignableRider).name || '').trim(),
-      phone: String((row as AssignableRider).phone || '').trim(),
-      status: String((row as AssignableRider).status || '').trim(),
+      id: row.id as AssignableRider['id'],
+      name: String(row.name || '').trim(),
+      phone: String(row.phone || '').trim(),
+      status: String(row.status || '').trim() as AssignableRider['status'],
+      telegramChatId: typeof row.telegramChatId === 'string' ? row.telegramChatId : undefined,
+      telegram_chat_id: typeof row.telegram_chat_id === 'string' ? row.telegram_chat_id : undefined,
     }))
     .filter((row) => row.status === 'available' && row.phone)
     .sort((a, b) => Number(a.id || 0) - Number(b.id || 0));

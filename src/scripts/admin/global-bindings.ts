@@ -5,7 +5,7 @@ import { bindBillingGlobals } from './billing-ui';
 import { loadReservations, loadReservationStats } from './reservations';
 import { loadStats } from './stats';
 import { handleTableCheckout, performCheckout } from './table-actions';
-import { updateOrderStatus, markPaid, openDeliveryModal, closeDeliveryModal, confirmDelivery } from './order-actions';
+import { updateOrderStatus, markPaid } from './order-actions';
 import {
   openEditModal,
   saveEditProd,
@@ -47,9 +47,6 @@ export function bindAdminGlobals() {
   registerAdminGlobal('performCheckout', performCheckout);
   registerAdminGlobal('updateOrderStatus', updateOrderStatus);
   registerAdminGlobal('markPaid', markPaid);
-  registerAdminGlobal('openDeliveryModal', openDeliveryModal);
-  registerAdminGlobal('closeDeliveryModal', closeDeliveryModal);
-  registerAdminGlobal('confirmDelivery', confirmDelivery);
   registerAdminGlobal('openRejectModal', openRejectModal);
   registerAdminGlobal('closeRejectModal', closeRejectModal);
   registerAdminGlobal('confirmReject', confirmReject);

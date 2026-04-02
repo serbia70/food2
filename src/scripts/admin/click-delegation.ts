@@ -2,9 +2,8 @@ import { showTab, logout } from './core';
 import { loadReservations } from './reservations';
 import { loadStats } from './stats';
 import { showCommissionRecords } from './billing-ui';
-import { markPaid, openDeliveryModal, closeDeliveryModal, confirmDelivery } from './order-actions';
+import { markPaid } from './order-actions';
 import { handlePrintOrder } from './table-actions';
-import { loadOrderStats, archiveOldOrders, deleteArchivedOrders } from './orders';
 import { showAdminToast } from './globals';
 import { openEditModal, saveEditProd, localizeImages, moveCategory, delCategory, moveProduct, delProd, addProd } from './products';
 import { getAdminHandlers } from './globals';
@@ -75,9 +74,6 @@ export function bindAdminClickDelegation(options: {
     else if (action === 'reload-page') location.reload();
     else if (action === 'load-reservations') loadReservations();
     else if (action === 'load-stats') loadStats();
-    else if (action === 'load-order-stats') void loadOrderStats();
-    else if (action === 'archive-old-orders') void archiveOldOrders();
-    else if (action === 'delete-archived-orders') void deleteArchivedOrders();
     else if (action === 'table-checkout') (window as any).handleTableCheckout?.(table || '');
     else if (action === 'table-print') void handlePrintTableUI(table || '');
     else if (action === 'table-order') handleTableOrderForTable(table || '');
@@ -96,9 +92,6 @@ export function bindAdminClickDelegation(options: {
     else if (action === 'confirm-checkout') void confirmCheckoutUI();
     else if (action === 'mark-paid') markPaid(id || '');
     else if (action === 'open-reject') openRejectModal(id || '');
-    else if (action === 'open-delivery') openDeliveryModal(id || '');
-    else if (action === 'confirm-delivery') confirmDelivery();
-    else if (action === 'close-delivery-modal') closeDeliveryModal();
     else if (action === 'show-commission-records') void showCommissionRecords();
     else if (action === 'print-order') void handlePrintOrder(id || '');
     else if (action === 'print-current-order') void handlePrintOrder(String(getCurrentOrderId() || ''));
@@ -110,7 +103,7 @@ export function bindAdminClickDelegation(options: {
       fetch('/api/admin/settings/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_password: newPassword }),
+        body: JSON.stringify({ newPassword: newPassword }),
       })
         .then((res) => res.json().catch(() => ({})).then((data) => ({ ok: res.ok, data })))
         .then(({ ok, data }) => {
@@ -151,7 +144,7 @@ export function bindAdminClickDelegation(options: {
       const name = String(nameEl?.value || '').trim();
       const sub = String(subEl?.value || '').trim();
       if (!name) return alert('分类名称必填');
-      const payload = { name, sub_name: sub || name };
+      const payload = { name, subName: sub || name };
       fetch('/api/admin/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
         .then(res => res.json())
         .then(data => { if (data.success) location.reload(); else alert('创建失败'); });

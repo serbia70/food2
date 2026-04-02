@@ -152,7 +152,13 @@ test('order-actions source uses canonical dispatch and courier fields', async ()
   assert.match(source, /await remindRiders\(orderId, \{ riderRemindCount \}\);/);
   assert.match(source, /payload\.courierName = driverInfo\.name;/);
   assert.match(source, /payload\.courierPhone = driverInfo\.phone;/);
+  assert.match(source, /registerAdminGlobal\('assign-rider'/);
+  assert.match(source, /registerAdminGlobal\('auto-assign-rider'/);
 
+  assert.doesNotMatch(source, /openDeliveryModal/);
+  assert.doesNotMatch(source, /closeDeliveryModal/);
+  assert.doesNotMatch(source, /confirmDelivery/);
+  assert.doesNotMatch(source, /publishRiderDispatch/);
   assert.doesNotMatch(source, /rider_remind_count/);
   assert.doesNotMatch(source, /courier_name/);
   assert.doesNotMatch(source, /courier_phone/);
@@ -391,6 +397,9 @@ test('admin modals source uses canonical category fields', async () => {
 
   assert.match(source, /\{categories && categories\.map\(\(c: any\) => <option value=\{c\.id\}>\{c\.name\} \(\{c\.subName\}\)<\/option>\)\}/);
 
+  assert.doesNotMatch(source, /id="delivery-modal"/);
+  assert.doesNotMatch(source, /data-admin-action="confirm-delivery"/);
+  assert.doesNotMatch(source, /data-admin-action="close-delivery-modal"/);
   assert.doesNotMatch(source, /sub_name/);
 });
 
@@ -519,6 +528,12 @@ test('click delegation source uses canonical admin payload fields', async () => 
   assert.match(source, /body: JSON\.stringify\(\{ newPassword: newPassword \}\),/);
   assert.match(source, /const payload = \{ name, subName: sub \|\| name \};/);
 
+  assert.doesNotMatch(source, /open-delivery/);
+  assert.doesNotMatch(source, /confirm-delivery/);
+  assert.doesNotMatch(source, /close-delivery-modal/);
+  assert.doesNotMatch(source, /openDeliveryModal/);
+  assert.doesNotMatch(source, /closeDeliveryModal/);
+  assert.doesNotMatch(source, /confirmDelivery/);
   assert.doesNotMatch(source, /sub_name/);
 });
 

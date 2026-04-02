@@ -1,89 +1,8 @@
 
 import { registerAdminGlobal, showAdminToast } from './globals';
-import { fetchAvailableRiders, publishRiderDispatch, remindRiders, assignRider, autoAssignRider } from './orders';
+import { fetchAvailableRiders, remindRiders, assignRider, autoAssignRider } from './orders';
 
 const DELIVERY_ETA_OPTIONS = [10, 15, 20, 30, 45];
-
-// ================== Delivery Modal Logic ==================
-
-export function openDeliveryModal(orderId: string) {
-  const modal = document.getElementById('delivery-modal');
-  const listEl = document.getElementById('driver-select-list');
-  if (!modal || !listEl) return;
-
-  modal.dataset.orderId = orderId;
-  modal.dataset.etaMinutes = '';
-  listEl.replaceChildren();
-
-  DELIVERY_ETA_OPTIONS.forEach((minutes, index) => {
-    const option = document.createElement('button');
-    option.type = 'button';
-    option.className = 'driver-option';
-    option.dataset.etaMinutes = String(minutes);
-    option.textContent = `${minutes} 分钟`;
-    option.style.width = '100%';
-    option.style.padding = '10px';
-    option.style.border = '1px solid #eee';
-    option.style.borderRadius = '6px';
-    option.style.cursor = 'pointer';
-    option.style.background = '#fff';
-    option.style.marginBottom = '8px';
-    option.addEventListener('click', () => {
-      modal.dataset.etaMinutes = String(minutes);
-      listEl.querySelectorAll('[data-eta-minutes]').forEach((node) => {
-        const item = node as HTMLElement;
-        item.style.background = '#fff';
-        item.style.borderColor = '#eee';
-      });
-      option.style.background = '#eef2ff';
-      option.style.borderColor = '#6366f1';
-    });
-
-    listEl.appendChild(option);
-    if (index === 1) option.click();
-  });
-
-  modal.style.display = 'flex';
-}
-
-export function closeDeliveryModal() {
-  const modal = document.getElementById('delivery-modal');
-  if (modal) {
-    modal.style.display = 'none';
-    delete modal.dataset.orderId;
-    delete modal.dataset.etaMinutes;
-  }
-}
-
-// Expose helper for onclick selection
-registerAdminGlobal('selectDriver', (idx: number) => {
-  const modal = document.getElementById('delivery-modal');
-  const listEl = document.getElementById('driver-select-list');
-  if (!modal || !listEl) return;
-
-  const options = listEl.querySelectorAll('[data-eta-minutes]');
-  const target = options[idx] as HTMLElement | undefined;
-  if (!target) return;
-  target.click();
-});
-
-export async function confirmDelivery() {
-  const modal = document.getElementById('delivery-modal');
-  if (!modal || !modal.dataset.orderId) return;
-
-  const etaMinutes = Number(modal.dataset.etaMinutes || 0);
-  if (!etaMinutes) {
-    showAdminToast('请选择预计取餐时间');
-    return;
-  }
-
-  try {
-    await publishRiderDispatch(modal.dataset.orderId, etaMinutes);
-    closeDeliveryModal();
-  } catch (error: any) {
-    showAdminToast(error?.message || '发布失败');
-  }
-}
 
 function getReminderCountFromDataset(orderId: string): number {
   const candidates = [
@@ -192,48 +111,10 @@ function readAssignContext(orderId: string) {
   };
 }
 
-async function pickDispatchEtaMinutes() {
-  const modal = document.getElementById('delivery-modal');
-  const listEl = document.getElementById('driver-select-list');
-  if (!modal || !listEl) return 0;
-
-  modal.dataset.etaMinutes = '';
-  listEl.replaceChildren();
-
-  DELIVERY_ETA_OPTIONS.forEach((minutes, index) => {
-    const option = document.createElement('button');
-    option.type = 'button';
-    option.className = 'driver-option';
-    option.dataset.etaMinutes = String(minutes);
-    option.textContent = `${minutes} 分钟`;
-    option.style.width = '100%';
-    option.style.padding = '10px';
-    option.style.border = '1px solid #eee';
-    option.style.borderRadius = '6px';
-    option.style.cursor = 'pointer';
-    option.style.background = '#fff';
-    option.style.marginBottom = '8px';
-    option.addEventListener('click', () => {
-      modal.dataset.etaMinutes = String(minutes);
-      listEl.querySelectorAll('[data-eta-minutes]').forEach((node) => {
-        const item = node as HTMLElement;
-        item.style.background = '#fff';
-        item.style.borderColor = '#eee';
-      });
-      option.style.background = '#eef2ff';
-      option.style.borderColor = '#6366f1';
-    });
-
-    listEl.appendChild(option);
-    if (index === 1) option.click();
-  });
-
+function pickDispatchEtaMinutes() {
   const selected = prompt(`请选择预计取餐时间：\n${DELIVERY_ETA_OPTIONS.map((m, idx) => `${idx + 1}. ${m} 分钟`).join('\n')}\n\n请输入序号`);
   if (!selected) return 0;
-  const eta = DELIVERY_ETA_OPTIONS[Number(selected) - 1] || 0;
-  if (!eta) return 0;
-  modal.dataset.etaMinutes = String(eta);
-  return eta;
+  return DELIVERY_ETA_OPTIONS[Number(selected) - 1] || 0;
 }
 
 registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
@@ -241,7 +122,7 @@ registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
   if (!orderId) return;
 
   try {
-    const pickupEtaMinutes = await pickDispatchEtaMinutes();
+    const pickupEtaMinutes = pickDispatchEtaMinutes();
     if (!pickupEtaMinutes) {
       showAdminToast('请选择预计取餐时间');
       return;
@@ -276,7 +157,7 @@ registerAdminGlobal('auto-assign-rider', async (el: HTMLElement) => {
   if (!orderId) return;
 
   try {
-    const pickupEtaMinutes = await pickDispatchEtaMinutes();
+    const pickupEtaMinutes = pickDispatchEtaMinutes();
     if (!pickupEtaMinutes) {
       showAdminToast('请选择预计取餐时间');
       return;

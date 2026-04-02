@@ -13,7 +13,7 @@ const { categories } = Astro.props;
     <div class="form-group">
       <label>分类 (Category)</label>
       <select id="edit-cat" data-admin-change="edit-category" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
-        {categories && categories.map((c: any) => <option value={c.id}>{c.name} ({c.sub_name})</option>)}
+        {categories && categories.map((c: any) => <option value={c.id}>{c.name} ({c.subName})</option>)}
         <option value="new">➕ 新建分类 (Create New)</option>
       </select>
     </div>
@@ -58,21 +58,6 @@ const { categories } = Astro.props;
     <div class="modal-actions" style="margin-top:20px; display:flex; gap:10px;">
       <button class="btn-cancel" data-admin-action="close-edit-modal" style="flex:1">取消</button>
       <button class="btn-save" data-admin-action="save-edit-product" style="flex:1">💾 保存修改</button>
-    </div>
-  </div>
-</div>
-
-<!-- 取餐 ETA 通知弹窗 -->
-<div id="delivery-modal" class="modal" style="display:none;">
-  <div class="modal-content" style="max-width:400px;">
-    <h3>🛵 预计多久可取餐</h3>
-    <p style="margin:0 0 12px; color:#666; font-size:13px;">请选择预计可取餐时间，系统将通知骑手前来取餐。</p>
-    <div id="driver-select-list" style="max-height:300px; overflow-y:auto; margin-bottom:15px; border:1px solid #eee; padding:10px; border-radius:4px;">
-      <!-- JS 渲染 ETA 选项 -->
-    </div>
-    <div style="margin-top:20px; display:flex; gap:10px;">
-      <button class="btn-blue" style="flex:1" data-admin-action="confirm-delivery">🔔 通知骑手</button>
-      <button class="btn-del" style="flex:1" data-admin-action="close-delivery-modal">取消</button>
     </div>
   </div>
 </div>

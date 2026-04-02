@@ -113,26 +113,37 @@ test('buildDispatchPublishPayload stores awaiting_courier state and eta metadata
 
 test('filterRiderActiveOrders 仅返回 awaiting_courier 和当前骑手 delivering', () => {
   const allOrders = [
-    { id: 1, status: 'awaiting_courier', courier_phone: '' },
+    { id: 1, status: 'awaiting_courier', courier_phone: '', createdAt: '2026-04-03T20:00:00.000Z' },
     { id: 2, status: 'delivering', courier_phone: '06111' },
     { id: 3, status: 'delivering', courier_phone: '06222' },
     { id: 4, status: 'completed', courier_phone: '06111' },
     { id: 5, status: 'pending', courier_phone: '' },
   ];
 
-  assert.deepEqual(filterRiderActiveOrders(allOrders, '06111').map((order) => order.id), [1, 2]);
+  assert.deepEqual(filterRiderActiveOrders(allOrders, '06111', '2026-04-03T20:30:00.000Z').map((order) => order.id), [1, 2]);
 });
 
 test('filterRiderActiveOrders 在空手机号时仅返回 awaiting_courier', () => {
   const allOrders = [
-    { id: 1, status: 'awaiting_courier', courier_phone: '' },
+    { id: 1, status: 'awaiting_courier', courier_phone: '', createdAt: '2026-04-03T20:00:00.000Z' },
     { id: 2, status: 'delivering', courier_phone: '06111' },
     { id: 3, status: 'delivering', courier_phone: '06222' },
     { id: 4, status: 'completed', courier_phone: '06111' },
   ];
 
-  assert.deepEqual(filterRiderActiveOrders(allOrders, '').map((order) => order.id), [1]);
-  assert.deepEqual(filterRiderActiveOrders(allOrders, '   ').map((order) => order.id), [1]);
+  assert.deepEqual(filterRiderActiveOrders(allOrders, '', '2026-04-03T20:30:00.000Z').map((order) => order.id), [1]);
+  assert.deepEqual(filterRiderActiveOrders(allOrders, '   ', '2026-04-03T20:30:00.000Z').map((order) => order.id), [1]);
+});
+
+
+test('filterRiderActiveOrders 过滤过期 awaiting_courier 旧单', () => {
+  const allOrders = [
+    { id: 1, status: 'awaiting_courier', courier_phone: '', createdAt: '2026-04-03T20:25:00.000Z' },
+    { id: 2, status: 'awaiting_courier', courier_phone: '', createdAt: '2026-03-30T20:25:00.000Z' },
+    { id: 3, status: 'delivering', courier_phone: '06111', createdAt: '2026-03-30T20:25:00.000Z' },
+  ];
+
+  assert.deepEqual(filterRiderActiveOrders(allOrders, '06111', '2026-04-03T20:30:00.000Z').map((order) => order.id), [1, 3]);
 });
 
 test('buildContactableRiderRows 仅保留可联系的 available 骑手', () => {

@@ -42,23 +42,87 @@ export function buildContactableRiderRows<T extends Pick<Rider, 'id' | 'name' | 
   return pickAvailableRiders(riders);
 }
 
-export function filterRiderActiveOrders<T extends { status?: string | null; courier_phone?: string | null; courierPhone?: string | null }>(
+const STALE_AWAITING_ORDER_MS = 6 * 60 * 60 * 1000;
+
+function readOrderActiveTimestamp(order: {
+  pickupReadyAt?: string | null;
+  pickup_ready_at?: string | null;
+  riderBroadcastedAt?: string | null;
+  rider_broadcasted_at?: string | null;
+  createdAt?: string | null;
+  created_at?: string | null;
+}): number {
+  return parseTimestamp(
+    String(
+      order?.pickupReadyAt
+      || order?.pickup_ready_at
+      || order?.riderBroadcastedAt
+      || order?.rider_broadcasted_at
+      || order?.createdAt
+      || order?.created_at
+      || '',
+    ),
+  );
+}
+
+function isActiveAwaitingCourierOrder(
+  order: {
+    status?: string | null;
+    pickupReadyAt?: string | null;
+    pickup_ready_at?: string | null;
+    riderBroadcastedAt?: string | null;
+    rider_broadcasted_at?: string | null;
+    createdAt?: string | null;
+    created_at?: string | null;
+  },
+  nowIso?: string,
+): boolean {
+  if (!isRiderClaimableOrder(order)) return false;
+  const now = parseTimestamp(nowIso || new Date().toISOString());
+  const orderTs = readOrderActiveTimestamp(order);
+  if (now <= 0 || orderTs <= 0) return true;
+  return now - orderTs <= STALE_AWAITING_ORDER_MS;
+}
+
+export function filterRiderActiveOrders<T extends {
+  status?: string | null;
+  courier_phone?: string | null;
+  courierPhone?: string | null;
+  pickupReadyAt?: string | null;
+  pickup_ready_at?: string | null;
+  riderBroadcastedAt?: string | null;
+  rider_broadcasted_at?: string | null;
+  createdAt?: string | null;
+  created_at?: string | null;
+}>(
   orders: T[],
   riderPhone?: string | null,
+  nowIso?: string,
 ): T[] {
   const phone = String(riderPhone || '').trim();
   return orders.filter((order) => {
-    if (isRiderClaimableOrder(order)) return true;
+    if (isActiveAwaitingCourierOrder(order, nowIso)) return true;
     if (String(order?.status || '') !== 'delivering') return false;
     if (!phone) return false;
     return String(order?.courierPhone || order?.courier_phone || '').trim() === phone;
   });
 }
 
-export function filterRiderDashboardOrders<T extends { status?: string | null; courier_phone?: string | null; courierPhone?: string | null }>(
+export function filterRiderDashboardOrders<T extends {
+  status?: string | null;
+  courier_phone?: string | null;
+  courierPhone?: string | null;
+  pickupReadyAt?: string | null;
+  pickup_ready_at?: string | null;
+  riderBroadcastedAt?: string | null;
+  rider_broadcasted_at?: string | null;
+  createdAt?: string | null;
+  created_at?: string | null;
+}>(
   orders: T[],
   riderPhone?: string | null,
   view: 'active' | 'history' = 'active',
+  nowIso?: string,
 ): T[] {
   if (view === 'history') {
     const phone = String(riderPhone || '').trim();
@@ -67,7 +131,7 @@ export function filterRiderDashboardOrders<T extends { status?: string | null; c
       (order) => String(order?.status || '') === 'completed' && String(order?.courierPhone || order?.courier_phone || '').trim() === phone,
     );
   }
-  return filterRiderActiveOrders(orders, riderPhone);
+  return filterRiderActiveOrders(orders, riderPhone, nowIso);
 }
 
 export function getRiderStatusHintCopy(status: string | null | undefined): string {

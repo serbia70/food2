@@ -55,6 +55,7 @@ export const GET: APIRoute = async ({ url }) => {
         data.orders.map((order) => normalizeRiderOrder(order)),
         riderPhone,
         view === 'history' ? 'history' : 'active',
+        new Date().toISOString(),
       );
     }
 

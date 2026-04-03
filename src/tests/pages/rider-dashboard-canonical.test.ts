@@ -36,6 +36,11 @@ test('rider dashboard source uses canonical rider and order fields', async () =>
   assert.match(source, /await navigator\.clipboard\.writeText\(bindCommand\);/);
   assert.match(source, /const statusRes = await fetch\(`\/api\/rider\/orders\?phone=\$\{encodeURIComponent\(rider\.phone \|\| ''\)\}&view=active`\);/);
   assert.match(source, /refreshRiderSessionFromPayload\(statusData\);/);
+  assert.match(source, /async function handlePageWake\(\) \{/);
+  assert.match(source, /await refreshTelegramBindingStatus\(\);/);
+  assert.match(source, /await loadOrders\(\);/);
+  assert.match(source, /async function handleVisibilityChange\(\) \{/);
+  assert.match(source, /if \(!document\.hidden\) \{/);
   assert.match(source, /telegramBound = false;/);
   assert.doesNotMatch(source, /location\.href = bindState\.(httpsUrl|tgUrl);/);
   assert.match(source, /const items = parseItems\(o\.itemsJson\);/);

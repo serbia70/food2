@@ -106,13 +106,15 @@ import Layout from '../../layouts/Layout.astro';
     let deepLinkHintShown = false;
     let telegramBound = false;
 
-    function handlePageWake() {
-      loadOrders();
+    async function handlePageWake() {
+      await refreshTelegramBindingStatus();
+      await loadOrders();
     }
 
-    function handleVisibilityChange() {
+    async function handleVisibilityChange() {
       if (!document.hidden) {
-        loadOrders();
+        await refreshTelegramBindingStatus();
+        await loadOrders();
       }
     }
 

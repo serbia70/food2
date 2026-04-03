@@ -161,7 +161,7 @@ import Layout from '../../layouts/Layout.astro';
       panel.innerHTML = `
         <div class="telegram-binding-copy ${bound ? 'bound' : 'unbound'}">${copy}</div>
         ${bound ? '<button id="unbind-telegram-btn" class="btn-action" type="button">解除 Telegram 绑定</button>' : '<button id="bind-telegram-btn" class="btn-action btn-map" type="button">绑定 Telegram</button>'}
-        ${!showFallbackActions ? '' : '<div class="telegram-binding-tip">如果 Telegram 里只出现普通 /start，请点“复制绑定命令”后直接发送给机器人。</div><div class="telegram-binding-actions"><a id="bind-telegram-link" class="btn-action btn-map" target="_blank" rel="noreferrer">重新打开 Telegram</a><button id="copy-telegram-bind-link-btn" class="btn-action" type="button">复制绑定链接</button><button id="copy-telegram-bind-command-btn" class="btn-action" type="button">复制绑定命令</button></div>'}
+        ${!showFallbackActions ? '' : '<div class="telegram-binding-steps-title">绑定步骤</div><ol class="telegram-binding-steps"><li>先点“打开 Telegram”</li><li>如果 Telegram 聊天页是空白，再点“复制绑定命令”并发送给机器人</li><li>发送成功后回到此页查看状态</li></ol><div class="telegram-binding-tip">如果 Telegram 里只出现普通 /start，请点“复制绑定命令”后直接发送给机器人。</div><div class="telegram-binding-actions"><a id="bind-telegram-link" class="btn-action btn-map" target="_blank" rel="noreferrer">打开 Telegram</a><button id="copy-telegram-bind-link-btn" class="btn-action" type="button">复制绑定链接</button><button id="copy-telegram-bind-command-btn" class="btn-action" type="button">复制绑定命令</button></div>'}
       `;
       const bindBtn = document.getElementById('bind-telegram-btn');
       if (bindBtn) bindBtn.addEventListener('click', bindTelegram);
@@ -243,8 +243,6 @@ import Layout from '../../layouts/Layout.astro';
           ready: true,
         };
         renderTelegramBindingPanel();
-        if (bindState.httpsUrl) location.href = bindState.httpsUrl;
-        else location.href = bindState.tgUrl;
       } catch (error) {
         alert(`Telegram 绑定入口创建失败: ${error instanceof Error ? error.message : 'unknown error'}`);
       }

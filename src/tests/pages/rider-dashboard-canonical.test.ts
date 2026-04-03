@@ -15,7 +15,9 @@ test('rider dashboard source uses canonical rider and order fields', async () =>
   assert.match(source, /telegramChatId: rider\.telegramChatId \|\| '__pending_refresh__',/);
   assert.match(source, /const bindLink = String\(bindState\.httpsUrl \|\| bindState\.tgUrl \|\| ''\)\.trim\(\);/);
   assert.match(source, /const showFallbackActions = !bound && bindState\.ready;/);
-  assert.match(source, /<a id="bind-telegram-link" class="btn-action btn-map" target="_blank" rel="noreferrer">重新打开 Telegram<\/a>/);
+  assert.match(source, /<div class="telegram-binding-steps-title">绑定步骤<\/div>/);
+  assert.match(source, /<ol class="telegram-binding-steps"><li>先点“打开 Telegram”<\/li><li>如果 Telegram 聊天页是空白，再点“复制绑定命令”并发送给机器人<\/li><li>发送成功后回到此页查看状态<\/li><\/ol>/);
+  assert.match(source, /<a id="bind-telegram-link" class="btn-action btn-map" target="_blank" rel="noreferrer">打开 Telegram<\/a>/);
   assert.match(source, /<button id="copy-telegram-bind-link-btn" class="btn-action" type="button">复制绑定链接<\/button>/);
   assert.match(source, /<button id="copy-telegram-bind-command-btn" class="btn-action" type="button">复制绑定命令<\/button>/);
   assert.match(source, /<button id="unbind-telegram-btn" class="btn-action" type="button">解除 Telegram 绑定<\/button>/);
@@ -35,7 +37,7 @@ test('rider dashboard source uses canonical rider and order fields', async () =>
   assert.match(source, /const statusRes = await fetch\(`\/api\/rider\/orders\?phone=\$\{encodeURIComponent\(rider\.phone \|\| ''\)\}&view=active`\);/);
   assert.match(source, /refreshRiderSessionFromPayload\(statusData\);/);
   assert.match(source, /telegramBound = false;/);
-  assert.match(source, /if \(bindState\.httpsUrl\) location\.href = bindState\.httpsUrl;/);
+  assert.doesNotMatch(source, /location\.href = bindState\.(httpsUrl|tgUrl);/);
   assert.match(source, /const items = parseItems\(o\.itemsJson\);/);
   assert.match(source, /const address = o\.tableInfo \|\| '';/);
   assert.match(source, /const phone = o\.userPhone \|\| '';/);

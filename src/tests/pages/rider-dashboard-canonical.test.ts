@@ -16,8 +16,11 @@ test('rider dashboard source uses canonical rider and order fields', async () =>
   assert.match(source, /const bindLink = String\(bindState\.httpsUrl \|\| bindState\.tgUrl \|\| ''\)\.trim\(\);/);
   assert.match(source, /<a id="bind-telegram-link" class="btn-action btn-map" target="_blank" rel="noreferrer">打开 Telegram 绑定<\/a>/);
   assert.match(source, /<button id="copy-telegram-bind-link-btn" class="btn-action" type="button">复制绑定链接<\/button>/);
+  assert.match(source, /<button id="copy-telegram-bind-command-btn" class="btn-action" type="button">复制绑定命令<\/button>/);
   assert.match(source, /bindLinkEl\.href = bindLink;/);
   assert.match(source, /await navigator\.clipboard\.writeText\(bindLink\);/);
+  assert.match(source, /const bindCommand = String\(bindState\.startCommand \|\| ''\)\.trim\(\);/);
+  assert.match(source, /await navigator\.clipboard\.writeText\(bindCommand\);/);
   assert.match(source, /location\.href = bindState\.tgUrl;/);
   assert.match(source, /const items = parseItems\(o\.itemsJson\);/);
   assert.match(source, /const address = o\.tableInfo \|\| '';/);

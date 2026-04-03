@@ -149,7 +149,7 @@ import Layout from '../../layouts/Layout.astro';
       return restaurantMatched && (orderId === deepLinkOrderId || orderNo === deepLinkOrderId);
     }
 
-    let bindState = { httpsUrl: '', tgUrl: '' };
+    let bindState = { httpsUrl: '', tgUrl: '', startCommand: '' };
 
     function renderTelegramBindingPanel() {
       const panel = document.getElementById('telegram-binding-panel');
@@ -160,7 +160,7 @@ import Layout from '../../layouts/Layout.astro';
       panel.innerHTML = `
         <div class="telegram-binding-copy ${bound ? 'bound' : 'unbound'}">${copy}</div>
         ${bound ? '' : '<button id="bind-telegram-btn" class="btn-action btn-map" type="button">绑定 Telegram</button>'}
-        ${bound || !bindLink ? '' : '<div class="telegram-binding-actions"><a id="bind-telegram-link" class="btn-action btn-map" target="_blank" rel="noreferrer">打开 Telegram 绑定</a><button id="copy-telegram-bind-link-btn" class="btn-action" type="button">复制绑定链接</button></div>'}
+        ${bound || !bindLink ? '' : '<div class="telegram-binding-actions"><a id="bind-telegram-link" class="btn-action btn-map" target="_blank" rel="noreferrer">打开 Telegram 绑定</a><button id="copy-telegram-bind-link-btn" class="btn-action" type="button">复制绑定链接</button><button id="copy-telegram-bind-command-btn" class="btn-action" type="button">复制绑定命令</button></div>'}
       `;
       const bindBtn = document.getElementById('bind-telegram-btn');
       if (bindBtn) bindBtn.addEventListener('click', bindTelegram);
@@ -168,6 +168,8 @@ import Layout from '../../layouts/Layout.astro';
       if (bindLinkEl instanceof HTMLAnchorElement && bindLink) bindLinkEl.href = bindLink;
       const copyBtn = document.getElementById('copy-telegram-bind-link-btn');
       if (copyBtn) copyBtn.addEventListener('click', copyTelegramBindLink);
+      const copyCommandBtn = document.getElementById('copy-telegram-bind-command-btn');
+      if (copyCommandBtn) copyCommandBtn.addEventListener('click', copyTelegramBindCommand);
     }
 
     function persistRiderSession(nextRider) {
@@ -197,6 +199,17 @@ import Layout from '../../layouts/Layout.astro';
       }
     }
 
+    async function copyTelegramBindCommand() {
+      const bindCommand = String(bindState.startCommand || '').trim();
+      if (!bindCommand) return;
+      try {
+        await navigator.clipboard.writeText(bindCommand);
+        alert('绑定命令已复制，请直接发给 Telegram 机器人');
+      } catch {
+        alert('复制失败，请稍后重试');
+      }
+    }
+
     async function bindTelegram() {
       if (!rider) return;
       try {
@@ -212,6 +225,7 @@ import Layout from '../../layouts/Layout.astro';
         bindState = {
           httpsUrl: String(data.bind_url || '').trim(),
           tgUrl: String(data.tg_bind_url || '').trim(),
+          startCommand: String(data.start_command || '').trim(),
         };
         renderTelegramBindingPanel();
         if (bindState.tgUrl) location.href = bindState.tgUrl;

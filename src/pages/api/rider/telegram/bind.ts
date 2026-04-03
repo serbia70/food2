@@ -41,9 +41,11 @@ export const POST: APIRoute = async ({ request }) => {
 
   const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
   const token = buildRiderTelegramBindToken({ riderId, riderPhone, expiresAt }, secret);
-  const bindUrl = `https://t.me/${botName}?start=${encodeURIComponent(`bind_${token}`)}`;
+  const startParam = encodeURIComponent(`bind_${token}`);
+  const bindUrl = `https://t.me/${botName}?start=${startParam}`;
+  const tgBindUrl = `tg://resolve?domain=${encodeURIComponent(botName)}&start=${startParam}`;
 
-  return new Response(JSON.stringify({ success: true, bind_url: bindUrl, expires_at: expiresAt }), {
+  return new Response(JSON.stringify({ success: true, bind_url: bindUrl, tg_bind_url: tgBindUrl, expires_at: expiresAt }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });

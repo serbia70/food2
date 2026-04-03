@@ -149,17 +149,25 @@ import Layout from '../../layouts/Layout.astro';
       return restaurantMatched && (orderId === deepLinkOrderId || orderNo === deepLinkOrderId);
     }
 
+    let bindState = { httpsUrl: '', tgUrl: '' };
+
     function renderTelegramBindingPanel() {
       const panel = document.getElementById('telegram-binding-panel');
       if (!panel || !rider) return;
       const bound = String(rider.telegramChatId || '').trim() !== '' && rider.telegramChatId !== '__pending_refresh__';
       const copy = getRiderTelegramBindingCopy(bound ? rider : { telegramChatId: '' });
+      const bindLink = String(bindState.httpsUrl || bindState.tgUrl || '').trim();
       panel.innerHTML = `
         <div class="telegram-binding-copy ${bound ? 'bound' : 'unbound'}">${copy}</div>
         ${bound ? '' : '<button id="bind-telegram-btn" class="btn-action btn-map" type="button">绑定 Telegram</button>'}
+        ${bound || !bindLink ? '' : '<div class="telegram-binding-actions"><a id="bind-telegram-link" class="btn-action btn-map" target="_blank" rel="noreferrer">打开 Telegram 绑定</a><button id="copy-telegram-bind-link-btn" class="btn-action" type="button">复制绑定链接</button></div>'}
       `;
       const bindBtn = document.getElementById('bind-telegram-btn');
       if (bindBtn) bindBtn.addEventListener('click', bindTelegram);
+      const bindLinkEl = document.getElementById('bind-telegram-link');
+      if (bindLinkEl instanceof HTMLAnchorElement && bindLink) bindLinkEl.href = bindLink;
+      const copyBtn = document.getElementById('copy-telegram-bind-link-btn');
+      if (copyBtn) copyBtn.addEventListener('click', copyTelegramBindLink);
     }
 
     function persistRiderSession(nextRider) {
@@ -178,6 +186,17 @@ import Layout from '../../layouts/Layout.astro';
       persistRiderSession(next);
     }
 
+    async function copyTelegramBindLink() {
+      const bindLink = String(bindState.httpsUrl || bindState.tgUrl || '').trim();
+      if (!bindLink) return;
+      try {
+        await navigator.clipboard.writeText(bindLink);
+        alert('绑定链接已复制，请粘贴到浏览器或 Telegram 中打开');
+      } catch {
+        alert('复制失败，请长按“打开 Telegram 绑定”按钮后手动复制链接');
+      }
+    }
+
     async function bindTelegram() {
       if (!rider) return;
       try {
@@ -190,7 +209,13 @@ import Layout from '../../layouts/Layout.astro';
         if (!res.ok || data.success === false || !data.bind_url) {
           throw new Error(data.error || 'bind_link_failed');
         }
-        location.href = data.bind_url;
+        bindState = {
+          httpsUrl: String(data.bind_url || '').trim(),
+          tgUrl: String(data.tg_bind_url || '').trim(),
+        };
+        renderTelegramBindingPanel();
+        if (bindState.tgUrl) location.href = bindState.tgUrl;
+        else location.href = bindState.httpsUrl;
       } catch (error) {
         alert(`Telegram 绑定入口创建失败: ${error instanceof Error ? error.message : 'unknown error'}`);
       }

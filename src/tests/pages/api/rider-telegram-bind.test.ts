@@ -26,13 +26,16 @@ test('POST rider telegram bind 在 process.env 已配置时返回 bind_url', asy
     const payload = await response.json() as {
       success: boolean;
       bind_url?: string;
+      tg_bind_url?: string;
       expires_at?: string;
     };
 
     assert.equal(payload.success, true);
     const bindUrl = String(payload.bind_url || '');
+    const tgBindUrl = String(payload.tg_bind_url || '');
     assert.ok(bindUrl.startsWith('https://t.me/food_test_bot?start=bind_'));
     assert.ok(bindUrl.length <= 110);
+    assert.ok(tgBindUrl.startsWith('tg://resolve?domain=food_test_bot&start=bind_'));
     assert.ok(String(payload.expires_at || '').length > 0);
   } finally {
     if (prevSecret === undefined) delete process.env.TELEGRAM_BIND_SECRET;

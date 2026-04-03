@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { API_BASE_URL } from '../../../config.ts';
+import { API_BASE_URL, SITE_BASE_URL } from '../../../config.ts';
 import { buildAdminAuthHeader, proxyAdminRequest } from '../../../lib/admin-api-route.ts';
 import { buildTelegramClaimCallback, buildTelegramDeepLink, buildTelegramDispatchMessage } from '../../../lib/telegram-dispatch.ts';
 
@@ -196,8 +196,7 @@ async function notifyTelegramRecipients(
     };
   }
 
-  const requestUrl = new URL(request.url);
-  const dashboardBaseUrl = requestUrl.origin;
+  const dashboardBaseUrl = String(SITE_BASE_URL || '').trim().replace(/\/$/, '') || 'https://food2.serbia70.com';
   const shopName = String(order.shopName || order.restaurantName || '店铺');
   const address = String(order.tableInfo || '');
   const totalAmount = Number(order.totalAmount || 0);

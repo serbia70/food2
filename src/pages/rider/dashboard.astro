@@ -186,8 +186,8 @@ import Layout from '../../layouts/Layout.astro';
 
     function refreshRiderSessionFromPayload(payload) {
       const source = payload && typeof payload === 'object' ? payload : {};
-      const maybeRider = source.rider && typeof source.rider === 'object' ? source.rider : null;
-      if (!maybeRider || !rider) return;
+      const maybeRider = source.rider && typeof source.rider === 'object' ? source.rider : source;
+      if (!maybeRider || typeof maybeRider !== 'object' || !rider) return;
       const next = normalizeRiderSession({ ...rider, ...maybeRider });
       if (!isValidRiderSession(next)) return;
       persistRiderSession(next);
@@ -196,10 +196,12 @@ import Layout from '../../layouts/Layout.astro';
     async function refreshTelegramBindingStatus() {
       if (!rider) return;
       try {
-        const statusRes = await fetch(`/api/rider/orders?phone=${encodeURIComponent(rider.phone || '')}&view=active`);
+        const statusRes = await fetch(`/api/rider/status?phone=${encodeURIComponent(rider.phone || '')}`);
         const statusData = await statusRes.json().catch(() => ({}));
         if (!statusRes.ok || statusData?.success === false) return;
-        refreshRiderSessionFromPayload(statusData);
+        const next = normalizeRiderSession(statusData.rider || statusData);
+        if (!isValidRiderSession(next)) return;
+        persistRiderSession(next);
       } catch {
       }
     }

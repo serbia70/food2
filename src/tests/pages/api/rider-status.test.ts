@@ -59,6 +59,9 @@ test('rider status source uses server-safe API base url', async () => {
   assert.match(source, /url: `\$\{apiBaseUrl\}\/api\/admin\/riders`,/);
   assert.match(source, /fetch\(`\$\{apiBaseUrl\}\/api\/rider\/status`, \{/);
   assert.match(source, /const upstreamBody = parsed && 'telegramChatId' in parsed/);
+  assert.match(source, /const riderPhone = String\(url\.searchParams\.get\('phone'\) \|\| ''\)\.trim\(\);/);
+  assert.match(source, /if \(riderPhone\) \{/);
+  assert.match(source, /fetch\(`\$\{apiBaseUrl\}\/api\/rider\/status\?phone=\$\{encodeURIComponent\(riderPhone\)\}`\);/);
 });
 
 test('POST 在带 telegramChatId 空串时保留清空语义转发上游', async () => {

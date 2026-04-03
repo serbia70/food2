@@ -694,7 +694,7 @@ test('POST rider-dispatch 在缺少 TELEGRAM_CALLBACK_SECRET 时降级为无 cal
     assert.equal(body.telegram_dispatch.deliveredCount, 1);
     assert.equal(body.telegram_dispatch.failedCount, 0);
     assert.equal(telegramSendBody?.replyMarkup?.inline_keyboard?.[0]?.[0]?.text, '查看并接单');
-    assert.equal(telegramSendBody?.replyMarkup?.inline_keyboard?.[0]?.[0]?.url, 'http://localhost:3000/rider/dashboard?orderId=462&restaurantId=demo-shop');
+    assert.equal(telegramSendBody?.replyMarkup?.inline_keyboard?.[0]?.[0]?.url, 'https://food2.serbia70.com/rider/dashboard?orderId=462&restaurantId=demo-shop');
     assert.equal(telegramSendBody?.replyMarkup?.inline_keyboard?.[0]?.[1]?.text, '联系门店');
     assert.equal(telegramSendBody?.replyMarkup?.inline_keyboard?.[0]?.some((item: Record<string, unknown>) => typeof item.callback_data === 'string'), false);
   } finally {

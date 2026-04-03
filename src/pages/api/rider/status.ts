@@ -44,6 +44,7 @@ function normalizeRiderRows(payload: unknown): Rider[] {
 
 export const GET: APIRoute = async ({ request, cookies, url }) => {
   const action = String(url.searchParams.get('action') || '').trim();
+  const riderPhone = String(url.searchParams.get('phone') || '').trim();
 
   if (action === 'list_available') {
     const upstream = await proxyAdminRequest({
@@ -83,6 +84,15 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
     return new Response(JSON.stringify({ success: true, riders }), {
       status: upstream.status,
       headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (riderPhone) {
+    const upstream = await fetch(`${apiBaseUrl}/api/rider/status?phone=${encodeURIComponent(riderPhone)}`);
+    const text = await upstream.text();
+    return new Response(text, {
+      status: upstream.status,
+      headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
     });
   }
 

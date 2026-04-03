@@ -35,6 +35,7 @@ test('POST rider telegram unbind 会把 telegram_chat_id 清空后转发到后�
     assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
       id: 7,
       riderPhone: '0613083899',
+      status: 'available',
       telegram_chat_id: '',
     });
     return new Response(JSON.stringify({ success: true }), {
@@ -49,6 +50,7 @@ test('POST rider telegram unbind 会把 telegram_chat_id 清空后转发到后�
     body: JSON.stringify({
       riderId: 7,
       riderPhone: '0613083899',
+      riderStatus: 'available',
     }),
   });
 
@@ -69,6 +71,7 @@ test('POST rider telegram unbind 在后端接口抛错时返回 502', async () =
     body: JSON.stringify({
       riderId: 7,
       riderPhone: '0613083899',
+      riderStatus: 'available',
     }),
   });
 

@@ -257,7 +257,7 @@ import Layout from '../../layouts/Layout.astro';
         const res = await fetch('/api/rider/telegram/unbind', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ riderId: rider.id, riderPhone: rider.phone }),
+          body: JSON.stringify({ riderId: rider.id, riderPhone: rider.phone, riderStatus: rider.status }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.success === false) {

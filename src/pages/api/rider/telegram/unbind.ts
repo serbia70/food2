@@ -17,8 +17,9 @@ export const POST: APIRoute = async ({ request }) => {
 
   const riderId = Number(body.riderId || 0);
   const riderPhone = String(body.riderPhone || '').trim();
+  const riderStatus = String(body.riderStatus || '').trim();
 
-  if (riderId <= 0 || !riderPhone) {
+  if (riderId <= 0 || !riderPhone || !riderStatus) {
     return new Response(JSON.stringify({ success: false, error: 'rider_session_required' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
@@ -30,7 +31,7 @@ export const POST: APIRoute = async ({ request }) => {
     upstream = await fetch(`${readApiBaseUrl()}/api/rider/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: riderId, riderPhone, telegram_chat_id: '' }),
+      body: JSON.stringify({ id: riderId, riderPhone, status: riderStatus, telegram_chat_id: '' }),
     });
   } catch (e) {
     return new Response(JSON.stringify({ success: false, error: 'rider_unbind_failed' }), {

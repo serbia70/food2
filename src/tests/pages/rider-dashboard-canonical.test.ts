@@ -23,6 +23,7 @@ test('rider dashboard source uses canonical rider and order fields', async () =>
   assert.match(source, /if \(!confirm\('确认解除 Telegram 绑定？'\)\) return;/);
   assert.match(source, /async function unbindTelegram\(\) \{/);
   assert.match(source, /const res = await fetch\('\/api\/rider\/telegram\/unbind', \{/);
+  assert.match(source, /body: JSON\.stringify\(\{ riderId: rider\.id, riderPhone: rider\.phone, riderStatus: rider\.status \}\),/);
   assert.match(source, /telegramChatId: ''/);
   assert.match(source, /bindState = \{ httpsUrl: '', tgUrl: '', startCommand: '', ready: false \};/);
   assert.match(source, /alert\('已解除 Telegram 绑定'\);/);

@@ -156,7 +156,7 @@ import Layout from '../../layouts/Layout.astro';
     function renderTelegramBindingPanel() {
       const panel = document.getElementById('telegram-binding-panel');
       if (!panel || !rider) return;
-      const bound = String(rider.telegramChatId || '').trim() !== '' && rider.telegramChatId !== '__pending_refresh__';
+      const bound = String(rider.telegramChatId || '').trim() !== '';
       const copy = getRiderTelegramBindingCopy(bound ? rider : { telegramChatId: '' });
       const bindLink = String(bindState.httpsUrl || bindState.tgUrl || '').trim();
       const showFallbackActions = !bound && bindState.ready;
@@ -300,7 +300,7 @@ import Layout from '../../layouts/Layout.astro';
         showDeepLinkToast('Telegram 绑定成功');
         const pendingRider = {
           ...rider,
-          telegramChatId: rider.telegramChatId || '__pending_refresh__',
+          telegramChatId: rider.telegramChatId || '__bound__',
         };
         persistRiderSession(pendingRider);
         telegramBound = false;

@@ -10,9 +10,9 @@ test('rider dashboard source uses canonical rider and order fields', async () =>
 
   assert.match(source, /const orderNo = String\(safeOrder\.orderNo \|\| ''\)\.trim\(\);/);
   assert.match(source, /const restaurantId = String\(safeOrder\.shopSlug \|\| safeOrder\.restaurantSlug \|\| safeOrder\.restaurantId \|\| safeOrder\.shopId \|\| ''\)\.trim\(\);/);
-  assert.match(source, /const bound = String\(rider\.telegramChatId \|\| ''\)\.trim\(\) !== '' && rider\.telegramChatId !== '__pending_refresh__';/);
+  assert.match(source, /const bound = String\(rider\.telegramChatId \|\| ''\)\.trim\(\) !== '';/);
   assert.match(source, /getRiderTelegramBindingCopy\(bound \? rider : \{ telegramChatId: '' \}\)/);
-  assert.match(source, /telegramChatId: rider\.telegramChatId \|\| '__pending_refresh__',/);
+  assert.match(source, /telegramChatId: rider\.telegramChatId \|\| '__bound__',/);
   assert.match(source, /const bindLink = String\(bindState\.httpsUrl \|\| bindState\.tgUrl \|\| ''\)\.trim\(\);/);
   assert.match(source, /const showFallbackActions = !bound && bindState\.ready;/);
   assert.match(source, /<div class="telegram-binding-steps-title">绑定步骤<\/div>/);

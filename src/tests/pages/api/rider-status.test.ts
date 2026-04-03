@@ -103,3 +103,45 @@ test('GET list_available 在有 admin auth 时返回过滤后的 available rider
     globalThis.fetch = originalFetch;
   }
 });
+
+test('GET list_available 兼容 admin riders 返回 telegram_chat_id 并归一到 telegramChatId', async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+
+      if (url === 'http://localhost:3030/api/admin/riders') {
+        const headers = new Headers(init?.headers);
+        assert.equal(headers.get('authorization'), 'Bearer admin-token');
+        return new Response(JSON.stringify({
+          riders: [
+            { id: 7, name: '陈工', phone: '0613083899', status: 'available', telegram_chat_id: 'chat-7' },
+          ],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    };
+
+    const { GET } = await loadRoute();
+    const response = await GET({
+      request: new Request('http://localhost/api/rider/status?action=list_available'),
+      cookies: makeCookies({ admin_token: 'admin-token' }) as any,
+      url: new URL('http://localhost/api/rider/status?action=list_available'),
+    } as any);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      success: true,
+      riders: [
+        { id: 7, name: '陈工', phone: '0613083899', status: 'available', telegram_chat_id: 'chat-7', telegramChatId: 'chat-7' },
+      ],
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

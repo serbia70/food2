@@ -79,6 +79,26 @@ test('assignRider throws telegram notification failure details when assignment s
   );
 });
 
+test('autoAssignRider throws telegram notification failure details when assignment succeeded but notify failed', async () => {
+  globalThis.window = { showToast() {}, refreshOrderList() {} } as any;
+
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    success: true,
+    telegram_notification: {
+      success: false,
+      error: 'telegram_chat_id_missing',
+    },
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  await assert.rejects(
+    () => autoAssignRider('471', { shopSlug: 'demo-shop', pickupEtaMinutes: 20 }),
+    /telegram_chat_id_missing/,
+  );
+});
+
 test('orders source keeps assign APIs and removes broadcast helper', async () => {
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');

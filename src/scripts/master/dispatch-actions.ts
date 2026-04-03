@@ -79,6 +79,18 @@ export function initMasterDispatchActions({
         throw new Error(String(dispatchData?.error || '再次催单失败'));
       }
 
+      const failedAttempt = Array.isArray(dispatchData?.telegram_dispatch?.attempts)
+        ? dispatchData.telegram_dispatch.attempts.find((item: { delivered?: boolean; error?: unknown }) => item?.delivered === false && String(item?.error || '').trim())
+        : null;
+
+      if (dispatchData?.telegram_dispatch?.failedCount > 0) {
+        throw new Error(String(
+          failedAttempt?.error
+            || dispatchData?.telegram_dispatch?.skippedReason
+            || '再次催单失败'
+        ));
+      }
+
       alert('已再次催单');
       runtimeActionBindings.reloadPage();
     } catch (error) {
@@ -115,6 +127,9 @@ export function initMasterDispatchActions({
     const assignData = await assignRes.json().catch(() => ({}));
     if (!assignRes.ok || assignData?.success === false) {
       throw new Error(String(assignData?.error || (input.action === 'auto_assign' ? '自动派单失败' : '指派骑手失败')));
+    }
+    if (assignData?.telegram_notification?.success === false) {
+      throw new Error(String(assignData?.telegram_notification?.error || (input.action === 'auto_assign' ? '自动派单失败' : '指派骑手失败')));
     }
     return assignData;
   }

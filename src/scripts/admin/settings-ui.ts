@@ -286,7 +286,7 @@ export function initSettingsUI(onSaved: () => void) {
   registerAdminGlobal('save-telegram-settings', async () => {
     const form = document.getElementById('settings-form') as HTMLFormElement | null;
     const tokenNode = form?.querySelector('input[name="tg_token"]') as HTMLInputElement | null;
-    const chatIdNode = form?.querySelector('input[name="tg_chat_id"]') as HTMLInputElement | null;
+    const chatIdNode = form?.querySelector('input[name="tg_chatId"]') as HTMLInputElement | null;
     await submitPayload({
       telegram: {
         token: tokenNode?.value || '',
@@ -382,7 +382,17 @@ export function initSettingsUI(onSaved: () => void) {
           const ok = document.createElement('div');
           ok.style.cssText = 'margin-top:6px; font-size:12px; color:#2e7d32;';
           ok.textContent = '满足派单条件：可接收 Telegram 通知';
-          row.append(name, meta, ok);
+
+          const testBtn = document.createElement('button');
+          testBtn.type = 'button';
+          testBtn.dataset.adminAction = 'test-rider-telegram';
+          testBtn.dataset.riderName = String(rider?.name || '');
+          testBtn.dataset.riderPhone = String(rider?.phone || '');
+          testBtn.dataset.riderChatId = String(rider?.telegramChatId || '');
+          testBtn.textContent = '测试 Telegram';
+          testBtn.style.cssText = 'margin-top:8px; border:1px solid #1976d2; background:#fff; color:#1976d2; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:12px;';
+
+          row.append(name, meta, ok, testBtn);
         }
 
         listEl.appendChild(row);
@@ -392,6 +402,38 @@ export function initSettingsUI(onSaved: () => void) {
       listEl.innerHTML = '<div style="color:#d32f2f; font-size:13px;">骑手状态加载失败</div>';
     }
   });
+
+  registerAdminGlobal('test-rider-telegram', async (el: HTMLElement) => {
+    try {
+      const runtime = getAdminRuntimeState();
+      const shopSlug = String(runtime?.shopSlug || '').trim();
+      if (!shopSlug) {
+        throw new Error('shop_slug_required');
+      }
+
+      const riderName = String(el.dataset.riderName || '').trim();
+      const riderChatId = String(el.dataset.riderChatId || '').trim();
+      if (!riderChatId) {
+        throw new Error('telegram_chat_id_missing');
+      }
+
+      const res = await fetch('/api/admin/rider-telegram-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopSlug, riderName, riderChatId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.success === false) {
+        console.error('[admin/rider-telegram-test]', JSON.stringify(data));
+        throw new Error(String(data?.error || 'Telegram 测试失败'));
+      }
+
+      showAdminToast(`测试消息已发送给 ${riderName}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      showAdminToast(message || 'Telegram 测试失败');
+    }
+  }, false);
 
   registerAdminGlobal('save-hours-settings', async () => {
     const openNode = document.querySelector('input[name="open"]') as HTMLInputElement | null;

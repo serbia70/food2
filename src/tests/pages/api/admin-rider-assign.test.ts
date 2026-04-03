@@ -311,3 +311,47 @@ test('keeps assignment successful when telegram notification fails', async () =>
     },
   });
 });
+
+test('manual_assign 调用本地 telegram send 时透传 cookie 与 authorization', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+
+    if (url === 'http://localhost:3030/api/admin/riders') {
+      return new Response(JSON.stringify({
+        riders: [
+          { id: 9, name: '骑手C', phone: '063', status: 'available', telegramChatId: 'tg-9' },
+        ],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url === 'http://localhost:3030/api/admin/orders/475/status') {
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url === 'http://localhost:3000/api/telegram/send') {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get('cookie'), 'master_token=master-cookie-1; admin_token=admin-cookie-1');
+      assert.equal(headers.get('authorization'), 'Bearer inline-auth-token');
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('http://localhost:3000/api/admin/rider-assign', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: 'master_token=master-cookie-1; admin_token=admin-cookie-1',
+        authorization: 'Bearer inline-auth-token',
+      },
+      body: JSON.stringify({ action: 'manual_assign', orderId: '475', riderId: '9', shopSlug: 'demo-shop' }),
+    }),
+    cookies: createCookies(),
+  } as any);
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).success, true);
+});

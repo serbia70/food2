@@ -253,8 +253,8 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
                 <span class={`status-tag status-${o.status}`}>
                   {o.status === 'pending' ? '待处理' :
                    o.status === 'confirmed' ? '已接单' :
-                   o.status === 'awaiting_courier' ? '待骑手接单' :
-                   o.status === 'delivering' ? '派送中' : o.status}
+                   o.status === 'awaiting_courier' ? '待骑手确认' :
+                   o.status === 'delivering' ? '骑手已接单' : o.status}
                 </span>
 
                 {(o.status === 'pending' || o.status === 'confirmed' || o.status === 'awaiting_courier') && (

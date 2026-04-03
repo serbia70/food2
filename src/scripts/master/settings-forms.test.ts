@@ -225,3 +225,199 @@ test('submitMasterServerSettings submits canonical server payload together with 
 
   globalThis.FormData = OriginalFormData;
 });
+
+test('submitMasterServerTelegramTest posts current telegram fields to telegram-test endpoint', async () => {
+  const feedbackCalls: Array<{ id: string; message: string }> = [];
+  const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+
+  const OriginalFormData = globalThis.FormData;
+  const originalFetch = globalThis.fetch;
+
+  const button = {
+    disabled: false,
+    textContent: '发送测试信息',
+  } as unknown as HTMLButtonElement;
+
+  globalThis.FormData = class FakeFormData {
+    private readonly source: { entries: Record<string, string> };
+
+    constructor(source: { entries: Record<string, string> }) {
+      this.source = source;
+    }
+
+    get(key: string) {
+      return this.source.entries[key] ?? null;
+    }
+  } as typeof FormData;
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    assert.equal(button.disabled, true);
+    assert.equal(button.textContent, '发送中...');
+    fetchCalls.push({ url: String(input), init });
+    return new Response(JSON.stringify({ success: true, ok: true, result: { message_id: 321 } }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  const actions = initMasterSettingsForms({
+    async submitSettingsAction() {
+      throw new Error('submitSettingsAction should not be used');
+    },
+    readNumberField() {
+      throw new Error('readNumberField should not be used');
+    },
+    setFeedback(id, message) {
+      feedbackCalls.push({ id, message });
+    },
+  });
+
+  const form = {
+    entries: {
+      telegramBotToken: ' bot-token-123 ',
+      telegramChatId: ' -100998877 ',
+    },
+    querySelector(selector: string) {
+      if (selector === '[data-master-telegram-test-button]') return button;
+      return null;
+    },
+  } as HTMLFormElement & { entries: Record<string, string> };
+
+  await actions.submitMasterServerTelegramTest(form);
+
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fetchCalls[0].url, '/api/master/telegram-test');
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, '发送测试信息');
+  assert.deepEqual(feedbackCalls, [
+    { id: 'master-server-settings-feedback', message: '发送测试消息中...' },
+    { id: 'master-server-settings-feedback', message: '测试消息已发送' },
+  ]);
+  assert.deepEqual(JSON.parse(String(fetchCalls[0].init?.body || '{}')), {
+    telegramBotToken: 'bot-token-123',
+    telegramChatId: '-100998877',
+    text: 'Master Telegram 测试消息',
+  });
+
+  globalThis.FormData = OriginalFormData;
+  globalThis.fetch = originalFetch;
+});
+
+test('submitMasterServerTelegramTest shows proxy-style nested error message', async () => {
+  const feedbackCalls: Array<{ id: string; message: string }> = [];
+  const OriginalFormData = globalThis.FormData;
+  const originalFetch = globalThis.fetch;
+
+  globalThis.FormData = class FakeFormData {
+    private readonly source: { entries: Record<string, string> };
+
+    constructor(source: { entries: Record<string, string> }) {
+      this.source = source;
+    }
+
+    get(key: string) {
+      return this.source.entries[key] ?? null;
+    }
+  } as typeof FormData;
+
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    ok: false,
+    error: {
+      code: 'upstream_failed',
+      message: 'Upstream error (502)',
+    },
+  }), {
+    status: 502,
+    headers: { 'Content-Type': 'application/json' },
+  })) as typeof fetch;
+
+  const actions = initMasterSettingsForms({
+    async submitSettingsAction() {
+      throw new Error('submitSettingsAction should not be used');
+    },
+    readNumberField() {
+      throw new Error('readNumberField should not be used');
+    },
+    setFeedback(id, message) {
+      feedbackCalls.push({ id, message });
+    },
+  });
+
+  const form = {
+    entries: {
+      telegramBotToken: 'bot-token-123',
+      telegramChatId: '-100998877',
+    },
+    querySelector() {
+      return null;
+    },
+  } as HTMLFormElement & { entries: Record<string, string> };
+
+  await actions.submitMasterServerTelegramTest(form);
+
+  assert.deepEqual(feedbackCalls, [
+    { id: 'master-server-settings-feedback', message: '发送测试消息中...' },
+    { id: 'master-server-settings-feedback', message: '发送失败: Upstream error (502)' },
+  ]);
+
+  globalThis.FormData = OriginalFormData;
+  globalThis.fetch = originalFetch;
+});
+
+test('submitMasterServerTelegramTest shows structured telegram error message', async () => {
+  const feedbackCalls: Array<{ id: string; message: string }> = [];
+  const OriginalFormData = globalThis.FormData;
+  const originalFetch = globalThis.fetch;
+
+  globalThis.FormData = class FakeFormData {
+    private readonly source: { entries: Record<string, string> };
+
+    constructor(source: { entries: Record<string, string> }) {
+      this.source = source;
+    }
+
+    get(key: string) {
+      return this.source.entries[key] ?? null;
+    }
+  } as typeof FormData;
+
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    success: false,
+    error: 'telegram_chat_id_required',
+  }), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' },
+  })) as typeof fetch;
+
+  const actions = initMasterSettingsForms({
+    async submitSettingsAction() {
+      throw new Error('submitSettingsAction should not be used');
+    },
+    readNumberField() {
+      throw new Error('readNumberField should not be used');
+    },
+    setFeedback(id, message) {
+      feedbackCalls.push({ id, message });
+    },
+  });
+
+  const form = {
+    entries: {
+      telegramBotToken: 'bot-token-123',
+      telegramChatId: '',
+    },
+    querySelector() {
+      return null;
+    },
+  } as HTMLFormElement & { entries: Record<string, string> };
+
+  await actions.submitMasterServerTelegramTest(form);
+
+  assert.deepEqual(feedbackCalls, [
+    { id: 'master-server-settings-feedback', message: '发送测试消息中...' },
+    { id: 'master-server-settings-feedback', message: '发送失败: telegram_chat_id_required' },
+  ]);
+
+  globalThis.FormData = OriginalFormData;
+  globalThis.fetch = originalFetch;
+});

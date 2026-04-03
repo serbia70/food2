@@ -203,6 +203,58 @@ export function initMasterSettingsForms({
     return false;
   }
 
+  async function submitMasterServerTelegramTest(form: HTMLFormElement) {
+    const feedbackId = 'master-server-settings-feedback';
+    const button = form.querySelector('[data-master-telegram-test-button]');
+    const testButton = button && typeof button === 'object' && 'disabled' in button && 'textContent' in button
+      ? button as HTMLButtonElement
+      : null;
+    const originalText = testButton?.textContent || '发送测试信息';
+
+    try {
+      if (testButton) {
+        testButton.disabled = true;
+        testButton.textContent = '发送中...';
+      }
+      setFeedback(feedbackId, '发送测试消息中...');
+      const formData = new FormData(form);
+      const res = await fetch('/api/master/telegram-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegramBotToken: String(formData.get('telegramBotToken') || '').trim(),
+          telegramChatId: String(formData.get('telegramChatId') || '').trim(),
+          text: 'Master Telegram 测试消息',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || (data && typeof data === 'object' && 'success' in data && data.success === false)) {
+        const nestedErrorMessage = data && typeof data === 'object' && 'error' in data && data.error && typeof data.error === 'object' && 'message' in data.error && typeof data.error.message === 'string'
+          ? data.error.message.trim()
+          : '';
+        const telegramDescription = typeof data?.telegram_response?.description === 'string' && data.telegram_response.description.trim()
+          ? data.telegram_response.description.trim()
+          : '';
+        const directError = typeof data?.error === 'string' && data.error.trim()
+          ? data.error.trim()
+          : '';
+        const errorMsg = telegramDescription || nestedErrorMessage || directError || 'telegram_send_failed';
+        setFeedback(feedbackId, `发送失败: ${errorMsg}`);
+        return false;
+      }
+      setFeedback(feedbackId, '测试消息已发送');
+      return false;
+    } catch (error) {
+      setFeedback(feedbackId, `发送失败: ${error instanceof Error ? error.message : 'telegram_send_failed'}`);
+      return false;
+    } finally {
+      if (testButton) {
+        testButton.disabled = false;
+        testButton.textContent = originalText;
+      }
+    }
+  }
+
   return {
     submitMasterCategoriesSettings(form: HTMLFormElement) {
       void submitMasterCategoriesSettings(form);
@@ -211,6 +263,9 @@ export function initMasterSettingsForms({
     submitMasterServerSettings(form: HTMLFormElement) {
       void submitMasterServerSettings(form);
       return false;
+    },
+    submitMasterServerTelegramTest(form: HTMLFormElement) {
+      return submitMasterServerTelegramTest(form);
     },
     submitMasterFooterSettings(form: HTMLFormElement) {
       void submitMasterFooterSettings(form);

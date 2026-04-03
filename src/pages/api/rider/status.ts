@@ -8,8 +8,17 @@ const apiBaseUrl = process.env.PUBLIC_API_URL || API_BASE_URL;
 
 export const prerender = false;
 
+function toCanonicalRiderRow(row: unknown): Rider {
+  const rider = row && typeof row === 'object' ? row as Rider & { telegram_chat_id?: string | null } : {} as Rider & { telegram_chat_id?: string | null };
+  return {
+    ...rider,
+    telegramChatId: String(rider.telegramChatId || rider.telegram_chat_id || '').trim(),
+  };
+}
+
 function normalizeRiderRows(payload: unknown): Rider[] {
-  if (Array.isArray(payload)) return payload as Rider[];
+  const normalizeList = (rows: unknown) => Array.isArray(rows) ? rows.map((row) => toCanonicalRiderRow(row)) : [];
+  if (Array.isArray(payload)) return normalizeList(payload);
   if (!payload || typeof payload !== 'object') return [];
 
   const data = payload as {
@@ -19,15 +28,15 @@ function normalizeRiderRows(payload: unknown): Rider[] {
     items?: unknown;
   };
 
-  if (Array.isArray(data.riders)) return data.riders as Rider[];
-  if (Array.isArray(data.rows)) return data.rows as Rider[];
-  if (Array.isArray(data.items)) return data.items as Rider[];
+  if (Array.isArray(data.riders)) return normalizeList(data.riders);
+  if (Array.isArray(data.rows)) return normalizeList(data.rows);
+  if (Array.isArray(data.items)) return normalizeList(data.items);
 
   if (data.data && typeof data.data === 'object') {
     const nested = data.data as { riders?: unknown; rows?: unknown; items?: unknown };
-    if (Array.isArray(nested.riders)) return nested.riders as Rider[];
-    if (Array.isArray(nested.rows)) return nested.rows as Rider[];
-    if (Array.isArray(nested.items)) return nested.items as Rider[];
+    if (Array.isArray(nested.riders)) return normalizeList(nested.riders);
+    if (Array.isArray(nested.rows)) return normalizeList(nested.rows);
+    if (Array.isArray(nested.items)) return normalizeList(nested.items);
   }
 
   return [];

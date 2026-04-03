@@ -133,10 +133,16 @@ async function notifyAssignedRider({
   if (!chatId) return { success: false, error: 'telegram_chat_id_missing' };
 
   try {
+    const cookie = request.headers.get('cookie') || '';
+    const authorization = request.headers.get('authorization') || '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (cookie) headers.cookie = cookie;
+    if (authorization) headers.authorization = authorization;
+
     const telegramUrl = new URL('/api/telegram/send', request.url).toString();
     const response = await fetch(telegramUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         shopSlug,
         chat_id: chatId,

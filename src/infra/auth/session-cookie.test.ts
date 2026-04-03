@@ -28,6 +28,14 @@ test('resolveSessionToken returns bearer token from cookie when header missing',
   assert.equal(token, 'Bearer cookie-token');
 });
 
+test('resolveSessionToken falls back to raw cookie header when cookie store is missing', () => {
+  const request = new Request('https://example.com', {
+    headers: { cookie: 'foo=1; master_token=raw-cookie-token; bar=2' },
+  });
+  const token = resolveSessionToken(request, undefined, 'master_token');
+  assert.equal(token, 'Bearer raw-cookie-token');
+});
+
 test('resolveSessionToken returns empty when no header and no cookie token', () => {
   const request = new Request('https://example.com');
   const token = resolveSessionToken(request, undefined, 'master_token');

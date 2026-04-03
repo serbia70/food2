@@ -87,6 +87,77 @@ test('POST rider-dispatch publish 兼容 admin riders 返回 telegram_chat_id', 
   assert.equal(telegramBody?.chat_id, 'chat-snake-8');
 });
 
+test('POST rider-dispatch publish 调用本地 telegram send 时透传 cookie 与 authorization', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+
+    if (url === 'http://localhost:3030/api/admin/orders/476/status') {
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'http://localhost:3030/api/admin/riders') {
+      return new Response(JSON.stringify({ riders: [
+        { id: 8, name: '骑手B', phone: '0613000000', status: 'available', telegram_chat_id: 'chat-snake-8' },
+      ] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://food2.serbia70.com/api/telegram/send') {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get('cookie'), 'master_token=master-cookie-1; admin_token=admin-cookie-1');
+      assert.equal(headers.get('authorization'), 'Bearer inline-auth-token');
+      return new Response(JSON.stringify({ success: true, ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/admin/rider-dispatch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: 'master_token=master-cookie-1; admin_token=admin-cookie-1',
+        authorization: 'Bearer inline-auth-token',
+      },
+      body: JSON.stringify({
+        orderId: '476',
+        action: 'publish',
+        status: 'awaiting_courier',
+        pickupEtaMinutes: 15,
+        pickupReadyAt: '2026-03-30T22:00:53.290Z',
+        riderBroadcastedAt: '2026-03-30T21:45:53.290Z',
+        riderLastRemindedAt: '',
+        riderRemindCount: 0,
+        shopSlug: 'demo-shop',
+        shopId: 21,
+        shopName: 'Demo Shop',
+        tableInfo: 'hui, 0613083888, ruma1',
+        totalAmount: 905,
+        userPhone: '0613083888',
+      }),
+    }),
+    cookies: {
+      get(name: string) {
+        if (name === 'admin_token') return { value: 'test-token' };
+        return undefined;
+      },
+    },
+  } as any);
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).success, true);
+});
+
 test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
 

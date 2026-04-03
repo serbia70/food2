@@ -35,6 +35,14 @@ const { settings } = Astro.props as { settings: MasterSettingsView['server'] };
 
     <div class="settings-actions">
       <button type="submit" class="settings-submit">保存 MQTT / Telegram 配置</button>
+      <button
+        type="button"
+        class="settings-secondary"
+        data-master-telegram-test-button
+        onclick="return window.submitMasterServerTelegramTest ? window.submitMasterServerTelegramTest(this.form) : false;"
+      >
+        发送测试信息
+      </button>
       <div id="master-server-settings-feedback" class="settings-feedback">修改后请同步确认客户端、打印机和 Telegram 机器人回调配置是否仍然可用。</div>
     </div>
   </form>
@@ -59,5 +67,6 @@ const { settings } = Astro.props as { settings: MasterSettingsView['server'] };
   .settings-form input { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fff; }
   .settings-actions { display: grid; gap: 8px; }
   .settings-submit { border: none; border-radius: 10px; padding: 12px 16px; background: #dc2626; color: #fff; font-weight: 800; cursor: pointer; }
+  .settings-secondary { border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px 16px; background: #fff; color: #0f172a; font-weight: 800; cursor: pointer; }
   .settings-feedback { font-size: 12px; color: #64748b; }
 </style>

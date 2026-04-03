@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const pagePath = resolve(process.cwd(), 'src/pages/master/index.astro');
+const dispatchActionsPath = resolve(process.cwd(), 'src/scripts/master/dispatch-actions.ts');
 
 test('master page source wires dispatch tab into dashboard layout', async () => {
   const page = await readFile(pagePath, 'utf8');
@@ -62,6 +63,21 @@ test('master page source wires dispatch tab into dashboard layout', async () => 
   assert.doesNotMatch(page, /fetch\('\/api\/master\/impersonate-shop'/);
   assert.doesNotMatch(page, /fetch\('\/api\/admin\/rider-dispatch'/);
   assert.match(page, /再次催单/);
+});
+
+test('master dispatch actions source surfaces telegram notification failures from assign api', async () => {
+  const source = await readFile(dispatchActionsPath, 'utf8');
+
+  assert.match(source, /if \(assignData\?\.telegram_notification\?\.success === false\) \{/);
+  assert.match(source, /throw new Error\(String\(assignData\?\.telegram_notification\?\.error \|\| \(input\.action === 'auto_assign' \? '自动派单失败' : '指派骑手失败'\)\)\);/);
+});
+
+test('master dispatch actions source surfaces telegram dispatch failure chain for remind action', async () => {
+  const source = await readFile(dispatchActionsPath, 'utf8');
+
+  assert.match(source, /const failedAttempt = Array\.isArray\(dispatchData\?\.telegram_dispatch\?\.attempts\)/);
+  assert.match(source, /dispatchData\?\.telegram_dispatch\?\.failedCount > 0/);
+  assert.match(source, /dispatchData\?\.telegram_dispatch\?\.skippedReason/);
 });
 
 test('master page source wires riders tab into dashboard layout and stable proxy chain', async () => {

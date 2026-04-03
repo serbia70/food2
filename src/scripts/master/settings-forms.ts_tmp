@@ -1,0 +1,40 @@
+  async function submitMasterServerTelegramTest(form: HTMLFormElement) {
+    const feedbackId = 'master-server-settings-feedback';
+    const button = form.querySelector('[data-master-telegram-test-button]') as HTMLButtonElement | null;
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = '发送测试消息中...';
+    }
+
+    setFeedback(feedbackId, '发送测试消息中...');
+
+    try {
+      const formData = new FormData(form);
+      const res = await fetch('/api/master/telegram-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegramBotToken: String(formData.get('telegramBotToken') || '').trim(),
+          telegramChatId: String(formData.get('telegramChatId') || '').trim(),
+          text: 'Master Telegram 测试消息',
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errorMsg = data?.telegram_response?.description || data?.error || 'telegram_send_failed';
+        setFeedback(feedbackId, `发送失败: ${errorMsg}`);
+      } else {
+        setFeedback(feedbackId, '测试消息已发送');
+      }
+    } catch (e) {
+      setFeedback(feedbackId, '发送失败: telegram_send_failed');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = '发送测试消息';
+      }
+    }
+    return false;
+  }

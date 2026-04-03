@@ -36,48 +36,139 @@ function parseShopSettings(raw: unknown): Record<string, unknown> {
 
 function readTelegramBotToken(raw: unknown): string {
   const settings = asRecord(raw);
+  const dataSettings = asRecord(asRecord(settings.data).settings);
   const serverSettings = asRecord(settings.server);
+  const dataServerSettings = asRecord(dataSettings.server);
   return String(
     settings.telegram_bot_token
       || settings.telegramBotToken
+      || dataSettings.telegram_bot_token
+      || dataSettings.telegramBotToken
       || serverSettings.telegram_bot_token
       || serverSettings.telegramBotToken
+      || dataServerSettings.telegram_bot_token
+      || dataServerSettings.telegramBotToken
       || '',
   ).trim();
 }
 
-async function loadTelegramBotToken(request: Request, shopSlug: string): Promise<string> {
+function describeFetchError(error: unknown): { message: string; cause?: string; code?: string } {
+  const fallback = {
+    message: error instanceof Error ? error.message : 'fetch_failed',
+  } as { message: string; cause?: string; code?: string };
+
+  if (!error || typeof error !== 'object') return fallback;
+
+  const errorRecord = error as Record<string, unknown>;
+  const cause = errorRecord.cause;
+  if (!cause || typeof cause !== 'object') return fallback;
+
+  const causeRecord = cause as Record<string, unknown>;
+  const causeMessage = typeof causeRecord.message === 'string' ? causeRecord.message.trim() : '';
+  const code = typeof causeRecord.code === 'string' ? causeRecord.code.trim() : '';
+
+  if (causeMessage) fallback.cause = causeMessage;
+  if (code) fallback.code = code;
+  return fallback;
+}
+
+const TELEGRAM_SEND_MAX_ATTEMPTS = 3;
+
+function shouldRetryTelegramSend(error: unknown): boolean {
+  const details = describeFetchError(error);
+  return details.code === 'UND_ERR_CONNECT_TIMEOUT';
+}
+
+async function postTelegramMessage(token: string, telegramPayload: Record<string, unknown>): Promise<Response> {
+  return fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(telegramPayload),
+  });
+}
+
+async function sendTelegramMessage(token: string, telegramPayload: Record<string, unknown>): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= TELEGRAM_SEND_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await postTelegramMessage(token, telegramPayload);
+    } catch (error) {
+      lastError = error;
+      if (!shouldRetryTelegramSend(error) || attempt === TELEGRAM_SEND_MAX_ATTEMPTS) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('telegram_send_failed');
+}
+
+async function loadTelegramBotToken(request: Request, shopSlug: string): Promise<{
+  token: string;
+  tokenSource: 'shop' | 'master' | 'home' | 'missing_after_shop_master_home_fallback';
+  diagnostics: {
+    shopInfo: { requested: boolean; tokenFound: boolean };
+    masterSettings: { requested: boolean; status: number | null; tokenFound: boolean };
+    homeSettings: { requested: boolean; status: number | null; tokenFound: boolean };
+  };
+}> {
+  const diagnostics = {
+    shopInfo: { requested: false, tokenFound: false },
+    masterSettings: { requested: false, status: null as number | null, tokenFound: false },
+    homeSettings: { requested: false, status: null as number | null, tokenFound: false },
+  };
+
   const normalizedShopSlug = String(shopSlug || '').trim();
   if (normalizedShopSlug) {
+    diagnostics.shopInfo.requested = true;
     const shopRes = await fetch(`${API_BASE_URL}/${encodeURIComponent(normalizedShopSlug)}/info`);
     if (!shopRes.ok) throw new Error(`shop_info_http_${shopRes.status}`);
     const shop = await shopRes.json().catch(() => ({}));
     const settings = parseShopSettings(asRecord(shop).settings);
     const telegram = asRecord(settings.telegram);
-    const shopToken = String(telegram.token || '').trim();
-    if (shopToken) return shopToken;
+    const shopToken = String(telegram.token || readTelegramBotToken(settings) || '').trim();
+    diagnostics.shopInfo.tokenFound = Boolean(shopToken);
+    if (shopToken) {
+      return { token: shopToken, tokenSource: 'shop', diagnostics };
+    }
   }
 
-  const passthroughHeaders: Record<string, string> = {};
+  const masterHeaders: Record<string, string> = {};
   const cookie = request.headers.get('cookie') || '';
-  const authorization = request.headers.get('authorization') || '';
-  if (cookie) passthroughHeaders.cookie = cookie;
-  if (authorization) passthroughHeaders.authorization = authorization;
+  if (cookie) masterHeaders.cookie = cookie;
 
-  const masterRes = await fetch(new URL('/api/master/settings', request.url).toString(), {
+  diagnostics.masterSettings.requested = true;
+  const masterRes = await fetch(new URL('/api/master/init', request.url).toString(), {
     method: 'GET',
-    ...(Object.keys(passthroughHeaders).length > 0 ? { headers: passthroughHeaders } : {}),
+    ...(Object.keys(masterHeaders).length > 0 ? { headers: masterHeaders } : {}),
   });
+  diagnostics.masterSettings.status = masterRes.status;
   if (masterRes.ok) {
     const masterData = await masterRes.json().catch(() => ({}));
-    const masterToken = readTelegramBotToken(asRecord(masterData).settings);
-    if (masterToken) return masterToken;
+    const masterToken = readTelegramBotToken(masterData);
+    diagnostics.masterSettings.tokenFound = Boolean(masterToken);
+    if (masterToken) {
+      return { token: masterToken, tokenSource: 'master', diagnostics };
+    }
   }
 
+  diagnostics.homeSettings.requested = true;
   const homeRes = await fetch(`${API_BASE_URL}/api/home`);
+  diagnostics.homeSettings.status = homeRes.status;
   if (!homeRes.ok) throw new Error(`home_settings_http_${homeRes.status}`);
   const homeData = await homeRes.json().catch(() => ({}));
-  return readTelegramBotToken(asRecord(homeData).settings);
+  const homeToken = readTelegramBotToken(homeData);
+  diagnostics.homeSettings.tokenFound = Boolean(homeToken);
+  if (homeToken) {
+    return { token: homeToken, tokenSource: 'home', diagnostics };
+  }
+
+  return {
+    token: '',
+    tokenSource: 'missing_after_shop_master_home_fallback',
+    diagnostics,
+  };
 }
 
 export const POST: APIRoute = async ({ request }) => {
@@ -91,15 +182,29 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   let token = '';
+  let tokenSource: 'shop' | 'master' | 'home' | 'missing_after_shop_master_home_fallback' = 'missing_after_shop_master_home_fallback';
+  let diagnostics = {
+    shopInfo: { requested: false, tokenFound: false },
+    masterSettings: { requested: false, status: null as number | null, tokenFound: false },
+    homeSettings: { requested: false, status: null as number | null, tokenFound: false },
+  };
   try {
-    token = await loadTelegramBotToken(request, shopSlug);
+    const tokenResult = await loadTelegramBotToken(request, shopSlug);
+    token = tokenResult.token;
+    tokenSource = tokenResult.tokenSource;
+    diagnostics = tokenResult.diagnostics;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'shop_info_failed';
     return json({ success: false, error: message }, 502);
   }
 
   if (!token) {
-    return json({ success: false, error: 'telegram_bot_token_not_configured' }, 400);
+    return json({
+      success: false,
+      error: 'telegram_bot_token_not_configured',
+      tokenSource,
+      diagnostics,
+    }, 400);
   }
 
   const telegramPayload: Record<string, unknown> = {
@@ -117,11 +222,16 @@ export const POST: APIRoute = async ({ request }) => {
     telegramPayload.disable_web_page_preview = body.disable_web_page_preview;
   }
 
-  const telegramRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(telegramPayload),
-  });
+  let telegramRes: Response;
+  try {
+    telegramRes = await sendTelegramMessage(token, telegramPayload);
+  } catch (error) {
+    return json({
+      success: false,
+      error: 'telegram_send_failed',
+      ...describeFetchError(error),
+    }, 502);
+  }
 
   const responseText = await telegramRes.text();
   let parsed: Record<string, unknown> = {};

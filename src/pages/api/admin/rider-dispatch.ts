@@ -241,11 +241,17 @@ async function notifyTelegramRecipients(
     });
 
     try {
+      const cookie = request.headers.get('cookie') || '';
+      const authorization = request.headers.get('authorization') || '';
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (cookie) headers.cookie = cookie;
+      if (authorization) headers.authorization = authorization;
+
       const sendRes = await fetch(new URL('/api/telegram/send', request.url).toString(), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           shopSlug: String(order.shopSlug || order.restaurantSlug || '').trim(),
           chat_id: riderChatId,

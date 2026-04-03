@@ -38,6 +38,7 @@ test('GET rider orders 透传后端失败响应', async () => {
 test('GET rider orders 过滤当前骑手 active 订单', async () => {
   globalThis.fetch = async () => new Response(JSON.stringify({
     success: true,
+    rider: { id: 7, phone: '0613083899', telegram_chat_id: 'chat-7' },
     orders: [
       { id: 1, status: 'awaiting_courier', courierPhone: '', userPhone: '1' },
       { id: 2, status: 'delivering', courierPhone: '0613083899', userPhone: '2' },
@@ -57,6 +58,7 @@ test('GET rider orders 过滤当前骑手 active 订单', async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     success: true,
+    rider: { id: 7, phone: '0613083899', telegram_chat_id: 'chat-7', telegramChatId: 'chat-7' },
     orders: [
       { id: 1, status: 'awaiting_courier', courierPhone: '', userPhone: '1' },
       { id: 2, status: 'delivering', courierPhone: '0613083899', userPhone: '2' },

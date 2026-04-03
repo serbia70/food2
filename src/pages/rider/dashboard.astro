@@ -149,7 +149,7 @@ import Layout from '../../layouts/Layout.astro';
       return restaurantMatched && (orderId === deepLinkOrderId || orderNo === deepLinkOrderId);
     }
 
-    let bindState = { httpsUrl: '', tgUrl: '', startCommand: '' };
+    let bindState = { httpsUrl: '', tgUrl: '', startCommand: '', ready: false };
 
     function renderTelegramBindingPanel() {
       const panel = document.getElementById('telegram-binding-panel');
@@ -157,13 +157,16 @@ import Layout from '../../layouts/Layout.astro';
       const bound = String(rider.telegramChatId || '').trim() !== '' && rider.telegramChatId !== '__pending_refresh__';
       const copy = getRiderTelegramBindingCopy(bound ? rider : { telegramChatId: '' });
       const bindLink = String(bindState.httpsUrl || bindState.tgUrl || '').trim();
+      const showFallbackActions = !bound && bindState.ready;
       panel.innerHTML = `
         <div class="telegram-binding-copy ${bound ? 'bound' : 'unbound'}">${copy}</div>
-        ${bound ? '' : '<button id="bind-telegram-btn" class="btn-action btn-map" type="button">绑定 Telegram</button>'}
-        ${bound || !bindLink ? '' : '<div class="telegram-binding-actions"><a id="bind-telegram-link" class="btn-action btn-map" target="_blank" rel="noreferrer">打开 Telegram 绑定</a><button id="copy-telegram-bind-link-btn" class="btn-action" type="button">复制绑定链接</button><button id="copy-telegram-bind-command-btn" class="btn-action" type="button">复制绑定命令</button></div>'}
+        ${bound ? '<button id="unbind-telegram-btn" class="btn-action" type="button">解除 Telegram 绑定</button>' : '<button id="bind-telegram-btn" class="btn-action btn-map" type="button">绑定 Telegram</button>'}
+        ${!showFallbackActions ? '' : '<div class="telegram-binding-tip">如果 Telegram 里只出现普通 /start，请点“复制绑定命令”后直接发送给机器人。</div><div class="telegram-binding-actions"><a id="bind-telegram-link" class="btn-action btn-map" target="_blank" rel="noreferrer">重新打开 Telegram</a><button id="copy-telegram-bind-link-btn" class="btn-action" type="button">复制绑定链接</button><button id="copy-telegram-bind-command-btn" class="btn-action" type="button">复制绑定命令</button></div>'}
       `;
       const bindBtn = document.getElementById('bind-telegram-btn');
       if (bindBtn) bindBtn.addEventListener('click', bindTelegram);
+      const unbindBtn = document.getElementById('unbind-telegram-btn');
+      if (unbindBtn) unbindBtn.addEventListener('click', unbindTelegram);
       const bindLinkEl = document.getElementById('bind-telegram-link');
       if (bindLinkEl instanceof HTMLAnchorElement && bindLink) bindLinkEl.href = bindLink;
       const copyBtn = document.getElementById('copy-telegram-bind-link-btn');
@@ -186,6 +189,17 @@ import Layout from '../../layouts/Layout.astro';
       const next = normalizeRiderSession({ ...rider, ...maybeRider });
       if (!isValidRiderSession(next)) return;
       persistRiderSession(next);
+    }
+
+    async function refreshTelegramBindingStatus() {
+      if (!rider) return;
+      try {
+        const statusRes = await fetch(`/api/rider/orders?phone=${encodeURIComponent(rider.phone || '')}&view=active`);
+        const statusData = await statusRes.json().catch(() => ({}));
+        if (!statusRes.ok || statusData?.success === false) return;
+        refreshRiderSessionFromPayload(statusData);
+      } catch {
+      }
     }
 
     async function copyTelegramBindLink() {
@@ -226,12 +240,34 @@ import Layout from '../../layouts/Layout.astro';
           httpsUrl: String(data.bind_url || '').trim(),
           tgUrl: String(data.tg_bind_url || '').trim(),
           startCommand: String(data.start_command || '').trim(),
+          ready: true,
         };
         renderTelegramBindingPanel();
         if (bindState.tgUrl) location.href = bindState.tgUrl;
         else location.href = bindState.httpsUrl;
       } catch (error) {
         alert(`Telegram 绑定入口创建失败: ${error instanceof Error ? error.message : 'unknown error'}`);
+      }
+    }
+
+    async function unbindTelegram() {
+      if (!rider) return;
+      if (!confirm('确认解除 Telegram 绑定？')) return;
+      try {
+        const res = await fetch('/api/rider/telegram/unbind', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ riderId: rider.id, riderPhone: rider.phone }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+          throw new Error(data.error || 'unbind_failed');
+        }
+        bindState = { httpsUrl: '', tgUrl: '', startCommand: '', ready: false };
+        persistRiderSession({ ...rider, telegramChatId: '' });
+        alert('已解除 Telegram 绑定');
+      } catch (error) {
+        alert(`解除 Telegram 绑定失败: ${error instanceof Error ? error.message : 'unknown error'}`);
       }
     }
 
@@ -267,6 +303,8 @@ import Layout from '../../layouts/Layout.astro';
           telegramChatId: rider.telegramChatId || '__pending_refresh__',
         };
         persistRiderSession(pendingRider);
+        telegramBound = false;
+        void refreshTelegramBindingStatus();
       }
 
       const dashboard = document.getElementById('dashboard');

@@ -6,6 +6,12 @@ const apiBaseUrl = process.env.PUBLIC_API_URL || API_BASE_URL;
 
 export const prerender = false;
 
+function normalizeRiderRow(row: Record<string, unknown>): Record<string, unknown> {
+  const normalized = { ...row };
+  if (row.telegramChatId === undefined && row.telegram_chat_id !== undefined) normalized.telegramChatId = row.telegram_chat_id;
+  return normalized;
+}
+
 function normalizeRiderOrder(order: Record<string, unknown>): Record<string, unknown> {
   const normalized = { ...order };
   if (order.orderNo === undefined && order.order_no !== undefined) normalized.orderNo = order.order_no;
@@ -49,7 +55,10 @@ export const GET: APIRoute = async ({ url }) => {
   }
 
   try {
-    const data = JSON.parse(text) as { success?: boolean; orders?: Array<Record<string, unknown>> };
+    const data = JSON.parse(text) as { success?: boolean; rider?: Record<string, unknown>; orders?: Array<Record<string, unknown>> };
+    if (data.success && data.rider && typeof data.rider === 'object') {
+      data.rider = normalizeRiderRow(data.rider);
+    }
     if (data.success && Array.isArray(data.orders)) {
       data.orders = filterRiderDashboardOrders(
         data.orders.map((order) => normalizeRiderOrder(order)),

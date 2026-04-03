@@ -31,7 +31,7 @@ export const POST: APIRoute = async ({ request }) => {
     upstream = await fetch(`${readApiBaseUrl()}/api/rider/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: riderId, riderPhone, status: riderStatus, telegram_chat_id: '' }),
+      body: JSON.stringify({ id: riderId, riderPhone, status: riderStatus, telegram_chat_id: '', telegramChatId: '' }),
     });
   } catch (e) {
     return new Response(JSON.stringify({ success: false, error: 'rider_unbind_failed' }), {

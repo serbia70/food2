@@ -37,6 +37,7 @@ test('POST rider telegram unbind 会把 telegram_chat_id 清空后转发到后�
       riderPhone: '0613083899',
       status: 'available',
       telegram_chat_id: '',
+      telegramChatId: '',
     });
     return new Response(JSON.stringify({ success: true }), {
       status: 200,

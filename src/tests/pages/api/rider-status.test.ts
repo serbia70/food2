@@ -58,6 +58,50 @@ test('rider status source uses server-safe API base url', async () => {
   assert.match(source, /const apiBaseUrl = process\.env\.PUBLIC_API_URL \|\| API_BASE_URL;/);
   assert.match(source, /url: `\$\{apiBaseUrl\}\/api\/admin\/riders`,/);
   assert.match(source, /fetch\(`\$\{apiBaseUrl\}\/api\/rider\/status`, \{/);
+  assert.match(source, /const upstreamBody = parsed && 'telegramChatId' in parsed/);
+});
+
+test('POST 在带 telegramChatId 空串时保留清空语义转发上游', async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      assert.equal(url, 'http://localhost:3030/api/rider/status');
+      assert.equal(init?.method, 'POST');
+      assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
+        id: 7,
+        riderPhone: '0613083899',
+        status: 'available',
+        telegram_chat_id: '',
+        telegramChatId: '',
+      });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    const { POST } = await loadRoute();
+    const response = await POST({
+      request: new Request('http://localhost/api/rider/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 7,
+          riderPhone: '0613083899',
+          status: 'available',
+          telegram_chat_id: '',
+          telegramChatId: '',
+        }),
+      }),
+    } as any);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('GET list_available 在有 admin auth 时返回过滤后的 available riders', async () => {

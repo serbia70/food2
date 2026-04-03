@@ -243,8 +243,8 @@ import Layout from '../../layouts/Layout.astro';
           ready: true,
         };
         renderTelegramBindingPanel();
-        if (bindState.tgUrl) location.href = bindState.tgUrl;
-        else location.href = bindState.httpsUrl;
+        if (bindState.httpsUrl) location.href = bindState.httpsUrl;
+        else location.href = bindState.tgUrl;
       } catch (error) {
         alert(`Telegram 绑定入口创建失败: ${error instanceof Error ? error.message : 'unknown error'}`);
       }

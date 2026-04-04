@@ -81,7 +81,7 @@ PUBLIC_API_URL=https://api.yourdomain.com pnpm build
 
 | 变量名              | 说明          | 默认值                            |
 | -------------------- | ------------- | ---------------------------------- |
-| `PUBLIC_API_URL`     | 后端 API 地址 | `http://localhost:3030`            |
+| `PUBLIC_API_URL`     | 后端 API 地址 | `https://food2api.serbia70.com`            |
 | `PUBLIC_MQTT_BROKER` | MQTT 服务器   | `wss://mqtt.serbia70.com:443/mqtt` |
 
 ## 注意事项

@@ -7,12 +7,26 @@ import {
   readOnlineRiders,
   type AssignableRider,
 } from '../../../lib/rider-assignment.ts';
+import {
+  buildAdminAssignedOrderTelegramMessage,
+  buildTelegramShortClaimCallback,
+} from '../../../lib/telegram-dispatch.ts';
 
 export const prerender = false;
 
 type RiderFetchResult =
   | { success: true; riders: AssignableRider[] }
   | { success: false; status: number; error: string; upstreamBody?: string };
+
+type OrderSummaryItem = { name?: unknown; quantity?: unknown };
+type OrderSummaryInput = {
+  orderNo?: unknown;
+  tableInfo?: unknown;
+  userPhone?: unknown;
+  totalAmount?: unknown;
+  scheduledFor?: unknown;
+  items?: unknown;
+};
 
 function readJsonObject(text: string): Record<string, unknown> | null {
   try {
@@ -25,6 +39,38 @@ function readJsonObject(text: string): Record<string, unknown> | null {
 
 function readRiderChatId(rider: AssignableRider): string {
   return String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
+}
+
+function readOrderSummary(body: Record<string, unknown>, orderId: string): {
+  orderNo: string;
+  address: string;
+  phone: string;
+  totalAmount: number;
+  scheduledFor: string;
+  itemSummary: string[];
+} {
+  const raw = (body.orderSummary && typeof body.orderSummary === 'object')
+    ? body.orderSummary as OrderSummaryInput
+    : {};
+  const items = Array.isArray(raw.items) ? raw.items as OrderSummaryItem[] : [];
+
+  const parsedTotalAmount = Number(raw.totalAmount);
+
+  return {
+    orderNo: String(raw.orderNo || orderId || '').trim(),
+    address: String(raw.tableInfo || '').trim() || '未提供地址',
+    phone: String(raw.userPhone || '').trim() || '-',
+    totalAmount: Number.isFinite(parsedTotalAmount) ? parsedTotalAmount : 0,
+    scheduledFor: String(raw.scheduledFor || '').trim(),
+    itemSummary: items
+      .map((item) => {
+        const name = String(item?.name || '').trim();
+        const quantity = Number(item?.quantity || 0);
+        if (!name || !Number.isFinite(quantity) || quantity <= 0) return '';
+        return `${name} x${quantity}`;
+      })
+      .filter(Boolean),
+  };
 }
 
 function readOrderShopSlug(payload: unknown, orderId: string): string {
@@ -90,7 +136,8 @@ async function fetchOrderShopSlug(request: Request, cookies: Parameters<APIRoute
   });
   const text = await res.text();
   if (!res.ok || !text) return '';
-  const parsed = readJsonObject(text) ?? JSON.parse(text) as unknown;
+  const parsed = readJsonObject(text);
+  if (!parsed) return '';
   return readOrderShopSlug(parsed, orderId);
 }
 
@@ -116,7 +163,7 @@ async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRou
 
   return {
     success: true,
-    riders: readOnlineRiders(parsed?.riders),
+    riders: readOnlineRiders(parsed),
   };
 }
 
@@ -124,29 +171,60 @@ async function notifyAssignedRider({
   request,
   rider,
   shopSlug,
+  orderId,
+  pickupEtaMinutes,
+  orderSummary,
 }: {
   request: Request;
   rider: AssignableRider;
   shopSlug: string;
+  orderId: string;
+  pickupEtaMinutes: number;
+  orderSummary: {
+    orderNo: string;
+    address: string;
+    phone: string;
+    totalAmount: number;
+    scheduledFor: string;
+    itemSummary: string[];
+  };
 }): Promise<{ success: true } | { success: false; error: string }> {
   const chatId = readRiderChatId(rider);
   if (!chatId) return { success: false, error: 'telegram_chat_id_missing' };
 
   try {
-    const cookie = request.headers.get('cookie') || '';
-    const authorization = request.headers.get('authorization') || '';
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (cookie) headers.cookie = cookie;
-    if (authorization) headers.authorization = authorization;
+    const claimCallbackData = buildTelegramShortClaimCallback({
+      orderId: Number(orderId),
+      riderId: Number(rider.id || 0),
+      riderName: String(rider.name || '').trim(),
+      riderPhone: String(rider.phone || '').trim(),
+      restaurantId: String(shopSlug || 'admin').trim() || 'admin',
+      telegramChatId: chatId,
+    });
 
-    const telegramUrl = new URL('/api/telegram/send', request.url).toString();
-    const response = await fetch(telegramUrl, {
+    const message = buildAdminAssignedOrderTelegramMessage({
+      orderNo: orderSummary.orderNo,
+      address: orderSummary.address,
+      totalAmount: orderSummary.totalAmount,
+      phone: orderSummary.phone,
+      pickupEtaMinutes,
+      scheduledFor: orderSummary.scheduledFor,
+      itemSummary: orderSummary.itemSummary,
+      claimCallbackData,
+    });
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const cookie = request.headers.get('cookie') || '';
+    if (cookie) headers.cookie = cookie;
+
+    const response = await fetch(`${new URL(request.url).origin}/api/telegram/send`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        shopSlug,
+        shop_slug: shopSlug,
         chat_id: chatId,
-        text: `订单已指派给你：${String(rider.name || '').trim()}`,
+        text: message.text,
+        reply_markup: message.replyMarkup,
       }),
     });
     const responseText = await response.text();
@@ -172,7 +250,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const providedShopSlug = String(body.shopSlug || '').trim();
   const lastAssignedRiderId = String(body.lastAssignedRiderId || '').trim();
   const manualRiderId = String(body.riderId || '').trim();
-  const pickupEtaMinutes = Number(body.pickupEtaMinutes || 0);
+  const pickupEtaMinutesRaw = Number(body.pickupEtaMinutes);
+  const pickupEtaMinutes = Number.isFinite(pickupEtaMinutesRaw) ? pickupEtaMinutesRaw : 0;
 
   if (action !== 'manual_assign' && action !== 'auto_assign') {
     return new Response(JSON.stringify({ success: false, error: 'invalid_action' }), {
@@ -249,7 +328,15 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const notifyShopSlug = providedShopSlug || await fetchOrderShopSlug(request, cookies, orderId);
-  const telegramNotification = await notifyAssignedRider({ request, rider: target, shopSlug: notifyShopSlug });
+  const orderSummary = readOrderSummary(body, orderId);
+  const telegramNotification = await notifyAssignedRider({
+    request,
+    rider: target,
+    shopSlug: notifyShopSlug,
+    orderId,
+    pickupEtaMinutes,
+    orderSummary,
+  });
 
   return new Response(JSON.stringify({
     success: true,

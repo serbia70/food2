@@ -5,6 +5,7 @@ export const prerender = false;
 
 type TelegramSendBody = {
   shopSlug?: unknown;
+  shop_slug?: unknown;
   chatId?: unknown;
   chat_id?: unknown;
   text?: unknown;
@@ -53,6 +54,14 @@ function readTelegramBotToken(raw: unknown): string {
 }
 
 function describeFetchError(error: unknown): { message: string; cause?: string; code?: string } {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return {
+      message: 'fetch aborted',
+      cause: `Telegram request timed out after ${TELEGRAM_SEND_REQUEST_TIMEOUT_MS}ms`,
+      code: 'TELEGRAM_REQUEST_TIMEOUT',
+    };
+  }
+
   const fallback = {
     message: error instanceof Error ? error.message : 'fetch_failed',
   } as { message: string; cause?: string; code?: string };
@@ -72,19 +81,33 @@ function describeFetchError(error: unknown): { message: string; cause?: string; 
   return fallback;
 }
 
-const TELEGRAM_SEND_MAX_ATTEMPTS = 3;
+const TELEGRAM_SEND_MAX_ATTEMPTS = 2;
+const TELEGRAM_SEND_RETRY_DELAY_MS = 250;
+const TELEGRAM_SEND_REQUEST_TIMEOUT_MS = 2000;
 
 function shouldRetryTelegramSend(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') return true;
   const details = describeFetchError(error);
-  return details.code === 'UND_ERR_CONNECT_TIMEOUT';
+  return details.code === 'UND_ERR_CONNECT_TIMEOUT' || details.code === 'ECONNRESET' || details.code === 'ETIMEDOUT';
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function postTelegramMessage(token: string, telegramPayload: Record<string, unknown>): Promise<Response> {
-  return fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(telegramPayload),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort('telegram_request_timeout'), TELEGRAM_SEND_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(telegramPayload),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function sendTelegramMessage(token: string, telegramPayload: Record<string, unknown>): Promise<Response> {
@@ -98,6 +121,7 @@ async function sendTelegramMessage(token: string, telegramPayload: Record<string
       if (!shouldRetryTelegramSend(error) || attempt === TELEGRAM_SEND_MAX_ATTEMPTS) {
         throw error;
       }
+      await wait(TELEGRAM_SEND_RETRY_DELAY_MS * attempt);
     }
   }
 
@@ -173,7 +197,7 @@ async function loadTelegramBotToken(request: Request, shopSlug: string): Promise
 
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.json().catch(() => ({})) as TelegramSendBody;
-  const shopSlug = String(body.shopSlug || '').trim();
+  const shopSlug = String(body.shopSlug || body.shop_slug || '').trim();
   const chatId = String(body.chatId || body.chat_id || '').trim();
   const text = String(body.text || '').trim();
 

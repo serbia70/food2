@@ -296,7 +296,7 @@ test('loadMasterRiderStatusData reads canonical impersonate proxy payload only',
     globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input instanceof Request ? input.url : input);
 
-      if (url === 'http://localhost:3030/api/master/impersonate-shop?id=11') {
+      if (url === 'https://food2.serbia70.com/api/master/impersonate-shop?id=11') {
         assert.equal(init?.method, 'GET');
         return new Response(JSON.stringify({
           ok: true,
@@ -311,7 +311,7 @@ test('loadMasterRiderStatusData reads canonical impersonate proxy payload only',
         });
       }
 
-      if (url === 'http://localhost:3030/api/admin/riders') {
+      if (url === 'https://food2.serbia70.com/api/admin/riders') {
         const headers = new Headers(init?.headers);
         assert.equal(headers.get('authorization'), 'Bearer admin-token-11');
         return new Response(JSON.stringify({
@@ -346,7 +346,7 @@ test('loadMasterRiderStatusData skips shop when impersonate proxy is not canonic
     globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input instanceof Request ? input.url : input);
 
-      if (url === 'http://localhost:3030/api/master/impersonate-shop?id=11') {
+      if (url === 'https://food2.serbia70.com/api/master/impersonate-shop?id=11') {
         assert.equal(init?.method, 'GET');
         return new Response(JSON.stringify({
           success: true,

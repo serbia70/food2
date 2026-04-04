@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.PUBLIC_API_URL = 'http://localhost:3030';
+process.env.PUBLIC_API_URL = 'https://api.test.local';
 
 const originalFetch = globalThis.fetch;
 
@@ -20,7 +20,7 @@ test('POST telegram send 读取店铺 settings 里的 token 并转发到 Telegra
     const url = String(input);
     calls.push({ url, init });
 
-    if (url === 'http://localhost:3030/demo-shop/info') {
+    if (url === 'https://api.test.local/demo-shop/info') {
       return new Response(JSON.stringify({
         id: 21,
         slug: 'demo-shop',
@@ -76,7 +76,7 @@ test('POST telegram send 读取店铺 settings 里的 token 并转发到 Telegra
     ok: true,
     result: { message_id: 99 },
   });
-  assert.ok(calls.some((call) => call.url === 'http://localhost:3030/demo-shop/info'));
+  assert.ok(calls.some((call) => call.url === 'https://api.test.local/demo-shop/info'));
   assert.ok(calls.some((call) => call.url === 'https://api.telegram.org/botbot-token-123/sendMessage'));
 });
 
@@ -87,7 +87,7 @@ test('POST telegram send 在店铺未配置 token 时回退读取当前站内 ma
     const url = String(input);
     calls.push(url);
 
-    if (url === 'http://localhost:3030/demo-shop/info') {
+    if (url === 'https://api.test.local/demo-shop/info') {
       return new Response(JSON.stringify({
         id: 21,
         slug: 'demo-shop',
@@ -154,7 +154,7 @@ test('POST telegram send 兼容 master settings 的 server.telegramBotToken 嵌�
     const url = String(input);
     calls.push(url);
 
-    if (url === 'http://localhost:3030/demo-shop/info') {
+    if (url === 'https://api.test.local/demo-shop/info') {
       return new Response(JSON.stringify({
         id: 21,
         slug: 'demo-shop',
@@ -218,7 +218,7 @@ test('POST telegram send 兼容 master settings 的 server.telegramBotToken 嵌�
 test('POST telegram send 在店铺和 master 都缺少 token 时返回 400 与诊断信息', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/demo-shop/info') {
+    if (url === 'https://api.test.local/demo-shop/info') {
       return new Response(JSON.stringify({
         id: 21,
         slug: 'demo-shop',
@@ -234,7 +234,7 @@ test('POST telegram send 在店铺和 master 都缺少 token 时返回 400 与�
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    if (url === 'http://localhost:3030/api/home') {
+    if (url === 'https://api.test.local/api/home') {
       return new Response(JSON.stringify({ data: { settings: {} } }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -287,7 +287,7 @@ test('POST telegram send 请求当前站内 master init 时只透传 cookie', as
     const url = String(input);
     calls.push(url);
 
-    if (url === 'http://localhost:3030/demo-shop/info') {
+    if (url === 'https://api.test.local/demo-shop/info') {
       return new Response(JSON.stringify({
         id: 21,
         slug: 'demo-shop',
@@ -360,7 +360,7 @@ test('POST telegram send 在当前站内 master settings 未授权时回退公�
     const url = String(input);
     calls.push(url);
 
-    if (url === 'http://localhost:3030/demo-shop/info') {
+    if (url === 'https://api.test.local/demo-shop/info') {
       return new Response(JSON.stringify({
         id: 21,
         slug: 'demo-shop',
@@ -381,7 +381,7 @@ test('POST telegram send 在当前站内 master settings 未授权时回退公�
       });
     }
 
-    if (url === 'http://localhost:3030/api/home') {
+    if (url === 'https://api.test.local/api/home') {
       return new Response(JSON.stringify({
         data: {
           settings: {
@@ -425,7 +425,7 @@ test('POST telegram send 在当前站内 master settings 未授权时回退公�
     result: { message_id: 104 },
   });
   assert.ok(calls.includes('https://food2.serbia70.com/api/master/init'));
-  assert.ok(calls.includes('http://localhost:3030/api/home'));
+  assert.ok(calls.includes('https://api.test.local/api/home'));
   assert.ok(calls.includes('https://api.telegram.org/botpublic-home-token/sendMessage'));
 });
 
@@ -436,7 +436,7 @@ test('POST telegram send 请求当前站内 master init 时不会转发 admin au
     const url = String(input);
     calls.push(url);
 
-    if (url === 'http://localhost:3030/103/info') {
+    if (url === 'https://api.test.local/103/info') {
       return new Response(JSON.stringify({
         id: 103,
         slug: '103',
@@ -460,7 +460,7 @@ test('POST telegram send 请求当前站内 master init 时不会转发 admin au
       });
     }
 
-    if (url === 'http://localhost:3030/api/home') {
+    if (url === 'https://api.test.local/api/home') {
       return new Response(JSON.stringify({
         data: {
           settings: {
@@ -560,7 +560,7 @@ test('POST telegram send 在缺少 shopSlug 时仍可使用全局 token 发送',
     ok: true,
     result: { message_id: 101 },
   });
-  assert.ok(!calls.includes('http://localhost:3030/demo-shop/info'));
+  assert.ok(!calls.includes('https://api.test.local/demo-shop/info'));
 });
 
 test('POST telegram send 在店铺 settings 使用扁平 telegramBotToken 时也能发送', async () => {
@@ -570,7 +570,7 @@ test('POST telegram send 在店铺 settings 使用扁平 telegramBotToken 时也
     const url = String(input);
     calls.push(url);
 
-    if (url === 'http://localhost:3030/103/info') {
+    if (url === 'https://api.test.local/103/info') {
       return new Response(JSON.stringify({
         id: 103,
         slug: '103',
@@ -616,7 +616,7 @@ test('POST telegram send 在店铺 settings 使用扁平 telegramBotToken 时也
     ok: true,
     result: { message_id: 105 },
   });
-  assert.ok(calls.includes('http://localhost:3030/103/info'));
+  assert.ok(calls.includes('https://api.test.local/103/info'));
   assert.ok(calls.includes('https://api.telegram.org/botshop-flat-token/sendMessage'));
   assert.ok(!calls.includes('https://food2.serbia70.com/api/master/init'));
 });
@@ -628,7 +628,7 @@ test('POST telegram send 兼容 chat_id 字段', async () => {
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
-      if (url === 'http://localhost:3030/demo-shop/info') {
+      if (url === 'https://api.test.local/demo-shop/info') {
         return new Response(JSON.stringify({
           id: 21,
           slug: 'demo-shop',
@@ -675,6 +675,61 @@ test('POST telegram send 兼容 chat_id 字段', async () => {
   }
 });
 
+test('POST telegram send 兼容 shop_slug 字段', async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url === 'https://api.test.local/demo-shop/info') {
+        return new Response(JSON.stringify({
+          id: 21,
+          slug: 'demo-shop',
+          settings: JSON.stringify({ telegram: { token: 'bot-token-123' } }),
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url === 'https://api.telegram.org/botbot-token-123/sendMessage') {
+        const body = JSON.parse(String(init?.body || '{}'));
+        assert.equal(body.chat_id, 'chat-7');
+        assert.equal(body.text, '新订单');
+        return new Response(JSON.stringify({ ok: true, result: { message_id: 107 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const mod = await loadRoute();
+    const response = await mod.POST({
+      request: new Request('https://food2.serbia70.com/api/telegram/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop_slug: 'demo-shop',
+          chat_id: 'chat-7',
+          text: '新订单',
+        }),
+      }),
+    } as any);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      success: true,
+      ok: true,
+      result: { message_id: 107 },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('POST telegram send retries through multiple connect timeouts and then succeeds', async () => {
   const originalFetch = globalThis.fetch;
   let telegramAttempts = 0;
@@ -683,7 +738,7 @@ test('POST telegram send retries through multiple connect timeouts and then succ
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
 
-      if (url === 'http://localhost:3030/demo-shop/info') {
+      if (url === 'https://api.test.local/demo-shop/info') {
         return new Response(JSON.stringify({
           id: 21,
           slug: 'demo-shop',
@@ -696,7 +751,7 @@ test('POST telegram send retries through multiple connect timeouts and then succ
 
       if (url === 'https://api.telegram.org/botbot-token-123/sendMessage') {
         telegramAttempts += 1;
-        if (telegramAttempts < 3) {
+        if (telegramAttempts < 2) {
           throw Object.assign(new TypeError('fetch failed'), {
             cause: Object.assign(new Error('Connect Timeout Error (attempted address: api.telegram.org:443, timeout: 10000ms)'), {
               code: 'UND_ERR_CONNECT_TIMEOUT',
@@ -726,7 +781,7 @@ test('POST telegram send retries through multiple connect timeouts and then succ
     } as any);
 
     assert.equal(response.status, 200);
-    assert.equal(telegramAttempts, 3);
+    assert.equal(telegramAttempts, 2);
     assert.deepEqual(await response.json(), {
       success: true,
       ok: true,
@@ -745,7 +800,7 @@ test('POST telegram send returns 502 after exhausting connect timeout retries', 
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
 
-      if (url === 'http://localhost:3030/demo-shop/info') {
+      if (url === 'https://api.test.local/demo-shop/info') {
         return new Response(JSON.stringify({
           id: 21,
           slug: 'demo-shop',
@@ -782,7 +837,7 @@ test('POST telegram send returns 502 after exhausting connect timeout retries', 
     } as any);
 
     assert.equal(response.status, 502);
-    assert.equal(telegramAttempts, 3);
+    assert.equal(telegramAttempts, 2);
     assert.deepEqual(await response.json(), {
       success: false,
       error: 'telegram_send_failed',
@@ -807,12 +862,16 @@ test('telegram send source uses canonical internal request fields', async () => 
   assert.match(source, /const masterHeaders: Record<string, string> = \{\};/);
   assert.match(source, /const cookie = request\.headers\.get\('cookie'\) \|\| '';/);
   assert.match(source, /if \(cookie\) masterHeaders\.cookie = cookie;/);
+  assert.match(source, /const TELEGRAM_SEND_MAX_ATTEMPTS = 2;/);
+  assert.match(source, /const TELEGRAM_SEND_RETRY_DELAY_MS = 250;/);
+  assert.match(source, /const TELEGRAM_SEND_REQUEST_TIMEOUT_MS = 2000;/);
+  assert.match(source, /await wait\(TELEGRAM_SEND_RETRY_DELAY_MS \* attempt\);/);
   assert.doesNotMatch(source, /const authorization = request\.headers\.get\('authorization'\) \|\| '';/);
   assert.doesNotMatch(source, /passthroughHeaders\.authorization = authorization/);
   assert.match(source, /const normalizedShopSlug = String\(shopSlug \|\| ''\)\.trim\(\);/);
-  assert.match(source, /const shopSlug = String\(body\.shopSlug \|\| ''\)\.trim\(\);/);
+  assert.match(source, /const shopSlug = String\(body\.shopSlug \|\| body\.shop_slug \|\| ''\)\.trim\(\);/);
   assert.match(source, /const chatId = String\(body\.chatId \|\| body\.chat_id \|\| ''\)\.trim\(\);/);
   assert.match(source, /const homeRes = await fetch\(`\$\{API_BASE_URL\}\/api\/home`\);/);
-  assert.doesNotMatch(source, /shop_slug\?: unknown;/);
-  assert.doesNotMatch(source, /body\.shop_slug/);
+  assert.match(source, /shop_slug\?: unknown;/);
+  assert.match(source, /body\.shop_slug/);
 });

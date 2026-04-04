@@ -1,4 +1,4 @@
-process.env.PUBLIC_API_URL = 'http://localhost:3030';
+process.env.PUBLIC_API_URL = 'https://api.test.local';
 process.env.TELEGRAM_CALLBACK_SECRET = 'test-telegram-callback-secret';
 process.env.TELEGRAM_WEBHOOK_SECRET = 'test-telegram-callback-secret';
 process.env.TELEGRAM_BIND_SECRET = 'test-telegram-bind-secret';
@@ -130,7 +130,7 @@ test('POST rider-bind 在签名合法时写回 telegram_chat_id', async () => {
 
     globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input instanceof Request ? input.url : input);
-      assert.equal(url, 'http://localhost:3030/api/rider/status');
+      assert.equal(url, 'https://api.test.local/api/rider/status');
       assert.equal(init?.method, 'POST');
       assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
         id: 7,

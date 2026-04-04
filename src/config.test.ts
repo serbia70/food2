@@ -5,9 +5,9 @@ import { resolve } from 'node:path';
 
 const filePath = resolve(process.cwd(), 'src/config.ts');
 
-test('config source does not fall back API_BASE_URL to localhost:3030', async () => {
+test('config source does not fall back API_BASE_URL to localhost', async () => {
   const source = await readFile(filePath, 'utf8');
 
   assert.match(source, /PUBLIC_API_URL/);
-  assert.doesNotMatch(source, /localhost:3030/);
+  assert.doesNotMatch(source, /localhost:\d+/);
 });

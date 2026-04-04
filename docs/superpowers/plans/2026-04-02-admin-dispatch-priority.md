@@ -244,7 +244,7 @@ EOF
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.PUBLIC_API_URL = 'http://localhost:3030';
+process.env.PUBLIC_API_URL = 'https://food2.serbia70.com';
 
 const originalFetch = globalThis.fetch;
 
@@ -272,7 +272,7 @@ test('manual_assign updates order to delivering for selected available rider', a
     const url = String(input);
     calls.push(url);
 
-    if (url === 'http://localhost:3030/api/admin/riders') {
+    if (url === 'https://food2.serbia70.com/api/admin/riders') {
       return new Response(JSON.stringify({
         riders: [
           { id: 7, name: '骑手A', phone: '061', status: 'available', telegramChatId: 'tg-7' },
@@ -280,7 +280,7 @@ test('manual_assign updates order to delivering for selected available rider', a
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3030/api/admin/orders/470/status') {
+    if (url === 'https://food2.serbia70.com/api/admin/orders/470/status') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.equal(body.status, 'delivering');
       assert.equal(body.courierName, '骑手A');
@@ -289,7 +289,7 @@ test('manual_assign updates order to delivering for selected available rider', a
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3030/api/telegram/send') {
+    if (url === 'https://food2.serbia70.com/api/telegram/send') {
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -308,14 +308,14 @@ test('manual_assign updates order to delivering for selected available rider', a
 
   assert.equal(response.status, 200);
   assert.equal((await response.json()).success, true);
-  assert.ok(calls.includes('http://localhost:3030/api/admin/orders/470/status'));
+  assert.ok(calls.includes('https://food2.serbia70.com/api/admin/orders/470/status'));
 });
 
 test('auto_assign picks next available rider when cursor is present', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
 
-    if (url === 'http://localhost:3030/api/admin/riders') {
+    if (url === 'https://food2.serbia70.com/api/admin/riders') {
       return new Response(JSON.stringify({
         riders: [
           { id: 7, name: '骑手A', phone: '061', status: 'available', telegramChatId: 'tg-7' },
@@ -324,7 +324,7 @@ test('auto_assign picks next available rider when cursor is present', async () =
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3030/api/admin/orders/471/status') {
+    if (url === 'https://food2.serbia70.com/api/admin/orders/471/status') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.equal(body.courierName, '骑手B');
       assert.equal(body.courierPhone, '062');
@@ -332,7 +332,7 @@ test('auto_assign picks next available rider when cursor is present', async () =
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3030/api/telegram/send') {
+    if (url === 'https://food2.serbia70.com/api/telegram/send') {
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -357,7 +357,7 @@ test('returns no_available_riders when no available rider exists', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
 
-    if (url === 'http://localhost:3030/api/admin/riders') {
+    if (url === 'https://food2.serbia70.com/api/admin/riders') {
       return new Response(JSON.stringify({ riders: [] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -953,7 +953,7 @@ test('publish updates order into awaiting_courier without courier assignment fie
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
 
-    if (url === 'http://localhost:3030/api/admin/orders/480/status') {
+    if (url === 'https://food2.serbia70.com/api/admin/orders/480/status') {
       statusUpdateBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -961,7 +961,7 @@ test('publish updates order into awaiting_courier without courier assignment fie
       });
     }
 
-    if (url === 'http://localhost:3030/api/admin/riders') {
+    if (url === 'https://food2.serbia70.com/api/admin/riders') {
       return new Response(JSON.stringify({ riders: [] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

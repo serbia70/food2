@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.PUBLIC_API_URL = 'http://localhost:3030';
+process.env.PUBLIC_API_URL = 'https://api.test.local';
 
 const originalFetch = globalThis.fetch;
 
@@ -16,7 +16,7 @@ test.afterEach(() => {
 test('GET rider orders 透传后端失败响应', async () => {
   globalThis.fetch = async (input: string | URL | Request) => {
     const url = String(input instanceof Request ? input.url : input);
-    assert.equal(url, 'http://localhost:3030/api/rider/orders?phone=0613083899&view=active');
+    assert.equal(url, 'https://api.test.local/api/rider/orders?phone=0613083899&view=active');
     return new Response(JSON.stringify({ success: false, error: 'rider_session_required' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },

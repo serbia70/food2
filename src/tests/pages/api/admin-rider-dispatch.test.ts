@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-process.env.PUBLIC_API_URL = 'http://localhost:3030';
+process.env.PUBLIC_API_URL = 'https://api.test.local';
 process.env.TELEGRAM_CALLBACK_SECRET = 'test-telegram-callback-secret';
 
 const originalFetch = globalThis.fetch;
@@ -20,14 +20,14 @@ test('POST rider-dispatch publish 兼容 admin riders 返回 telegram_chat_id', 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
 
-    if (url === 'http://localhost:3030/api/admin/orders/470/status') {
+    if (url === 'https://api.test.local/api/admin/orders/470/status') {
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    if (url === 'http://localhost:3030/api/admin/riders') {
+    if (url === 'https://api.test.local/api/admin/riders') {
       return new Response(JSON.stringify({ riders: [
         { id: 8, name: '骑手B', phone: '0613000000', status: 'available', telegram_chat_id: 'chat-snake-8' },
       ] }), {
@@ -36,7 +36,7 @@ test('POST rider-dispatch publish 兼容 admin riders 返回 telegram_chat_id', 
       });
     }
 
-    if (url === 'https://food2.serbia70.com/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return new Response(JSON.stringify({ success: true, ok: true }), {
         status: 200,
@@ -91,14 +91,14 @@ test('POST rider-dispatch publish 调用本地 telegram send 时透传 cookie �
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
 
-    if (url === 'http://localhost:3030/api/admin/orders/476/status') {
+    if (url === 'https://api.test.local/api/admin/orders/476/status') {
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    if (url === 'http://localhost:3030/api/admin/riders') {
+    if (url === 'https://api.test.local/api/admin/riders') {
       return new Response(JSON.stringify({ riders: [
         { id: 8, name: '骑手B', phone: '0613000000', status: 'available', telegram_chat_id: 'chat-snake-8' },
       ] }), {
@@ -107,7 +107,7 @@ test('POST rider-dispatch publish 调用本地 telegram send 时透传 cookie �
       });
     }
 
-    if (url === 'https://food2.serbia70.com/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       const headers = new Headers(init?.headers);
       assert.equal(headers.get('cookie'), 'master_token=master-cookie-1; admin_token=admin-cookie-1');
       assert.equal(headers.get('authorization'), 'Bearer inline-auth-token');
@@ -165,7 +165,7 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
     const url = String(input);
     calls.push({ url, init });
 
-    if (url === 'http://localhost:3030/api/admin/orders') {
+    if (url === 'https://api.test.local/api/admin/orders') {
       return new Response(JSON.stringify([
         {
           id: 447,
@@ -184,7 +184,7 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
       });
     }
 
-    if (url === 'http://localhost:3030/api/admin/orders/447/status') {
+    if (url === 'https://api.test.local/api/admin/orders/447/status') {
       assert.equal(init?.method, 'PUT');
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -192,7 +192,7 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
       });
     }
 
-    if (url === 'http://localhost:3030/api/admin/riders') {
+    if (url === 'https://api.test.local/api/admin/riders') {
       assert.equal((init?.headers as Record<string, string> | undefined)?.Authorization, 'Bearer test-token');
       return new Response(JSON.stringify({ riders: [
         { id: 7, name: '骑手A', phone: '0613083899', status: 'available', telegramChatId: 'chat-7' },
@@ -202,7 +202,7 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
       });
     }
 
-    if (url === 'https://food2.serbia70.com/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       assert.equal(init?.method, 'POST');
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, any>;
       assert.equal(body.shopSlug, 'demo-shop');
@@ -254,7 +254,7 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
   assert.equal(body.order.id, 447);
   assert.equal(body.order.status, 'awaiting_courier');
   assert.ok(calls.some((call) => call.url.includes('/api/admin/orders/447/status')));
-  assert.ok(calls.some((call) => call.url === 'https://food2.serbia70.com/api/telegram/send'));
+  assert.ok(calls.some((call) => call.url === 'https://api.test.local/api/telegram/send'));
 });
 
 test('POST rider-dispatch publish 在请求体已带订单快照时不再依赖 /api/admin/orders', async () => {
@@ -264,7 +264,7 @@ test('POST rider-dispatch publish 在请求体已带订单快照时不再依赖 
     const url = String(input);
     calls.push({ url, init });
 
-    if (url === 'http://localhost:3030/api/admin/orders/463/status') {
+    if (url === 'https://api.test.local/api/admin/orders/463/status') {
       assert.equal(init?.method, 'PUT');
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -272,7 +272,7 @@ test('POST rider-dispatch publish 在请求体已带订单快照时不再依赖 
       });
     }
 
-    if (url === 'http://localhost:3030/api/admin/riders') {
+    if (url === 'https://api.test.local/api/admin/riders') {
       assert.equal((init?.headers as Record<string, string> | undefined)?.Authorization, 'Bearer test-token');
       return new Response(JSON.stringify({ riders: [
         { id: 7, name: '骑手A', phone: '0613083899', status: 'available', telegramChatId: 'chat-7' },
@@ -282,7 +282,7 @@ test('POST rider-dispatch publish 在请求体已带订单快照时不再依赖 
       });
     }
 
-    if (url === 'https://food2.serbia70.com/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.equal(body.shopSlug, 'demo-shop');
       assert.equal(body.chat_id, 'chat-7');
@@ -292,7 +292,7 @@ test('POST rider-dispatch publish 在请求体已带订单快照时不再依赖 
       });
     }
 
-    if (url === 'http://localhost:3030/api/admin/orders') {
+    if (url === 'https://api.test.local/api/admin/orders') {
       return new Response('Not Found', {
         status: 404,
         headers: { 'Content-Type': 'text/plain' },
@@ -339,9 +339,9 @@ test('POST rider-dispatch publish 在请求体已带订单快照时不再依赖 
   const body = await response.json();
   assert.equal(body.success, true);
   assert.equal(body.order.id, '463');
-  assert.ok(calls.some((call) => call.url === 'http://localhost:3030/api/admin/orders/463/status'));
-  assert.ok(calls.some((call) => call.url === 'https://food2.serbia70.com/api/telegram/send'));
-  assert.equal(calls.some((call) => call.url === 'http://localhost:3030/api/admin/orders'), false);
+  assert.ok(calls.some((call) => call.url === 'https://api.test.local/api/admin/orders/463/status'));
+  assert.ok(calls.some((call) => call.url === 'https://api.test.local/api/telegram/send'));
+  assert.equal(calls.some((call) => call.url === 'https://api.test.local/api/admin/orders'), false);
 });
 
 test('POST rider-dispatch remind 会再次广播并返回 telegram_dispatch', async () => {
@@ -351,7 +351,7 @@ test('POST rider-dispatch remind 会再次广播并返回 telegram_dispatch', as
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
 
-    if (url === 'http://localhost:3030/api/admin/orders/472/status') {
+    if (url === 'https://api.test.local/api/admin/orders/472/status') {
       statusUpdateBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -359,7 +359,7 @@ test('POST rider-dispatch remind 会再次广播并返回 telegram_dispatch', as
       });
     }
 
-    if (url === 'http://localhost:3030/api/admin/riders') {
+    if (url === 'https://api.test.local/api/admin/riders') {
       return new Response(JSON.stringify({ riders: [
         { id: 9, name: '骑手C', phone: '0613000011', status: 'available', telegramChatId: 'chat-9' },
       ] }), {
@@ -368,7 +368,7 @@ test('POST rider-dispatch remind 会再次广播并返回 telegram_dispatch', as
       });
     }
 
-    if (url === 'https://food2.serbia70.com/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       telegramSendCount += 1;
       return new Response(JSON.stringify({ success: true, ok: true }), {
         status: 200,
@@ -426,7 +426,7 @@ test('POST rider-dispatch publish 在未提供 status 时会推进到 awaiting_c
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
 
-    if (url === 'http://localhost:3030/api/admin/orders/473/status') {
+    if (url === 'https://api.test.local/api/admin/orders/473/status') {
       statusUpdateBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -434,7 +434,7 @@ test('POST rider-dispatch publish 在未提供 status 时会推进到 awaiting_c
       });
     }
 
-    if (url === 'http://localhost:3030/api/admin/riders') {
+    if (url === 'https://api.test.local/api/admin/riders') {
       return new Response(JSON.stringify({ riders: [] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -489,7 +489,7 @@ test('POST rider-dispatch 在上游订单更新 404 时返回明确阶段错误'
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
 
-    if (url === 'http://localhost:3030/api/admin/orders') {
+    if (url === 'https://api.test.local/api/admin/orders') {
       return new Response(JSON.stringify([
         {
           id: 460,
@@ -508,7 +508,7 @@ test('POST rider-dispatch 在上游订单更新 404 时返回明确阶段错误'
       });
     }
 
-    if (url === 'http://localhost:3030/api/admin/orders/460/status') {
+    if (url === 'https://api.test.local/api/admin/orders/460/status') {
       assert.equal(init?.method, 'PUT');
       return new Response('Not Found', {
         status: 404,
@@ -559,7 +559,7 @@ test('POST rider-dispatch 在 Astro cookies 缺失时仍会用原始 cookie 头�
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
 
-    if (url === 'http://localhost:3030/api/admin/orders/461/status') {
+    if (url === 'https://api.test.local/api/admin/orders/461/status') {
       const headers = new Headers(init?.headers);
       assert.equal(init?.method, 'PUT');
       assert.equal(headers.get('authorization'), 'Bearer raw-cookie-token');
@@ -569,7 +569,7 @@ test('POST rider-dispatch 在 Astro cookies 缺失时仍会用原始 cookie 头�
       });
     }
 
-    if (url === 'http://localhost:3030/api/admin/riders') {
+    if (url === 'https://api.test.local/api/admin/riders') {
       const headers = new Headers(init?.headers);
       assert.equal(headers.get('authorization'), 'Bearer raw-cookie-token');
       return new Response(JSON.stringify({ riders: [] }), {
@@ -628,14 +628,14 @@ test('POST rider-dispatch 在缺少 TELEGRAM_CALLBACK_SECRET 时降级为无 cal
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
-      if (url === 'http://localhost:3030/api/admin/orders/462/status') {
+      if (url === 'https://api.test.local/api/admin/orders/462/status') {
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
       }
 
-      if (url === 'http://localhost:3030/api/admin/riders') {
+      if (url === 'https://api.test.local/api/admin/riders') {
         return new Response(JSON.stringify({ riders: [
           { id: 7, name: '骑手A', phone: '0613083899', status: 'available', telegramChatId: 'chat-7' },
         ] }), {
@@ -644,7 +644,7 @@ test('POST rider-dispatch 在缺少 TELEGRAM_CALLBACK_SECRET 时降级为无 cal
         });
       }
 
-      if (url === 'http://localhost:3000/api/telegram/send') {
+      if (url === 'https://api.test.local/api/telegram/send') {
         telegramSendBody = JSON.parse(String(init?.body || '{}')) as Record<string, any>;
         return new Response(JSON.stringify({ success: true, ok: true }), {
           status: 200,

@@ -39,7 +39,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.PUBLIC_API_URL = 'http://localhost:3030';
+process.env.PUBLIC_API_URL = 'https://food2.serbia70.com';
 
 const originalFetch = globalThis.fetch;
 

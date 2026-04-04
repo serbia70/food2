@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.PUBLIC_API_URL = 'http://localhost:3030';
+process.env.PUBLIC_API_URL = 'https://api.test.local';
 
 const originalFetch = globalThis.fetch;
 
@@ -25,7 +25,7 @@ function createCookies() {
 test('returns telegram_bot_token_not_configured when body and saved settings both miss token', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://api.test.local/api/master/settings') {
       return new Response(JSON.stringify({
         success: true,
         settings: { telegramChatId: '-1001', telegramBotToken: '' },
@@ -54,7 +54,7 @@ test('returns telegram_bot_token_not_configured when body and saved settings bot
 test('returns telegram_chat_id_required when resolved chat id is empty', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://api.test.local/api/master/settings') {
       return new Response(JSON.stringify({
         success: true,
         settings: { telegramChatId: '', telegramBotToken: 'saved-bot-token' },
@@ -85,7 +85,7 @@ test('sends telegram message through backend telegram endpoint with request body
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/telegram-test') {
+    if (url === 'https://api.test.local/api/master/telegram-test') {
       upstreamRequest = {
         url,
         body: JSON.parse(String(init?.body || '{}')),
@@ -95,7 +95,7 @@ test('sends telegram message through backend telegram endpoint with request body
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://api.test.local/api/master/settings') {
       return new Response(JSON.stringify({
         success: true,
         settings: { telegramChatId: 'saved-chat-id', telegramBotToken: 'saved-bot-token' },
@@ -125,7 +125,7 @@ test('sends telegram message through backend telegram endpoint with request body
     result: { message_id: 555 },
   });
   assert.deepEqual(upstreamRequest, {
-    url: 'http://localhost:3030/api/master/telegram-test',
+    url: 'https://api.test.local/api/master/telegram-test',
     body: {
       telegramBotToken: 'inline-token',
       telegramChatId: '-100998877',
@@ -139,7 +139,7 @@ test('accepts snake_case body keys before saved settings fallback', async () => 
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/telegram-test') {
+    if (url === 'https://api.test.local/api/master/telegram-test') {
       telegramRequest = {
         url,
         body: JSON.parse(String(init?.body || '{}')),
@@ -172,7 +172,7 @@ test('accepts snake_case body keys before saved settings fallback', async () => 
     result: { message_id: 777 },
   });
   assert.deepEqual(telegramRequest, {
-    url: 'http://localhost:3030/api/master/telegram-test',
+    url: 'https://api.test.local/api/master/telegram-test',
     body: {
       telegramBotToken: 'inline-token',
       telegramChatId: '-100998877',
@@ -186,7 +186,7 @@ test('sends telegram message when body is complete even if settings fetch would 
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/telegram-test') {
+    if (url === 'https://api.test.local/api/master/telegram-test') {
       telegramRequest = {
         url,
         body: JSON.parse(String(init?.body || '{}')),
@@ -219,7 +219,7 @@ test('sends telegram message when body is complete even if settings fetch would 
     result: { message_id: 778 },
   });
   assert.deepEqual(telegramRequest, {
-    url: 'http://localhost:3030/api/master/telegram-test',
+    url: 'https://api.test.local/api/master/telegram-test',
     body: {
       telegramBotToken: 'inline-token',
       telegramChatId: '-100998877',
@@ -233,13 +233,13 @@ test('falls back to saved chat id when body only provides token', async () => {
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://api.test.local/api/master/settings') {
       return new Response(JSON.stringify({
         success: true,
         settings: { telegramChatId: '-100saved-chat' },
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-    if (url === 'http://localhost:3030/api/master/telegram-test') {
+    if (url === 'https://api.test.local/api/master/telegram-test') {
       telegramRequest = {
         url,
         body: JSON.parse(String(init?.body || '{}')),
@@ -272,7 +272,7 @@ test('falls back to saved chat id when body only provides token', async () => {
     result: { message_id: 779 },
   });
   assert.deepEqual(telegramRequest, {
-    url: 'http://localhost:3030/api/master/telegram-test',
+    url: 'https://api.test.local/api/master/telegram-test',
     body: {
       telegramBotToken: 'inline-token',
       telegramChatId: '-100saved-chat',
@@ -286,13 +286,13 @@ test('falls back to saved snake_case token when body only provides chat id', asy
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://api.test.local/api/master/settings') {
       return new Response(JSON.stringify({
         success: true,
         settings: { telegram_bot_token: 'saved-bot-token' },
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-    if (url === 'http://localhost:3030/api/master/telegram-test') {
+    if (url === 'https://api.test.local/api/master/telegram-test') {
       telegramRequest = {
         url,
         body: JSON.parse(String(init?.body || '{}')),
@@ -325,7 +325,7 @@ test('falls back to saved snake_case token when body only provides chat id', asy
     result: { message_id: 780 },
   });
   assert.deepEqual(telegramRequest, {
-    url: 'http://localhost:3030/api/master/telegram-test',
+    url: 'https://api.test.local/api/master/telegram-test',
     body: {
       telegramBotToken: 'saved-bot-token',
       telegramChatId: '-100998877',
@@ -337,13 +337,13 @@ test('falls back to saved snake_case token when body only provides chat id', asy
 test('returns structured telegram_send_failed payload when telegram api rejects request', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/telegram-test') {
+    if (url === 'https://api.test.local/api/master/telegram-test') {
       return new Response(JSON.stringify({ ok: false, description: 'Bad Request: chat not found' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://api.test.local/api/master/settings') {
       return new Response(JSON.stringify({
         success: true,
         settings: { telegramChatId: 'saved-chat-id', telegramBotToken: 'saved-bot-token' },
@@ -394,13 +394,13 @@ test('returns invalid_json when request body is not valid json', async () => {
 test('returns network error message when telegram fetch throws', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://api.test.local/api/master/settings') {
       return new Response(JSON.stringify({
         success: true,
         settings: { telegramChatId: 'saved-chat-id', telegramBotToken: 'saved-bot-token' },
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-    if (url === 'http://localhost:3030/api/master/telegram-test') {
+    if (url === 'https://api.test.local/api/master/telegram-test') {
       throw new Error('telegram network down');
     }
     throw new Error(`Unexpected fetch: ${url}`);
@@ -432,7 +432,7 @@ test('returns network error message when telegram fetch throws', async () => {
 test('returns nested cause when telegram fetch fails with generic fetch failed', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/telegram-test') {
+    if (url === 'https://api.test.local/api/master/telegram-test') {
       throw new Error('fetch failed', { cause: new Error('Client network socket disconnected before secure TLS connection was established') });
     }
     throw new Error(`Unexpected fetch: ${url}`);

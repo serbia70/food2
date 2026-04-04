@@ -344,7 +344,7 @@ git add src/components/master/MasterServerSettingsCard.astro src/scripts/master/
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.PUBLIC_API_URL = 'http://localhost:3030';
+process.env.PUBLIC_API_URL = 'https://food2.serbia70.com';
 
 const originalFetch = globalThis.fetch;
 
@@ -368,7 +368,7 @@ function createCookies() {
 test('returns telegram_bot_token_not_configured when body and saved settings both miss token', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://food2.serbia70.com/api/master/settings') {
       return new Response(JSON.stringify({
         success: true,
         settings: { telegramChatId: '-1001', telegramBotToken: '' },
@@ -397,7 +397,7 @@ test('returns telegram_bot_token_not_configured when body and saved settings bot
 test('returns telegram_chat_id_required when resolved chat id is empty', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://food2.serbia70.com/api/master/settings') {
       return new Response(JSON.stringify({
         success: true,
         settings: { telegramChatId: '', telegramBotToken: 'saved-bot-token' },
@@ -438,7 +438,7 @@ test('sends telegram message with request body values before saved settings fall
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://food2.serbia70.com/api/master/settings') {
       return new Response(JSON.stringify({
         success: true,
         settings: { telegramChatId: 'saved-chat-id', telegramBotToken: 'saved-bot-token' },
@@ -485,7 +485,7 @@ test('returns structured telegram_send_failed payload when telegram api rejects 
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    if (url === 'http://localhost:3030/api/master/settings') {
+    if (url === 'https://food2.serbia70.com/api/master/settings') {
       return new Response(JSON.stringify({
         success: true,
         settings: { telegramChatId: 'saved-chat-id', telegramBotToken: 'saved-bot-token' },

@@ -10,10 +10,8 @@ function jsonResponse(status: number, payload: Record<string, unknown>): Respons
   });
 }
 
-
 export const POST: APIRoute = async ({ request, cookies }) => {
-  const auth = readAdminAuth(request, cookies);
-  if (!auth) {
+  if (!readAdminAuth(request, cookies)) {
     return jsonResponse(401, { success: false, error: 'unauthorized' });
   }
 
@@ -33,26 +31,20 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const riderName = String(body.riderName || '').trim() || '骑手';
-  const telegramBotToken = String(body.telegramBotToken || body.telegram_bot_token || '').trim();
   const now = new Date().toISOString();
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    authorization: auth,
-  };
-  const cookie = request.headers.get('cookie') || '';
-  if (cookie) headers.cookie = cookie;
-
   try {
-    const telegramUrl = new URL('/api/telegram/send', request.url).toString();
-    const upstreamResponse = await fetch(telegramUrl, {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const cookie = request.headers.get('cookie') || '';
+    if (cookie) headers.cookie = cookie;
+
+    const upstreamResponse = await fetch(`${new URL(request.url).origin}/api/telegram/send`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        shopSlug,
+        shop_slug: shopSlug,
         chat_id: riderChatId,
-        text: `Admin 骑手 Telegram 测试\n骑手：${riderName}\n时间：${now}`,
-        ...(telegramBotToken ? { telegramBotToken } : {}),
+        text: `Admin 骑手 Telegram 测试\n店铺：${shopSlug}\n骑手：${riderName}\n时间：${now}`,
       }),
     });
 

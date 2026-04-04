@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.PUBLIC_API_URL = 'http://localhost:3030';
+process.env.PUBLIC_API_URL = 'https://api.test.local';
 
 import { POST } from '../../../pages/api/rider/telegram/unbind.ts';
 
@@ -30,7 +30,7 @@ test('POST rider telegram unbind 在缺少 rider 信息时返回 rider_session_r
 test('POST rider telegram unbind 会把 telegram_chat_id 清空后转发到后端', async () => {
   globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
-    assert.equal(url, 'http://localhost:3030/api/rider/status');
+    assert.equal(url, 'https://api.test.local/api/rider/status');
     assert.equal(init?.method, 'POST');
     assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
       id: 7,

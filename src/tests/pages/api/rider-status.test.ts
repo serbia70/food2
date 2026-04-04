@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.PUBLIC_API_URL = 'http://localhost:3030';
+process.env.PUBLIC_API_URL = 'https://api.test.local';
 
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -29,7 +29,7 @@ test('GET list_available 在无 admin auth 时直接返回 401', async () => {
     globalThis.fetch = async (input: string | URL | Request) => {
       const url = String(input instanceof Request ? input.url : input);
 
-      if (url === 'http://localhost:3030/api/admin/riders') {
+      if (url === 'https://api.test.local/api/admin/riders') {
         return new Response(JSON.stringify({ error: 'Authorization header required' }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' },
@@ -70,7 +70,7 @@ test('POST 在带 telegramChatId 空串时保留清空语义转发上游', async
   try {
     globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input instanceof Request ? input.url : input);
-      assert.equal(url, 'http://localhost:3030/api/rider/status');
+      assert.equal(url, 'https://api.test.local/api/rider/status');
       assert.equal(init?.method, 'POST');
       assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
         id: 7,
@@ -114,7 +114,7 @@ test('GET list_available 在有 admin auth 时返回过滤后的 available rider
     globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input instanceof Request ? input.url : input);
 
-      if (url === 'http://localhost:3030/api/admin/riders') {
+      if (url === 'https://api.test.local/api/admin/riders') {
         const headers = new Headers(init?.headers);
         assert.equal(headers.get('authorization'), 'Bearer admin-token');
         return new Response(JSON.stringify({
@@ -158,7 +158,7 @@ test('GET list_available 兼容 admin riders 返回 telegram_chat_id 并归一�
     globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input instanceof Request ? input.url : input);
 
-      if (url === 'http://localhost:3030/api/admin/riders') {
+      if (url === 'https://api.test.local/api/admin/riders') {
         const headers = new Headers(init?.headers);
         assert.equal(headers.get('authorization'), 'Bearer admin-token');
         return new Response(JSON.stringify({

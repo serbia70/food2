@@ -92,3 +92,4 @@ test('master page source wires riders tab into dashboard layout and stable proxy
   assert.match(page, /initMasterRiderStatusActions\(document\)/);
   assert.doesNotMatch(page, /代收订单[\s\S]{0,400}代收总额[\s\S]{0,400}配送费总额/);
 });
+

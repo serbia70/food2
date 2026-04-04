@@ -7,6 +7,7 @@ import {
   buildTelegramClaimCallback,
   buildTelegramDispatchMessage,
   buildTelegramDeepLink,
+  buildTelegramShortClaimCallback,
   parseTelegramClaimCallback,
 } from './telegram-dispatch.ts';
 
@@ -30,6 +31,45 @@ test('buildTelegramDispatchMessage includes eta and action labels', () => {
   assert.match(message.text, /101 店有新单/);
   assert.match(message.text, /约 15 分钟后可取/);
   assert.equal(message.replyMarkup.inline_keyboard[0]?.[0]?.text, '查看并接单');
+});
+
+test('telegram short claim callback fits Telegram callback_data limit and can be parsed', () => {
+  const callbackData = buildTelegramShortClaimCallback({
+    orderId: 88,
+    riderId: 3,
+    riderName: '陈工',
+    restaurantId: '101',
+    riderPhone: '0601',
+    telegramChatId: 'chat-3',
+    expiresAt: Date.now() + 60_000,
+  });
+
+  assert.match(callbackData, /^rc2\./);
+  assert.ok(Buffer.byteLength(callbackData, 'utf8') <= 64);
+
+  const parsed = parseTelegramClaimCallback(callbackData, { chatId: 'chat-3', riderPhone: '0601' });
+  assert.equal(parsed.orderId, 88);
+  assert.equal(parsed.riderId, 3);
+  assert.equal(parsed.telegramChatId, 'chat-3');
+});
+
+test('telegram short claim callback remains parseable across module instances', async () => {
+  const callbackData = buildTelegramShortClaimCallback({
+    orderId: 108,
+    riderId: 6,
+    riderName: '骑手888',
+    restaurantId: '101',
+    riderPhone: '0613888',
+    telegramChatId: 'chat-888',
+    expiresAt: Date.now() + 60_000,
+  });
+
+  const reloaded = await import(new URL(`./telegram-dispatch.ts?reload=${Date.now()}`, import.meta.url).href);
+  const parsed = reloaded.parseTelegramClaimCallback(callbackData, { chatId: 'chat-888', riderPhone: '0613888' });
+
+  assert.equal(parsed.orderId, 108);
+  assert.equal(parsed.riderId, 6);
+  assert.equal(parsed.telegramChatId, 'chat-888');
 });
 
 test('telegram claim callback round-trips order and rider identity', () => {

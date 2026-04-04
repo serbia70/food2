@@ -43,9 +43,8 @@ test('POST rider-telegram-test sends message to rider chat id through local tele
 
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0]?.url, 'http://localhost:3000/api/telegram/send');
-
   const forwardedBody = JSON.parse(String(fetchCalls[0]?.init?.body ?? '{}')) as Record<string, string>;
-  assert.equal(forwardedBody.shopSlug, 'demo-shop');
+  assert.equal(forwardedBody.shop_slug, 'demo-shop');
   assert.equal(forwardedBody.chat_id, 'chat-123');
   assert.match(forwardedBody.text, /陈工/);
 
@@ -53,7 +52,7 @@ test('POST rider-telegram-test sends message to rider chat id through local tele
   assert.deepEqual(await response.json(), { success: true, ok: true });
 });
 
-test('POST rider-telegram-test forwards inline telegramBotToken to avoid master-only fallback', async () => {
+test('POST rider-telegram-test ignores inline telegramBotToken and forwards cookie to local telegram route', async () => {
   const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -68,7 +67,7 @@ test('POST rider-telegram-test forwards inline telegramBotToken to avoid master-
   const response = await mod.POST({
     request: new Request('http://localhost:3000/api/admin/rider-telegram-test', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', cookie: 'admin_token=admin-token-1' },
+      headers: { 'Content-Type': 'application/json', cookie: 'admin_token=admin-token-1; master_token=master-token-1' },
       body: JSON.stringify({
         shopSlug: '103',
         riderName: '陈工',
@@ -84,12 +83,17 @@ test('POST rider-telegram-test forwards inline telegramBotToken to avoid master-
     },
   } as any);
 
+  assert.equal(fetchCalls[0]?.url, 'http://localhost:3000/api/telegram/send');
+  const headers = new Headers(fetchCalls[0]?.init?.headers as HeadersInit | undefined);
   const forwardedBody = JSON.parse(String(fetchCalls[0]?.init?.body ?? '{}')) as Record<string, string>;
-  assert.equal(forwardedBody.telegramBotToken, 'inline-bot-token');
+  assert.equal(headers.get('cookie'), 'admin_token=admin-token-1; master_token=master-token-1');
+  assert.equal(forwardedBody.telegramBotToken, undefined);
+  assert.equal(forwardedBody.shop_slug, '103');
+  assert.equal(forwardedBody.chat_id, '1329103975');
   assert.equal(response.status, 200);
 });
 
-test('POST rider-telegram-test forwards rider request to telegram send without local token lookup', async () => {
+test('POST rider-telegram-test forwards rider request to backend telegram proxy without local token lookup', async () => {
   const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -129,13 +133,13 @@ test('POST rider-telegram-test forwards rider request to telegram send without l
   assert.equal(fetchCalls[0]?.url, 'http://localhost:3000/api/telegram/send');
 
   const forwardedBody = JSON.parse(String(fetchCalls[0]?.init?.body ?? '{}')) as Record<string, string>;
-  assert.equal(forwardedBody.shopSlug, '103');
+  assert.equal(forwardedBody.shop_slug, '103');
   assert.equal(forwardedBody.chat_id, '1329103975');
   assert.equal('telegramBotToken' in forwardedBody, false);
   assert.equal(response.status, 200);
 });
 
-test('POST rider-telegram-test bubbles telegram send token diagnostics directly', async () => {
+test('POST rider-telegram-test bubbles backend telegram diagnostics directly', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
 
@@ -143,21 +147,6 @@ test('POST rider-telegram-test bubbles telegram send token diagnostics directly'
       return new Response(JSON.stringify({
         success: false,
         error: 'telegram_bot_token_not_configured',
-        tokenSource: 'missing_after_admin_and_home_fallback',
-        diagnostics: {
-          adminSettingsMaster: {
-            status: 200,
-            hasSettings: false,
-            hasDataSettings: false,
-            tokenFound: false,
-          },
-          homeSettings: {
-            status: 200,
-            hasSettings: false,
-            hasDataSettings: true,
-            tokenFound: false,
-          },
-        },
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -190,21 +179,6 @@ test('POST rider-telegram-test bubbles telegram send token diagnostics directly'
   assert.deepEqual(await response.json(), {
     success: false,
     error: 'telegram_bot_token_not_configured',
-    tokenSource: 'missing_after_admin_and_home_fallback',
-    diagnostics: {
-      adminSettingsMaster: {
-        status: 200,
-        hasSettings: false,
-        hasDataSettings: false,
-        tokenFound: false,
-      },
-      homeSettings: {
-        status: 200,
-        hasSettings: false,
-        hasDataSettings: true,
-        tokenFound: false,
-      },
-    },
   });
 });
 

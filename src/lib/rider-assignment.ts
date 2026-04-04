@@ -4,11 +4,33 @@ export type AssignableRider = Pick<Rider, 'id' | 'name' | 'phone' | 'status' | '
   telegram_chat_id?: string;
 };
 
-export function readOnlineRiders(input: unknown): AssignableRider[] {
-  if (!Array.isArray(input)) return [];
+function readRiderRows(input: unknown): Record<string, unknown>[] {
+  if (Array.isArray(input)) return input.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
+  if (!input || typeof input !== 'object') return [];
 
-  return input
-    .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+  const data = input as {
+    riders?: unknown;
+    data?: unknown;
+    rows?: unknown;
+    items?: unknown;
+  };
+
+  if (Array.isArray(data.riders)) return readRiderRows(data.riders);
+  if (Array.isArray(data.rows)) return readRiderRows(data.rows);
+  if (Array.isArray(data.items)) return readRiderRows(data.items);
+
+  if (data.data && typeof data.data === 'object') {
+    const nested = data.data as { riders?: unknown; rows?: unknown; items?: unknown };
+    if (Array.isArray(nested.riders)) return readRiderRows(nested.riders);
+    if (Array.isArray(nested.rows)) return readRiderRows(nested.rows);
+    if (Array.isArray(nested.items)) return readRiderRows(nested.items);
+  }
+
+  return [];
+}
+
+export function readOnlineRiders(input: unknown): AssignableRider[] {
+  return readRiderRows(input)
     .map((row) => ({
       id: row.id as AssignableRider['id'],
       name: String(row.name || '').trim(),

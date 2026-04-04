@@ -146,7 +146,8 @@
       "WebFetch(domain:food.serbia70.com)",
       "Bash([ -d \"$d/food2astro\" ])",
       "Bash(printf '%s\\\\n' __TRACKED_VAR__/food2astro)",
-      "Bash(printf '\\\\n---SPLIT---\\\\n')"
+      "Bash(printf '\\\\n---SPLIT---\\\\n')",
+      "Bash(nslookup:*)"
     ]
   }
 }

@@ -16,7 +16,7 @@ interface AdminAssignedOrderTelegramInput {
   pickupEtaMinutes: number;
   scheduledFor?: string;
   itemSummary: string[];
-  claimCallbackData: string;
+  claimCallbackData?: string;
 }
 
 interface TelegramDeepLinkInput {
@@ -106,8 +106,10 @@ function requireTelegramCallbackSecret(): string {
   const env = ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env || {});
   const secret = String(
     env.TELEGRAM_CALLBACK_SECRET
+      || env.TELEGRAM_WEBHOOK_SECRET
       || env.JWT_SECRET
       || process.env.TELEGRAM_CALLBACK_SECRET
+      || process.env.TELEGRAM_WEBHOOK_SECRET
       || process.env.JWT_SECRET
       || '',
   ).trim();
@@ -298,8 +300,9 @@ export function buildTelegramDispatchMessage(input: TelegramDispatchInput): Tele
     primaryButtons.unshift({ text: '立即接单', callback_data: input.claimCallbackData });
   }
 
-  if (String(input.phone || '').trim()) {
-    primaryButtons.push({ text: '联系门店', url: `tel:${input.phone}` });
+  const phone = String(input.phone || '').trim();
+  if (phone && phone !== '-') {
+    primaryButtons.push({ text: '联系门店', url: `tel:${phone}` });
   }
 
   return {
@@ -314,6 +317,31 @@ export function buildTelegramDispatchMessage(input: TelegramDispatchInput): Tele
       inline_keyboard: [primaryButtons],
     },
   };
+}
+
+const TELEGRAM_ADMIN_ASSIGNED_TEXT_MAX_BYTES = 3500;
+
+function trimTelegramLinesToByteLimit(lines: string[], maxBytes: number): string {
+  const kept: string[] = [];
+  let truncated = false;
+
+  for (const line of lines) {
+    const next = [...kept, line].join('\n');
+    if (Buffer.byteLength(next, 'utf8') <= maxBytes) {
+      kept.push(line);
+      continue;
+    }
+    truncated = true;
+    break;
+  }
+
+  if (!truncated) return kept.join('\n');
+
+  const suffix = '菜品过多，已截断';
+  while (kept.length > 0 && Buffer.byteLength([...kept, suffix].join('\n'), 'utf8') > maxBytes) {
+    kept.pop();
+  }
+  return [...kept, suffix].join('\n');
 }
 
 export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrderTelegramInput): TelegramDispatchMessage {
@@ -331,10 +359,19 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
     lines.splice(5, 0, `预约送达：${String(input.scheduledFor).trim()}`);
   }
 
+  const primaryButtons: TelegramInlineKeyboardButton[] = [];
+  if (String(input.claimCallbackData || '').trim()) {
+    primaryButtons.push({ text: '立即接单', callback_data: String(input.claimCallbackData).trim() });
+  }
+  const phone = String(input.phone || '').trim();
+  if (phone && phone !== '-') {
+    primaryButtons.push({ text: '联系门店', url: `tel:${phone}` });
+  }
+
   return {
-    text: lines.join('\n'),
+    text: trimTelegramLinesToByteLimit(lines, TELEGRAM_ADMIN_ASSIGNED_TEXT_MAX_BYTES),
     replyMarkup: {
-      inline_keyboard: [[{ text: '立即接单', callback_data: input.claimCallbackData }]],
+      inline_keyboard: primaryButtons.length > 0 ? [primaryButtons] : [],
     },
   };
 }

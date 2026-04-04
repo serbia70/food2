@@ -73,24 +73,24 @@ function readOrderSummary(body: Record<string, unknown>, orderId: string): {
   };
 }
 
-function readOrderShopSlug(payload: unknown, orderId: string): string {
+function findOrderRow(payload: unknown, orderId: string): Record<string, unknown> | null {
   const normalizedOrderId = String(orderId || '').trim();
-  if (!payload) return '';
+  if (!payload) return null;
 
-  const pickFromRow = (row: unknown): string => {
-    if (!row || typeof row !== 'object') return '';
+  const pickFromRow = (row: unknown): Record<string, unknown> | null => {
+    if (!row || typeof row !== 'object') return null;
     const data = row as Record<string, unknown>;
     const id = String(data.id || data.orderId || data.order_id || '').trim();
-    if (id && normalizedOrderId && id !== normalizedOrderId) return '';
-    return String(data.shopSlug || data.shop_slug || data.restaurantSlug || data.restaurant_slug || '').trim();
+    if (id && normalizedOrderId && id !== normalizedOrderId) return null;
+    return data;
   };
 
   if (Array.isArray(payload)) {
     for (const row of payload) {
-      const slug = pickFromRow(row);
-      if (slug) return slug;
+      const found = pickFromRow(row);
+      if (found) return found;
     }
-    return '';
+    return null;
   }
 
   if (typeof payload === 'object') {
@@ -101,8 +101,8 @@ function readOrderShopSlug(payload: unknown, orderId: string): string {
     const nestedData = data.data;
     if (Array.isArray(nestedData)) {
       for (const row of nestedData) {
-        const slug = pickFromRow(row);
-        if (slug) return slug;
+        const found = pickFromRow(row);
+        if (found) return found;
       }
     } else if (nestedData && typeof nestedData === 'object') {
       const nested = nestedData as Record<string, unknown>;
@@ -110,24 +110,51 @@ function readOrderShopSlug(payload: unknown, orderId: string): string {
       if (nestedDirect) return nestedDirect;
       if (Array.isArray(nested.orders)) {
         for (const row of nested.orders) {
-          const slug = pickFromRow(row);
-          if (slug) return slug;
+          const found = pickFromRow(row);
+          if (found) return found;
         }
       }
     }
 
     if (Array.isArray(data.orders)) {
       for (const row of data.orders) {
-        const slug = pickFromRow(row);
-        if (slug) return slug;
+        const found = pickFromRow(row);
+        if (found) return found;
       }
     }
   }
 
-  return '';
+  return null;
 }
 
-async function fetchOrderShopSlug(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies'], orderId: string): Promise<string> {
+function readOrderShopSlug(payload: unknown, orderId: string): string {
+  const row = findOrderRow(payload, orderId);
+  if (!row) return '';
+  return String(row.shopSlug || row.shop_slug || row.restaurantSlug || row.restaurant_slug || '').trim();
+}
+
+function readOrderSummaryFromRow(row: Record<string, unknown>, orderId: string): {
+  orderNo: string;
+  address: string;
+  phone: string;
+  totalAmount: number;
+  scheduledFor: string;
+  itemSummary: string[];
+} {
+  return readOrderSummary({ orderSummary: row }, orderId);
+}
+
+async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies'], orderId: string): Promise<{
+  shopSlug: string;
+  orderSummary: {
+    orderNo: string;
+    address: string;
+    phone: string;
+    totalAmount: number;
+    scheduledFor: string;
+    itemSummary: string[];
+  } | null;
+}> {
   const res = await proxyAdminRequest({
     request,
     cookies,
@@ -135,10 +162,14 @@ async function fetchOrderShopSlug(request: Request, cookies: Parameters<APIRoute
     method: 'GET',
   });
   const text = await res.text();
-  if (!res.ok || !text) return '';
+  if (!res.ok || !text) return { shopSlug: '', orderSummary: null };
   const parsed = readJsonObject(text);
-  if (!parsed) return '';
-  return readOrderShopSlug(parsed, orderId);
+  if (!parsed) return { shopSlug: '', orderSummary: null };
+  const row = findOrderRow(parsed, orderId);
+  return {
+    shopSlug: readOrderShopSlug(parsed, orderId),
+    orderSummary: row ? readOrderSummaryFromRow(row, orderId) : null,
+  };
 }
 
 async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies']): Promise<RiderFetchResult> {
@@ -174,6 +205,7 @@ async function notifyAssignedRider({
   orderId,
   pickupEtaMinutes,
   orderSummary,
+  fallbackChatId,
 }: {
   request: Request;
   rider: AssignableRider;
@@ -188,19 +220,33 @@ async function notifyAssignedRider({
     scheduledFor: string;
     itemSummary: string[];
   };
-}): Promise<{ success: true } | { success: false; error: string }> {
-  const chatId = readRiderChatId(rider);
-  if (!chatId) return { success: false, error: 'telegram_chat_id_missing' };
+  fallbackChatId?: string;
+}): Promise<
+  | { success: true; chatId: string; chatIdSource: 'rider' | 'request'; shopSlug: string }
+  | { success: false; error: string; chatId?: string; chatIdSource?: 'rider' | 'request' | 'missing'; shopSlug: string }
+> {
+  const riderChatId = String(readRiderChatId(rider) || '').trim();
+  const requestChatId = String(fallbackChatId || '').trim();
+  const chatId = String(riderChatId || requestChatId).trim();
+  const chatIdSource = riderChatId ? 'rider' : requestChatId ? 'request' : 'missing';
+  if (!chatId) return { success: false, error: 'telegram_chat_id_missing', chatIdSource, shopSlug };
 
   try {
-    const claimCallbackData = buildTelegramShortClaimCallback({
-      orderId: Number(orderId),
-      riderId: Number(rider.id || 0),
-      riderName: String(rider.name || '').trim(),
-      riderPhone: String(rider.phone || '').trim(),
-      restaurantId: String(shopSlug || 'admin').trim() || 'admin',
-      telegramChatId: chatId,
-    });
+    let claimCallbackData = '';
+    try {
+      claimCallbackData = buildTelegramShortClaimCallback({
+        orderId: Number(orderId),
+        riderId: Number(rider.id || 0),
+        riderName: String(rider.name || '').trim(),
+        riderPhone: String(rider.phone || '').trim(),
+        restaurantId: String(shopSlug || 'admin').trim() || 'admin',
+        telegramChatId: chatId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (message !== 'missing_telegram_callback_secret') throw error;
+      claimCallbackData = '';
+    }
 
     const message = buildAdminAssignedOrderTelegramMessage({
       orderNo: orderSummary.orderNo,
@@ -210,14 +256,14 @@ async function notifyAssignedRider({
       pickupEtaMinutes,
       scheduledFor: orderSummary.scheduledFor,
       itemSummary: orderSummary.itemSummary,
-      claimCallbackData,
+      claimCallbackData: claimCallbackData || undefined,
     });
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     const cookie = request.headers.get('cookie') || '';
     if (cookie) headers.cookie = cookie;
 
-    const response = await fetch(`${new URL(request.url).origin}/api/telegram/send`, {
+    const response = await fetch(`${API_BASE_URL}/api/telegram/send`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -232,13 +278,19 @@ async function notifyAssignedRider({
       return {
         success: false,
         error: responseText.trim() || `telegram_send_http_${response.status}`,
+        chatId,
+        chatIdSource,
+        shopSlug,
       };
     }
-    return { success: true };
+    return { success: true, chatId, chatIdSource, shopSlug };
   } catch (error) {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'telegram_send_failed',
+      chatId,
+      chatIdSource,
+      shopSlug,
     };
   }
 }
@@ -252,6 +304,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const manualRiderId = String(body.riderId || '').trim();
   const pickupEtaMinutesRaw = Number(body.pickupEtaMinutes);
   const pickupEtaMinutes = Number.isFinite(pickupEtaMinutesRaw) ? pickupEtaMinutesRaw : 0;
+  const riderTelegramChatId = String(body.riderTelegramChatId || '').trim();
+  const debugTelegram = body.debugTelegram === true;
 
   if (action !== 'manual_assign' && action !== 'auto_assign') {
     return new Response(JSON.stringify({ success: false, error: 'invalid_action' }), {
@@ -327,8 +381,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  const notifyShopSlug = providedShopSlug || await fetchOrderShopSlug(request, cookies, orderId);
-  const orderSummary = readOrderSummary(body, orderId);
+  const bodyOrderSummary = readOrderSummary(body, orderId);
+  const needsOrderDetails = !providedShopSlug || bodyOrderSummary.orderNo === orderId;
+  const fetchedOrderDetails = needsOrderDetails ? await fetchOrderDetails(request, cookies, orderId) : { shopSlug: '', orderSummary: null };
+  const notifyShopSlug = providedShopSlug || fetchedOrderDetails.shopSlug;
+  const orderSummary = fetchedOrderDetails.orderSummary && bodyOrderSummary.orderNo === orderId
+    ? fetchedOrderDetails.orderSummary
+    : bodyOrderSummary;
   const telegramNotification = await notifyAssignedRider({
     request,
     rider: target,
@@ -336,6 +395,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     orderId,
     pickupEtaMinutes,
     orderSummary,
+    fallbackChatId: riderTelegramChatId,
   });
 
   return new Response(JSON.stringify({
@@ -345,7 +405,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       name: target.name,
       phone: target.phone,
     },
-    ...(telegramNotification.success ? {} : { telegram_notification: telegramNotification }),
+    ...((!telegramNotification.success || debugTelegram) ? { telegram_notification: telegramNotification } : {}),
   }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },

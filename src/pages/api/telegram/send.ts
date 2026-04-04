@@ -83,7 +83,7 @@ function describeFetchError(error: unknown): { message: string; cause?: string; 
 
 const TELEGRAM_SEND_MAX_ATTEMPTS = 2;
 const TELEGRAM_SEND_RETRY_DELAY_MS = 250;
-const TELEGRAM_SEND_REQUEST_TIMEOUT_MS = 2000;
+const TELEGRAM_SEND_REQUEST_TIMEOUT_MS = 12000;
 
 function shouldRetryTelegramSend(error: unknown): boolean {
   if (error instanceof DOMException && error.name === 'AbortError') return true;

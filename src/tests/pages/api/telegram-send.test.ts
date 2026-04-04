@@ -864,7 +864,7 @@ test('telegram send source uses canonical internal request fields', async () => 
   assert.match(source, /if \(cookie\) masterHeaders\.cookie = cookie;/);
   assert.match(source, /const TELEGRAM_SEND_MAX_ATTEMPTS = 2;/);
   assert.match(source, /const TELEGRAM_SEND_RETRY_DELAY_MS = 250;/);
-  assert.match(source, /const TELEGRAM_SEND_REQUEST_TIMEOUT_MS = 2000;/);
+  assert.match(source, /const TELEGRAM_SEND_REQUEST_TIMEOUT_MS = 12000;/);
   assert.match(source, /await wait\(TELEGRAM_SEND_RETRY_DELAY_MS \* attempt\);/);
   assert.doesNotMatch(source, /const authorization = request\.headers\.get\('authorization'\) \|\| '';/);
   assert.doesNotMatch(source, /passthroughHeaders\.authorization = authorization/);

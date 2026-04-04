@@ -6,15 +6,17 @@ const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
 const originalLocation = globalThis.location;
+const originalAlert = globalThis.alert;
 
 test.afterEach(() => {
   globalThis.fetch = originalFetch;
   globalThis.window = originalWindow;
   globalThis.document = originalDocument;
   globalThis.location = originalLocation;
+  globalThis.alert = originalAlert;
 });
 
-test('assignRider posts manual_assign payload with eta', async () => {
+test('assignRider posts manual_assign payload with eta selected rider telegram chat id and order summary', async () => {
   let capturedBody: Record<string, unknown> | null = null;
   globalThis.window = { showToast() {}, refreshOrderList() {} } as any;
 
@@ -26,7 +28,11 @@ test('assignRider posts manual_assign payload with eta', async () => {
     });
   };
 
-  await assignRider('470', '7', { shopSlug: 'demo-shop', pickupEtaMinutes: 15 });
+  await assignRider('470', '7', {
+    shopSlug: 'demo-shop',
+    pickupEtaMinutes: 15,
+    riderTelegramChatId: 'tg-7',
+  });
 
   assert.deepEqual(capturedBody, {
     action: 'manual_assign',
@@ -34,6 +40,8 @@ test('assignRider posts manual_assign payload with eta', async () => {
     riderId: '7',
     shopSlug: 'demo-shop',
     pickupEtaMinutes: 15,
+    riderTelegramChatId: 'tg-7',
+    debugTelegram: false,
   });
 });
 
@@ -98,6 +106,50 @@ test('autoAssignRider throws telegram notification failure details when assignme
     /telegram_chat_id_missing/,
   );
 });
+
+test('assignRider shows blocking telegram diagnostics when debugTelegram is enabled and notify succeeds', async () => {
+  const toastMessages: string[] = [];
+  const alertMessages: string[] = [];
+  let refreshed = false;
+  globalThis.alert = ((message?: string) => {
+    alertMessages.push(String(message || ''));
+  }) as typeof alert;
+  globalThis.window = {
+    showToast(message: string) {
+      toastMessages.push(message);
+    },
+    refreshOrderList() {
+      refreshed = true;
+    },
+  } as any;
+
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    success: true,
+    telegram_notification: {
+      success: true,
+      chatId: 'tg-7',
+      chatIdSource: 'request',
+      shopSlug: 'demo-shop',
+    },
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  await assignRider('470', '7', {
+    shopSlug: 'demo-shop',
+    pickupEtaMinutes: 15,
+    riderTelegramChatId: 'tg-7',
+    debugTelegram: true,
+  });
+
+  assert.deepEqual(alertMessages, [
+    '派单Telegram: success chat=tg-7 source=request shop=demo-shop',
+  ]);
+  assert.deepEqual(toastMessages, []);
+  assert.equal(refreshed, true);
+});
+
 
 test('orders source keeps assign APIs and removes broadcast helper', async () => {
   const { readFile } = await import('node:fs/promises');

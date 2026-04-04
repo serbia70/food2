@@ -34,6 +34,7 @@ function pickDispatchEtaMinutes() {
   return DELIVERY_ETA_OPTIONS[Number(selected) - 1] || 0;
 }
 
+
 registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
   const orderId = String(el?.dataset?.orderId || '').trim();
   if (!orderId) return;
@@ -62,7 +63,12 @@ registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
     }
 
     const { shopSlug } = readAssignContext(orderId);
-    await assignRider(orderId, String(target.id || ''), { shopSlug, pickupEtaMinutes });
+    await assignRider(orderId, String(target.id || ''), {
+      shopSlug,
+      pickupEtaMinutes,
+      riderTelegramChatId: String((target as { telegramChatId?: string }).telegramChatId || '').trim(),
+      debugTelegram: true,
+    });
   } catch (error) {
     showAdminToast(getErrorMessage(error, '指派骑手失败'));
   }

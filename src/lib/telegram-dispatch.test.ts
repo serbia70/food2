@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildAdminAssignedOrderTelegramMessage,
   buildTelegramClaimCallback,
   buildTelegramDispatchMessage,
   buildTelegramDeepLink,
@@ -153,4 +154,23 @@ test('buildTelegramDispatchMessage 在无 callback data 时只保留查看入口
     { text: '查看并接单', url: 'https://food.example.com/rider/dashboard?orderId=88&restaurantId=101' },
     { text: '联系门店', url: 'tel:0601' },
   ]);
+});
+
+test('buildAdminAssignedOrderTelegramMessage trims oversized item summary to keep telegram text deliverable', () => {
+  const message = buildAdminAssignedOrderTelegramMessage({
+    orderNo: 'A514',
+    address: 'Cara Lazara 12',
+    totalAmount: 2890,
+    phone: '060123456',
+    pickupEtaMinutes: 10,
+    scheduledFor: '2026-04-04 12:30:00',
+    claimCallbackData: 'rc2.test',
+    itemSummary: Array.from({ length: 120 }, (_, index) => `超长菜品名称-${index + 1}-非常非常非常长 x9`),
+  });
+
+  assert.ok(Buffer.byteLength(message.text, 'utf8') <= 3500);
+  assert.match(message.text, /订单号：A514/);
+  assert.match(message.text, /预约送达：2026-04-04 12:30:00/);
+  assert.match(message.text, /菜品过多，已截断/);
+  assert.equal(message.replyMarkup.inline_keyboard[0]?.[0]?.text, '立即接单');
 });

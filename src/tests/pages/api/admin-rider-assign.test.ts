@@ -49,7 +49,7 @@ test('manual_assign updates order to delivering for selected available rider', a
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -93,7 +93,7 @@ test('auto_assign picks next available rider when cursor is present', async () =
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -208,7 +208,7 @@ test('returns no_available_riders when no available rider exists', async () => {
   });
 });
 
-test('manual_assign resolves shopSlug from orders API when request body misses shopSlug', async () => {
+test('manual_assign resolves shopSlug from orders API when request body misses shopSlug and hydrates order summary', async () => {
   let telegramBody: Record<string, unknown> | null = null;
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -228,11 +228,23 @@ test('manual_assign resolves shopSlug from orders API when request body misses s
 
     if (url === 'https://api.test.local/api/admin/orders') {
       return new Response(JSON.stringify([
-        { id: 474, shopSlug: 'demo-shop' },
+        {
+          id: 474,
+          shopSlug: 'demo-shop',
+          orderNo: 'A474',
+          tableInfo: 'Cara Lazara 12',
+          userPhone: '060123456',
+          totalAmount: 2890,
+          scheduledFor: '2026-04-04 12:30:00',
+          items: [
+            { name: '烤鸡腿', quantity: 2 },
+            { name: '米饭', quantity: 1 },
+          ],
+        },
       ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -252,6 +264,14 @@ test('manual_assign resolves shopSlug from orders API when request body misses s
 
   assert.equal(response.status, 200);
   assert.equal(telegramBody?.shop_slug, 'demo-shop');
+  assert.equal(telegramBody?.chat_id, 'tg-9');
+  assert.match(String(telegramBody?.text || ''), /A474/);
+  assert.match(String(telegramBody?.text || ''), /Cara Lazara 12/);
+  assert.match(String(telegramBody?.text || ''), /060123456/);
+  assert.match(String(telegramBody?.text || ''), /2890 RSD/);
+  assert.match(String(telegramBody?.text || ''), /预约送达：2026-04-04 12:30:00/);
+  assert.match(String(telegramBody?.text || ''), /烤鸡腿 x2/);
+  assert.match(String(telegramBody?.text || ''), /米饭 x1/);
   assert.deepEqual(await response.json(), {
     success: true,
     rider: {
@@ -284,7 +304,7 @@ test('shopSlug fallback ignores non-json orders response and still succeeds', as
       return new Response('<html>ok</html>', { status: 200, headers: { 'Content-Type': 'text/html' } });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -325,7 +345,7 @@ test('keeps assignment successful when telegram notification fails', async () =>
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       telegramCalled = true;
       throw new Error('telegram unavailable');
     }
@@ -355,6 +375,9 @@ test('keeps assignment successful when telegram notification fails', async () =>
     telegram_notification: {
       success: false,
       error: 'telegram unavailable',
+      chatId: 'tg-9',
+      chatIdSource: 'rider',
+      shopSlug: 'demo-shop',
     },
   });
 });
@@ -380,7 +403,7 @@ test('manual_assign sends short callback token and rider-claim can consume it', 
       });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -444,6 +467,7 @@ test('manual_assign sends short callback token and rider-claim can consume it', 
 
   assert.equal(response.status, 200);
   assert.equal(telegramBody?.shop_slug, 'demo-shop');
+  assert.equal(telegramBody?.chat_id, 'tg-9');
   assert.match(String(telegramBody?.text || ''), /A476/);
   assert.match(String(telegramBody?.text || ''), /Cara Lazara 12/);
   assert.match(String(telegramBody?.text || ''), /060123/);
@@ -493,7 +517,7 @@ test('manual_assign uses safe numeric fallback in telegram text to avoid NaN cop
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -549,7 +573,7 @@ test('manual_assign short callback keeps original rider full name when rider/sta
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -642,7 +666,7 @@ test('manual_assign 在 admin riders 仅返回 telegram_chat_id 时仍发送通�
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -695,7 +719,7 @@ test('manual_assign 在 admin riders 回包嵌套于 data.rows 时仍能找到�
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -728,6 +752,57 @@ test('manual_assign 在 admin riders 回包嵌套于 data.rows 时仍能找到�
   });
 });
 
+test('manual_assign 在 admin riders 缺少 chat_id 时回退使用前端传入的 riderTelegramChatId', async () => {
+  let telegramBody: Record<string, unknown> | null = null;
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+
+    if (url === 'https://api.test.local/api/admin/riders') {
+      return new Response(JSON.stringify({
+        riders: [
+          { id: 11, name: '骑手E', phone: '065', status: 'available' },
+        ],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url === 'https://api.test.local/api/admin/orders/481/status') {
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url === 'https://api.test.local/api/telegram/send') {
+      telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('http://localhost:3000/api/admin/rider-assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: 'admin_token=test-token' },
+      body: JSON.stringify({ action: 'manual_assign', orderId: '481', riderId: '11', shopSlug: 'demo-shop', riderTelegramChatId: 'tg-11' }),
+    }),
+    cookies: createCookies(),
+  } as any);
+
+  assert.equal(response.status, 200);
+  assert.equal(telegramBody?.chat_id, 'tg-11');
+  assert.deepEqual(await response.json(), {
+    success: true,
+    rider: {
+      id: 11,
+      name: '骑手E',
+      phone: '065',
+    },
+  });
+});
+
 test('manual_assign 在本地 telegram send 返回失败时继续透出真实错误', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -744,7 +819,7 @@ test('manual_assign 在本地 telegram send 返回失败时继续透出真实错
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       return new Response(JSON.stringify({ success: false, error: 'telegram_bot_token_not_configured' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -775,11 +850,224 @@ test('manual_assign 在本地 telegram send 返回失败时继续透出真实错
     telegram_notification: {
       success: false,
       error: '{"success":false,"error":"telegram_bot_token_not_configured"}',
+      chatId: 'tg-9',
+      chatIdSource: 'rider',
+      shopSlug: 'demo-shop',
     },
   });
 });
 
-test('manual_assign 调用本地 telegram send 时只透传 cookie 不透传 authorization', async () => {
+test('manual_assign 在仅有 TELEGRAM_WEBHOOK_SECRET 时仍可发送带接单按钮的通知', async () => {
+  const previousCallbackSecret = process.env.TELEGRAM_CALLBACK_SECRET;
+  const previousWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  let telegramBody: Record<string, unknown> | null = null;
+  delete process.env.TELEGRAM_CALLBACK_SECRET;
+  process.env.TELEGRAM_WEBHOOK_SECRET = 'test-telegram-callback-secret';
+
+  try {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url === 'https://api.test.local/api/admin/riders') {
+        return new Response(JSON.stringify({
+          riders: [
+            { id: 12, name: '骑手F', phone: '066', status: 'available', telegramChatId: 'tg-12' },
+          ],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (url === 'https://api.test.local/api/admin/orders/482/status') {
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (url === 'https://api.test.local/api/telegram/send') {
+        telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({ success: true, ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const mod = await loadRoute();
+    const response = await mod.POST({
+      request: new Request('http://localhost:3000/api/admin/rider-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie: 'admin_token=test-token' },
+        body: JSON.stringify({
+          action: 'manual_assign',
+          orderId: '482',
+          riderId: '12',
+          shopSlug: 'demo-shop',
+          riderTelegramChatId: 'tg-12',
+          debugTelegram: true,
+        }),
+      }),
+      cookies: createCookies(),
+    } as any);
+
+    assert.equal(response.status, 200);
+    const replyMarkup = telegramBody?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> } | undefined;
+    const claimButton = replyMarkup?.inline_keyboard?.flat().find((button) => button?.text === '立即接单');
+    assert.ok(claimButton?.callback_data);
+    assert.deepEqual(await response.json(), {
+      success: true,
+      rider: {
+        id: 12,
+        name: '骑手F',
+        phone: '066',
+      },
+      telegram_notification: {
+        success: true,
+        chatId: 'tg-12',
+        chatIdSource: 'rider',
+        shopSlug: 'demo-shop',
+      },
+    });
+  } finally {
+    if (previousCallbackSecret == null) delete process.env.TELEGRAM_CALLBACK_SECRET;
+    else process.env.TELEGRAM_CALLBACK_SECRET = previousCallbackSecret;
+    if (previousWebhookSecret == null) delete process.env.TELEGRAM_WEBHOOK_SECRET;
+    else process.env.TELEGRAM_WEBHOOK_SECRET = previousWebhookSecret;
+  }
+});
+
+test('manual_assign 在缺少 callback/webhook secret 时降级发送无按钮通知', async () => {
+  const previousCallbackSecret = process.env.TELEGRAM_CALLBACK_SECRET;
+  const previousWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  let telegramBody: Record<string, unknown> | null = null;
+  delete process.env.TELEGRAM_CALLBACK_SECRET;
+  delete process.env.TELEGRAM_WEBHOOK_SECRET;
+
+  try {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url === 'https://api.test.local/api/admin/riders') {
+        return new Response(JSON.stringify({
+          riders: [
+            { id: 13, name: '骑手G', phone: '067', status: 'available', telegramChatId: 'tg-13' },
+          ],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (url === 'https://api.test.local/api/admin/orders/483/status') {
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (url === 'https://api.test.local/api/telegram/send') {
+        telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({ success: true, ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const mod = await loadRoute();
+    const response = await mod.POST({
+      request: new Request('http://localhost:3000/api/admin/rider-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie: 'admin_token=test-token' },
+        body: JSON.stringify({
+          action: 'manual_assign',
+          orderId: '483',
+          riderId: '13',
+          shopSlug: 'demo-shop',
+          riderTelegramChatId: 'tg-13',
+          debugTelegram: true,
+        }),
+      }),
+      cookies: createCookies(),
+    } as any);
+
+    assert.equal(response.status, 200);
+    const replyMarkup = telegramBody?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> } | undefined;
+    assert.equal(replyMarkup?.inline_keyboard?.flat().some((button) => button?.text === '立即接单'), false);
+    assert.deepEqual(await response.json(), {
+      success: true,
+      rider: {
+        id: 13,
+        name: '骑手G',
+        phone: '067',
+      },
+      telegram_notification: {
+        success: true,
+        chatId: 'tg-13',
+        chatIdSource: 'rider',
+        shopSlug: 'demo-shop',
+      },
+    });
+  } finally {
+    if (previousCallbackSecret == null) delete process.env.TELEGRAM_CALLBACK_SECRET;
+    else process.env.TELEGRAM_CALLBACK_SECRET = previousCallbackSecret;
+    if (previousWebhookSecret == null) delete process.env.TELEGRAM_WEBHOOK_SECRET;
+    else process.env.TELEGRAM_WEBHOOK_SECRET = previousWebhookSecret;
+  }
+});
+
+test('manual_assign 在 orderSummary.phone 缺失时不生成无效 tel 按钮', async () => {
+  let telegramBody: Record<string, unknown> | null = null;
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+
+    if (url === 'https://api.test.local/api/admin/riders') {
+      return new Response(JSON.stringify({
+        riders: [
+          { id: 14, name: '骑手H', phone: '068', status: 'available', telegramChatId: 'tg-14' },
+        ],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url === 'https://api.test.local/api/admin/orders/484/status') {
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url === 'https://api.test.local/api/telegram/send') {
+      telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('http://localhost:3000/api/admin/rider-assign', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: 'master_token=master-cookie-1; admin_token=admin-cookie-1',
+      },
+      body: JSON.stringify({
+        action: 'manual_assign',
+        orderId: '484',
+        riderId: '14',
+        shopSlug: 'demo-shop',
+        orderSummary: {
+          orderNo: 'A484',
+          tableInfo: 'Cara Lazara 12',
+          userPhone: '',
+          totalAmount: 1500,
+          items: [{ name: '米饭', quantity: 1 }],
+        },
+      }),
+    }),
+    cookies: createCookies(),
+  } as any);
+
+  assert.equal(response.status, 200);
+  const replyMarkup = telegramBody?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string; url?: string }>> } | undefined;
+  assert.equal(replyMarkup?.inline_keyboard?.flat().some((button) => button?.url === 'tel:-'), false);
+  assert.equal((await response.json()).success, true);
+});
+
+test('manual_assign 调用后端 telegram send 时只透传 cookie 不透传 authorization', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
 
@@ -795,7 +1083,7 @@ test('manual_assign 调用本地 telegram send 时只透传 cookie 不透传 aut
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3000/api/telegram/send') {
+    if (url === 'https://api.test.local/api/telegram/send') {
       const headers = new Headers(init?.headers);
       assert.equal(headers.get('cookie'), 'master_token=master-cookie-1; admin_token=admin-cookie-1');
       assert.equal(headers.get('authorization'), null);

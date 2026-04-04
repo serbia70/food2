@@ -144,7 +144,7 @@ function formatTableLabel(tableInfo: any) {
               <span class="order-amount">{o.totalAmount} RSD</span>
             </div>
 
-            <span class="hidden-data" data-oid={o.id} data-order-id={o.id} data-order-no={o.orderNo} data-items={o.itemsJson} data-remarks={o.remarksJson} data-total={o.totalAmount} data-table={o.tableInfo} data-status={o.status}></span>
+            <span class="hidden-data" data-oid={o.id} data-order-id={o.id} data-order-no={o.orderNo} data-items={o.itemsJson} data-remarks={o.remarksJson} data-total={o.totalAmount} data-table={o.tableInfo} data-status={o.status} data-user-phone={o.userPhone} data-scheduled-for={o.scheduledFor}></span>
           </div>
 
           {o.orderType === 'delivery' && <div class="order-address-row">地址: {o.tableInfo}</div>}

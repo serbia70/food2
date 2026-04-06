@@ -83,6 +83,7 @@ const safeSlug = String(slug || '');
     </script>
   )}
 
+  <script is:inline>
     document.getElementById('login-form').addEventListener('submit', function (e) {
       e.preventDefault();
       var slug = document.getElementById('slug').value.trim();

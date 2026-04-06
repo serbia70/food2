@@ -3,6 +3,7 @@ import {
   formatPickupEtaLabel,
   getAdminDispatchStatusCopy,
   isAwaitingCourierOrder,
+  readDispatchMetaFromRemarks,
 } from '../../lib/rider-dispatch.ts';
 
 const { orders, useSimpleHallLabel = false } = Astro.props;
@@ -87,6 +88,8 @@ function formatTableLabel(tableInfo: any) {
       const oTime = new Date(o.createdAt).getTime();
       const isNewest = o.id === latestActiveId;
       const isCancelled = o.status === 'cancelled';
+      const dispatchMeta = readDispatchMetaFromRemarks(o.remarksJson);
+      const lastRiderDecision = dispatchMeta.lastRiderDecision;
       let items: any[] = [];
       try {
         const parsed = JSON.parse(o.itemsJson || '{}');
@@ -156,6 +159,11 @@ function formatTableLabel(tableInfo: any) {
           {o.orderType === 'delivery' && o.scheduledFor && (
             <div class="order-address-row" style="margin-top:4px; color:#1565c0;">
               预约送达: {formatScheduledLabel(o.scheduledFor)}
+            </div>
+          )}
+          {o.orderType === 'delivery' && lastRiderDecision && (
+            <div class="order-address-row" style="margin-top:4px; color:#6b7280;">
+              骑手反馈：{lastRiderDecision?.riderName}{lastRiderDecision?.action === 'declined' ? '已拒单' : '已接单'} {formatBelgradeHHmm(lastRiderDecision?.at)}
             </div>
           )}
         </div>

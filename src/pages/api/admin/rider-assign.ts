@@ -7,6 +7,7 @@ import {
   readOnlineRiders,
   type AssignableRider,
 } from '../../../lib/rider-assignment.ts';
+import { filterAvailableRidersForOrder } from '../../../lib/rider-dispatch.ts';
 import {
   buildAdminAssignedOrderTelegramMessage,
   buildTelegramShortClaimCallback,
@@ -173,6 +174,7 @@ function readOrderSummaryFromRow(row: Record<string, unknown>, orderId: string):
 
 async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies'], orderId: string): Promise<{
   shopSlug: string;
+  remarksJson: string;
   orderSummary: {
     orderNo: string;
     address: string;
@@ -189,12 +191,13 @@ async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute[
     method: 'GET',
   });
   const text = await res.text();
-  if (!res.ok || !text) return { shopSlug: '', orderSummary: null };
+  if (!res.ok || !text) return { shopSlug: '', remarksJson: '', orderSummary: null };
   const parsed = readJsonObject(text);
-  if (!parsed) return { shopSlug: '', orderSummary: null };
+  if (!parsed) return { shopSlug: '', remarksJson: '', orderSummary: null };
   const row = findOrderRow(parsed, orderId);
   return {
     shopSlug: readOrderShopSlug(parsed, orderId),
+    remarksJson: row && typeof row === 'object' ? String(row.remarksJson || row.remarks_json || '').trim() : '',
     orderSummary: row ? readOrderSummaryFromRow(row, orderId) : null,
   };
 }
@@ -264,19 +267,26 @@ async function notifyAssignedRider({
 
   try {
     let claimCallbackData = '';
+    let declineCallbackData = '';
     try {
-      claimCallbackData = buildTelegramShortClaimCallback({
+      const callbackBase = {
         orderId: Number(orderId),
         riderId: Number(rider.id || 0),
         riderName: String(rider.name || '').trim(),
         riderPhone: String(rider.phone || '').trim(),
         restaurantId: String(shopSlug || 'admin').trim() || 'admin',
         telegramChatId: chatId,
+      };
+      claimCallbackData = buildTelegramShortClaimCallback(callbackBase);
+      declineCallbackData = buildTelegramShortClaimCallback({
+        ...callbackBase,
+        action: 'decline',
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (message !== 'missing_telegram_callback_secret') throw error;
       claimCallbackData = '';
+      declineCallbackData = '';
     }
 
     const message = buildAdminAssignedOrderTelegramMessage({
@@ -288,6 +298,7 @@ async function notifyAssignedRider({
       scheduledFor: orderSummary.scheduledFor,
       itemSummary: orderSummary.itemSummary,
       claimCallbackData: claimCallbackData || undefined,
+      declineCallbackData: declineCallbackData || undefined,
     });
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -296,20 +307,51 @@ async function notifyAssignedRider({
     if (cookie) headers.cookie = cookie;
     if (authorization) headers.authorization = authorization;
 
-    const response = await fetch(`${API_BASE_URL}/api/telegram/send`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
+    const requestPayload = {
+      ...(shopSlug ? { shop_slug: shopSlug } : {}),
+      ...(inlineTelegramBotToken ? { telegramBotToken: inlineTelegramBotToken } : {}),
+      chat_id: chatId,
+      chatId,
+      text: message.text,
+      reply_markup: message.replyMarkup,
+    };
+    const callbackData = Array.isArray(message.replyMarkup?.inline_keyboard)
+      ? message.replyMarkup.inline_keyboard
+        .flat()
+        .map((button) => String((button as { callback_data?: unknown })?.callback_data || '').trim())
+        .find(Boolean) || ''
+      : '';
+
+    const sendTelegram = async (payload: Record<string, unknown>) => {
+      const response = await fetch(`${API_BASE_URL}/api/telegram/send`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const responseText = await response.text();
+      return {
+        response,
+        responseText,
+        parsedResponse: readJsonObject(responseText),
+      };
+    };
+
+    let { response, responseText, parsedResponse } = await sendTelegram(requestPayload);
+    const shouldRetryWithoutReplyMarkup = !response.ok
+      && response.headers.get('content-type')?.includes('text/html')
+      && responseText.includes('502');
+
+    if (shouldRetryWithoutReplyMarkup) {
+      const retryPayload = {
         ...(shopSlug ? { shop_slug: shopSlug } : {}),
         ...(inlineTelegramBotToken ? { telegramBotToken: inlineTelegramBotToken } : {}),
         chat_id: chatId,
         chatId,
         text: message.text,
-        reply_markup: message.replyMarkup,
-      }),
-    });
-    const responseText = await response.text();
-    const parsedResponse = readJsonObject(responseText);
+      };
+      ({ response, responseText, parsedResponse } = await sendTelegram(retryPayload));
+    }
+
     if (debugTelegram === true) {
       console.error('[admin/rider-assign:telegram]', JSON.stringify({
         shopSlug,
@@ -317,6 +359,10 @@ async function notifyAssignedRider({
         riderId: String(rider.id || '').trim(),
         chatId,
         chatIdSource,
+        textLength: message.text.length,
+        callbackDataLength: callbackData.length,
+        callbackDataPreview: callbackData.slice(0, 80),
+        retriedWithoutReplyMarkup: shouldRetryWithoutReplyMarkup,
         status: response.status,
         parsedSuccess: parsedResponse?.success,
         parsedOk: parsedResponse?.ok,
@@ -389,15 +435,22 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  const riders = ridersResult.riders;
+  const fetchedOrderDetails = await fetchOrderDetails(request, cookies, orderId);
+  const eligibleRiders = filterAvailableRidersForOrder(ridersResult.riders, fetchedOrderDetails.remarksJson);
   let target: AssignableRider | null = null;
 
   if (action === 'manual_assign') {
-    target = riders.find((row) => String(row.id || '').trim() === manualRiderId) || null;
+    target = eligibleRiders.find((row) => String(row.id || '').trim() === manualRiderId) || null;
+    if (!target && ridersResult.riders.some((row) => String(row.id || '').trim() === manualRiderId)) {
+      return new Response(JSON.stringify({ success: false, error: 'rider_already_declined_this_order' }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   if (action === 'auto_assign') {
-    target = pickNextAvailableRider({ riders, lastAssignedRiderId });
+    target = pickNextAvailableRider({ riders: eligibleRiders, lastAssignedRiderId });
   }
 
   if (!target) {
@@ -437,8 +490,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const bodyOrderSummary = readOrderSummary(body, orderId);
-  const needsOrderDetails = !providedShopSlug || bodyOrderSummary.orderNo === orderId;
-  const fetchedOrderDetails = needsOrderDetails ? await fetchOrderDetails(request, cookies, orderId) : { shopSlug: '', orderSummary: null };
   const notifyShopSlug = normalizeNotifyShopSlug(providedShopSlug) || fetchedOrderDetails.shopSlug;
   const orderSummary = fetchedOrderDetails.orderSummary && bodyOrderSummary.orderNo === orderId
     ? fetchedOrderDetails.orderSummary

@@ -5,6 +5,7 @@ import {
   buildContactableRiderRows,
   buildDispatchPublishPayload,
   buildReminderPayload,
+  filterAvailableRidersForOrder,
   filterRiderActiveOrders,
   filterRiderDashboardOrders,
   formatPickupEtaLabel,
@@ -14,6 +15,7 @@ import {
   isAwaitingCourierOrder,
   isRiderClaimableOrder,
   pickAvailableRiders,
+  readDispatchMetaFromRemarks,
   shouldEscalateUnclaimedOrder,
 } from './rider-dispatch.ts';
 
@@ -154,6 +156,43 @@ test('buildContactableRiderRows 仅保留可联系的 available 骑手', () => {
       { id: 3, name: 'C', phone: '062', status: 'busy' as const },
     ]),
     [{ id: 1, name: 'A', phone: '061', status: 'available' }],
+  );
+});
+
+test('readDispatchMetaFromRemarks 读取最近一条派单反馈和拒单骑手列表', () => {
+  const remarksJson = JSON.stringify([
+    '普通备注',
+    'dispatch_meta:{"lastRiderDecision":{"action":"declined","riderId":"7","riderName":"骑手A","riderPhone":"061","at":"2026-04-06T12:03:00.000Z"},"declinedRiderIds":["7","8"]}',
+  ]);
+
+  assert.deepEqual(
+    readDispatchMetaFromRemarks(remarksJson),
+    {
+      lastRiderDecision: {
+        action: 'declined',
+        riderId: '7',
+        riderName: '骑手A',
+        riderPhone: '061',
+        at: '2026-04-06T12:03:00.000Z',
+      },
+      declinedRiderIds: ['7', '8'],
+    },
+  );
+});
+
+test('filterAvailableRidersForOrder 排除当前订单已拒单骑手', () => {
+  const riders = [
+    { id: 7, name: '骑手A', phone: '061', status: 'available' as const },
+    { id: 8, name: '骑手B', phone: '062', status: 'available' as const },
+    { id: 9, name: '骑手C', phone: '063', status: 'busy' as const },
+  ];
+  const remarksJson = JSON.stringify([
+    'dispatch_meta:{"declinedRiderIds":["8"]}',
+  ]);
+
+  assert.deepEqual(
+    filterAvailableRidersForOrder(riders, remarksJson),
+    [{ id: 7, name: '骑手A', phone: '061', status: 'available' }],
   );
 });
 

@@ -1,5 +1,6 @@
 
 import { registerAdminGlobal, showAdminToast } from './globals';
+import { readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
 import { fetchAvailableRiders, assignRider, autoAssignRider } from './orders';
 
 const DELIVERY_ETA_OPTIONS = [10, 15, 20, 30, 45];
@@ -61,7 +62,9 @@ registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
   if (!orderId) return;
 
   try {
-    const riders = await fetchAvailableRiders();
+    const { hidden } = readAssignContext(orderId);
+    const declinedRiderIds = new Set(readDispatchMetaFromRemarks(String(hidden?.dataset?.remarks || '')).declinedRiderIds);
+    const riders = (await fetchAvailableRiders()).filter((rider) => !declinedRiderIds.has(String(rider.id || '').trim()));
     if (riders.length === 0) {
       showAdminToast('当前无可接单骑手');
       return;

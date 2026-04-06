@@ -1,5 +1,20 @@
 import type { Rider } from '../types/index.ts';
 
+export interface DispatchDecisionMeta {
+  action: 'accepted' | 'declined';
+  riderId: string;
+  riderName: string;
+  riderPhone: string;
+  at: string;
+}
+
+export interface DispatchMeta {
+  lastRiderDecision: DispatchDecisionMeta | null;
+  declinedRiderIds: string[];
+}
+
+const DISPATCH_META_PREFIX = 'dispatch_meta:';
+
 export function formatPickupEtaLabel(minutes: number | null | undefined): string {
   const value = Number(minutes || 0);
   return value > 0 ? `约 ${value} 分钟后可取` : '';
@@ -40,6 +55,68 @@ export function pickAvailableRiders<T extends Pick<Rider, 'id' | 'name' | 'phone
 
 export function buildContactableRiderRows<T extends Pick<Rider, 'id' | 'name' | 'phone' | 'status'>>(riders: T[]): T[] {
   return pickAvailableRiders(riders);
+}
+
+export function readDispatchMetaFromRemarks(remarksJson: string | null | undefined): DispatchMeta {
+  let remarks: unknown[] = [];
+  try {
+    const parsed = JSON.parse(String(remarksJson || '')) as unknown;
+    remarks = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    remarks = [];
+  }
+
+  for (let index = remarks.length - 1; index >= 0; index -= 1) {
+    const value = String(remarks[index] || '').trim();
+    if (!value.startsWith(DISPATCH_META_PREFIX)) continue;
+    try {
+      const parsed = JSON.parse(value.slice(DISPATCH_META_PREFIX.length)) as Partial<DispatchMeta>;
+      const last = parsed.lastRiderDecision && typeof parsed.lastRiderDecision === 'object'
+        ? {
+            action: parsed.lastRiderDecision.action === 'accepted' ? 'accepted' : 'declined',
+            riderId: String(parsed.lastRiderDecision.riderId || '').trim(),
+            riderName: String(parsed.lastRiderDecision.riderName || '').trim(),
+            riderPhone: String(parsed.lastRiderDecision.riderPhone || '').trim(),
+            at: String(parsed.lastRiderDecision.at || '').trim(),
+          }
+        : null;
+      return {
+        lastRiderDecision: last && last.riderId && last.riderName && last.riderPhone && last.at ? last : null,
+        declinedRiderIds: Array.isArray(parsed.declinedRiderIds)
+          ? parsed.declinedRiderIds.map((item) => String(item || '').trim()).filter(Boolean)
+          : [],
+      };
+    } catch {
+      return { lastRiderDecision: null, declinedRiderIds: [] };
+    }
+  }
+
+  return { lastRiderDecision: null, declinedRiderIds: [] };
+}
+
+export function buildDispatchMetaRemarks(
+  remarksJson: string | null | undefined,
+  meta: DispatchMeta,
+): string[] {
+  let remarks: string[] = [];
+  try {
+    const parsed = JSON.parse(String(remarksJson || '')) as unknown;
+    remarks = Array.isArray(parsed) ? parsed.map((item) => String(item || '')).filter(Boolean) : [];
+  } catch {
+    remarks = [];
+  }
+
+  const filtered = remarks.filter((item) => !String(item || '').trim().startsWith(DISPATCH_META_PREFIX));
+  filtered.push(`${DISPATCH_META_PREFIX}${JSON.stringify(meta)}`);
+  return filtered;
+}
+
+export function filterAvailableRidersForOrder<T extends Pick<Rider, 'id' | 'name' | 'phone' | 'status'>>(
+  riders: T[],
+  remarksJson: string | null | undefined,
+): T[] {
+  const declined = new Set(readDispatchMetaFromRemarks(remarksJson).declinedRiderIds);
+  return buildContactableRiderRows(riders).filter((rider) => !declined.has(String(rider.id || '').trim()));
 }
 
 const STALE_AWAITING_ORDER_MS = 6 * 60 * 60 * 1000;

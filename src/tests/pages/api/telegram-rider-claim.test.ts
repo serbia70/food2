@@ -10,6 +10,13 @@ import { POST } from '../../../pages/api/telegram/rider-claim.ts';
 
 type FetchFn = typeof globalThis.fetch;
 
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 function createClaimRequest(body: string, headers?: Record<string, string>): Request {
   return new Request('http://localhost/api/telegram/rider-claim', {
     method: 'POST',
@@ -28,6 +35,10 @@ function withMockedFetch(fn: FetchFn) {
   return () => {
     globalThis.fetch = originalFetch;
   };
+}
+
+function buildOrderRow(id: number | string, remarksJson = '') {
+  return { id, remarksJson };
 }
 
 test('POST rider-claim 在 secret 错误时返回 401', async () => {
@@ -55,15 +66,18 @@ test('POST rider-claim 支持 x-telegram-bot-api-secret-token 作为备用鉴权
   const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'http://localhost/api/rider/status?action=list_available') {
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: true,
         riders: [
           { id: 6, name: '骑手888', phone: '0613888', status: 'available', telegramChatId: 'chat-888' },
         ],
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
       });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(108)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
     }
     assert.equal(url, 'http://localhost/api/order/update_status');
     assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
@@ -73,10 +87,7 @@ test('POST rider-claim 支持 x-telegram-bot-api-secret-token 作为备用鉴权
       courier_name: '骑手888',
       courier_phone: '0613888',
     });
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ success: true });
   });
 
   try {
@@ -149,15 +160,24 @@ test('POST rider-claim consumes short callback payload', async () => {
   const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'http://localhost/api/rider/status?action=list_available') {
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: true,
         riders: [
           { id: 3, name: '陈工', phone: '0601', status: 'available', telegramChatId: 'chat-3' },
         ],
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
       });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(88)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(88)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
     }
     if (url === 'http://localhost/api/order/update_status') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
@@ -168,10 +188,7 @@ test('POST rider-claim consumes short callback payload', async () => {
         courier_name: '陈工',
         courier_phone: '0601',
       });
-      return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: true });
     }
     throw new Error(`unexpected fetch: ${url}`);
   });
@@ -196,19 +213,159 @@ test('POST rider-claim consumes short callback payload', async () => {
   }
 });
 
-test('POST rider-claim updates order to delivering with courier info from signed callback', async () => {
+test('POST rider-claim 在 decline callback 合法时写回拒单反馈且不更新订单状态', async () => {
+  let updateStatusCalled = false;
+  let remarksPayload: Record<string, unknown> | null = null;
   const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'http://localhost/api/rider/status?action=list_available') {
-      return new Response(JSON.stringify({
+      return jsonResponse({
+        success: true,
+        riders: [
+          { id: 4, name: '拒单骑手', phone: '0602', status: 'available', telegramChatId: 'chat-4' },
+        ],
+      });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(89)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      remarksPayload = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      return jsonResponse({ success: true });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(88)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
+    if (url === 'http://localhost/api/order/update_status') {
+      updateStatusCalled = true;
+      throw new Error('decline should not update order status');
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
+  try {
+    const callbackData = buildTelegramShortClaimCallback({
+      orderId: 89,
+      riderId: 4,
+      riderName: '拒单骑手',
+      riderPhone: '0602',
+      restaurantId: '101',
+      telegramChatId: 'chat-4',
+      expiresAt: Date.now() + 60_000,
+      action: 'decline',
+    });
+
+    const request = createClaimRequest(JSON.stringify({ callbackData, chatId: 'chat-4' }));
+    const response = await POST({ request } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true, action: 'decline' });
+    assert.equal(updateStatusCalled, false);
+    assert.equal(remarksPayload?.orderId, '89');
+    assert.ok(Array.isArray(remarksPayload?.remarks));
+    const declineMeta = JSON.parse(String((remarksPayload?.remarks as unknown[])[0] || '').replace(/^dispatch_meta:/, '')) as Record<string, unknown>;
+    assert.deepEqual(declineMeta, {
+      lastRiderDecision: {
+        action: 'declined',
+        riderId: '4',
+        riderName: '拒单骑手',
+        riderPhone: '0602',
+        at: String((declineMeta.lastRiderDecision as Record<string, unknown>)?.at || ''),
+      },
+      declinedRiderIds: ['4'],
+    });
+    assert.ok(!Number.isNaN(Date.parse(String((declineMeta.lastRiderDecision as Record<string, unknown>)?.at || ''))));
+  } finally {
+    restoreFetch();
+  }
+});
+
+
+test('POST rider-claim 在 accept callback 合法时先写回接单反馈再更新订单状态', async () => {
+  const calls: string[] = [];
+  let remarksPayload: Record<string, unknown> | null = null;
+  const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    calls.push(url);
+    if (url === 'http://localhost/api/rider/status?action=list_available') {
+      return jsonResponse({
         success: true,
         riders: [
           { id: 6, name: '骑手888', phone: '0613888', status: 'available', telegramChatId: 'chat-888' },
         ],
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
       });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(108)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      remarksPayload = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      return jsonResponse({ success: true });
+    }
+    assert.equal(url, 'http://localhost/api/order/update_status');
+    assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
+      id: 108,
+      expected_current_status: 'awaiting_courier',
+      status: 'delivering',
+      courier_name: '骑手888',
+      courier_phone: '0613888',
+    });
+    return jsonResponse({ success: true });
+  });
+
+  try {
+    const callbackData = buildTelegramClaimCallback({
+      orderId: 108,
+      riderId: 6,
+      riderName: '骑手888',
+      riderPhone: '0613888',
+      restaurantId: '101',
+      telegramChatId: 'chat-888',
+      expiresAt: Date.now() + 60_000,
+    });
+
+    const request = createClaimRequest(JSON.stringify({ callbackData, chatId: 'chat-888' }));
+    const response = await POST({ request } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true });
+    assert.equal(remarksPayload?.orderId, '108');
+    assert.ok(Array.isArray(remarksPayload?.remarks));
+    const acceptMeta = JSON.parse(String((remarksPayload?.remarks as unknown[])[0] || '').replace(/^dispatch_meta:/, '')) as Record<string, unknown>;
+    assert.deepEqual(acceptMeta, {
+      lastRiderDecision: {
+        action: 'accepted',
+        riderId: '6',
+        riderName: '骑手888',
+        riderPhone: '0613888',
+        at: String((acceptMeta.lastRiderDecision as Record<string, unknown>)?.at || ''),
+      },
+      declinedRiderIds: [],
+    });
+    assert.ok(!Number.isNaN(Date.parse(String((acceptMeta.lastRiderDecision as Record<string, unknown>)?.at || ''))));
+    assert.ok(calls.indexOf('http://localhost/api/admin/orders/remarks') < calls.indexOf('http://localhost/api/order/update_status'));
+  } finally {
+    restoreFetch();
+  }
+});
+
+test('POST rider-claim updates order to delivering with courier info from signed callback', async () => {
+  const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url === 'http://localhost/api/rider/status?action=list_available') {
+      return jsonResponse({
+        success: true,
+        riders: [
+          { id: 6, name: '骑手888', phone: '0613888', status: 'available', telegramChatId: 'chat-888' },
+        ],
+      });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(108)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
     }
     assert.equal(url, 'http://localhost/api/order/update_status');
     assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
@@ -248,10 +405,7 @@ test('POST rider-claim 在 chatId 不匹配时返回 400', async () => {
   const restoreFetch = withMockedFetch(async (input: string | URL | Request) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'http://localhost/api/rider/status?action=list_available') {
-      return new Response(JSON.stringify({ success: true, riders: [] }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: true, riders: [] });
     }
     throw new Error('update_status should not be called');
   });
@@ -284,10 +438,7 @@ test('POST rider-claim 在 callback 已过期时返回 expired_callback', async 
   const restoreFetch = withMockedFetch(async (input: string | URL | Request) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'http://localhost/api/rider/status?action=list_available') {
-      return new Response(JSON.stringify({ success: true, riders: [] }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: true, riders: [] });
     }
     throw new Error('update_status should not be called');
   });
@@ -327,14 +478,11 @@ test('POST rider-claim 在 callbackData 非法时返回统一错误码 400', asy
   const restoreFetch = withMockedFetch(async (input: string | URL | Request) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'http://localhost/api/rider/status?action=list_available') {
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: true,
         riders: [
           { id: 3, name: '陈工', phone: '0601', status: 'available', telegramChatId: 'chat-3' },
         ],
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
       });
     }
     throw new Error('update_status should not be called');
@@ -362,12 +510,15 @@ test('POST rider-claim 在 list_available 不可用时仍可按签名 payload �
     const url = String(input instanceof Request ? input.url : input);
 
     if (url === 'http://localhost/api/rider/status?action=list_available') {
-      return new Response(JSON.stringify({ error: 'not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ error: 'not found' }, 404);
     }
 
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(88)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
     if (url === 'http://localhost/api/order/update_status') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.deepEqual(body, {
@@ -377,10 +528,7 @@ test('POST rider-claim 在 list_available 不可用时仍可按签名 payload �
         courier_name: '陈工',
         courier_phone: '0601',
       });
-      return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: true });
     }
 
     throw new Error(`unexpected fetch: ${url}`);
@@ -423,6 +571,12 @@ test('POST rider-claim 使用短 callback 时优先回写 rider/status 返回的
       });
     }
 
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(88)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
     if (url === 'http://localhost/api/order/update_status') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.deepEqual(body, {
@@ -432,10 +586,7 @@ test('POST rider-claim 使用短 callback 时优先回写 rider/status 返回的
         courier_name: '骑手188全名',
         courier_phone: '061188',
       });
-      return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: true });
     }
 
     throw new Error(`unexpected fetch: ${url}`);
@@ -469,12 +620,15 @@ test('POST rider-claim 使用短 callback 时在 rider/status 不可用仍可接
     calls.push(url);
 
     if (url === 'http://localhost/api/rider/status?action=list_available') {
-      return new Response(JSON.stringify({ success: false, error: 'upstream_down' }), {
-        status: 503,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: false, error: 'upstream_down' }, 503);
     }
 
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(88)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
     if (url === 'http://localhost/api/order/update_status') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.deepEqual(body, {
@@ -484,10 +638,7 @@ test('POST rider-claim 使用短 callback 时在 rider/status 不可用仍可接
         courier_name: '骑手188',
         courier_phone: '061188',
       });
-      return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: true });
     }
 
     throw new Error(`unexpected fetch: ${url}`);

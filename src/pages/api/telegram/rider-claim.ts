@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { timingSafeEqual } from 'node:crypto';
 import { API_BASE_URL } from '../../../config.ts';
+import { buildDispatchMetaRemarks, readDispatchMetaFromRemarks } from '../../../lib/rider-dispatch.ts';
 import { parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
 import { readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
 
@@ -24,12 +25,18 @@ function readRiderChatId(rider: AssignableRider): string {
   return String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
 }
 
+function buildForwardHeaders(request: Request): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const cookie = request.headers.get('cookie') || '';
+  const authorization = request.headers.get('authorization') || '';
+  if (cookie) headers.cookie = cookie;
+  if (authorization) headers.authorization = authorization;
+  return headers;
+}
+
 async function readRiderIdentityByChatId(request: Request, chatId: string): Promise<{ riderName: string; riderPhone: string } | null> {
   const upstream = await fetch(`${new URL(request.url).origin}/api/rider/status?action=list_available`, {
-    headers: {
-      cookie: request.headers.get('cookie') || '',
-      authorization: request.headers.get('authorization') || '',
-    },
+    headers: buildForwardHeaders(request),
   });
   const text = await upstream.text();
   if (!upstream.ok || !text) return null;
@@ -65,6 +72,40 @@ function isTrustedTelegramRequest(request: Request): boolean {
       || '',
   ).trim();
   return provided !== '' && safeEqualText(provided, expected);
+}
+
+async function readOrderDispatchMeta(request: Request, orderId: string): Promise<string> {
+  const upstream = await fetch(`${new URL(request.url).origin}/api/admin/orders`, {
+    headers: buildForwardHeaders(request),
+  });
+  const text = await upstream.text();
+  if (!upstream.ok || !text) return '';
+  const parsed = JSON.parse(text) as unknown;
+  const rows = Array.isArray(parsed) ? parsed : [];
+  const matched = rows.find((row) => String((row as Record<string, unknown>)?.id || '').trim() === orderId);
+  return matched && typeof matched === 'object'
+    ? String((matched as Record<string, unknown>).remarksJson || (matched as Record<string, unknown>).remarks_json || '').trim()
+    : '';
+}
+
+async function writeOrderDispatchMeta(
+  request: Request,
+  orderId: string,
+  nextMeta: Parameters<typeof buildDispatchMetaRemarks>[1],
+): Promise<void> {
+  const existingRemarks = await readOrderDispatchMeta(request, orderId);
+  const upstream = await fetch(`${new URL(request.url).origin}/api/admin/orders/remarks`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildForwardHeaders(request),
+    },
+    body: JSON.stringify({
+      orderId,
+      remarks: buildDispatchMetaRemarks(existingRemarks, nextMeta),
+    }),
+  });
+  if (!upstream.ok) throw new Error('dispatch_feedback_write_failed');
 }
 
 export const POST: APIRoute = async ({ request }) => {
@@ -153,6 +194,47 @@ export const POST: APIRoute = async ({ request }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+
+  const orderIdText = String(callback.orderId || '').trim();
+  const existingMeta = readDispatchMetaFromRemarks(await readOrderDispatchMeta(request, orderIdText));
+
+  if (callback.action === 'decline') {
+    await writeOrderDispatchMeta(request, orderIdText, {
+      lastRiderDecision: {
+        action: 'declined',
+        riderId: String(callback.riderId || '').trim(),
+        riderName: resolvedName,
+        riderPhone: resolvedPhone,
+        at: new Date().toISOString(),
+      },
+      declinedRiderIds: Array.from(new Set([
+        ...existingMeta.declinedRiderIds,
+        String(callback.riderId || '').trim(),
+      ].filter(Boolean))),
+    });
+    console.info('[telegram/rider-claim:decline]', JSON.stringify({
+      orderId: callback.orderId,
+      riderId: callback.riderId,
+      riderName: resolvedName,
+      riderPhone: resolvedPhone,
+      chatId,
+    }));
+    return new Response(JSON.stringify({ success: true, action: 'decline' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  await writeOrderDispatchMeta(request, orderIdText, {
+    lastRiderDecision: {
+      action: 'accepted',
+      riderId: String(callback.riderId || '').trim(),
+      riderName: resolvedName,
+      riderPhone: resolvedPhone,
+      at: new Date().toISOString(),
+    },
+    declinedRiderIds: [],
+  });
 
   const upstream = await fetch(`${new URL(request.url).origin}/api/order/update_status`, {
     method: 'POST',

@@ -107,6 +107,58 @@ test('POST telegram webhook 在 callback_query 时转发到 rider-claim', async 
   }
 });
 
+test('POST telegram webhook 在 decline callback_query 时也原样转发到 rider-claim', async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    const callbackData = buildTelegramClaimCallback({
+      orderId: 89,
+      riderId: 4,
+      riderName: '拒单骑手',
+      riderPhone: '0602',
+      restaurantId: '101',
+      telegramChatId: 'chat-4',
+      expiresAt: Date.now() + 60_000,
+      action: 'decline',
+    });
+
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      assert.equal(url, 'http://localhost/api/telegram/rider-claim');
+      assert.equal(init?.method, 'POST');
+      assert.equal((init?.headers as Record<string, string>)['x-telegram-claim-secret'], 'test-telegram-callback-secret');
+      assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
+        callbackData,
+        chatId: 'chat-4',
+      });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    const request = new Request('http://localhost/api/telegram/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-telegram-bot-api-secret-token': 'test-telegram-callback-secret',
+      },
+      body: JSON.stringify({
+        callback_query: {
+          data: callbackData,
+          message: { chat: { id: 'chat-4' } },
+        },
+      }),
+    });
+
+    const response = await POST({ request } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true, route: 'rider-claim' });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('POST telegram webhook 在 secret 错误时返回 401', async () => {
   const request = new Request('http://localhost/api/telegram/webhook', {
     method: 'POST',

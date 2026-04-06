@@ -17,7 +17,10 @@ interface AdminAssignedOrderTelegramInput {
   scheduledFor?: string;
   itemSummary: string[];
   claimCallbackData?: string;
+  declineCallbackData?: string;
 }
+
+type TelegramClaimAction = 'accept' | 'decline';
 
 interface TelegramDeepLinkInput {
   baseUrl: string;
@@ -35,6 +38,7 @@ interface TelegramClaimCallbackInput {
   riderPhone: string;
   telegramChatId: string;
   expiresAt?: number;
+  action?: TelegramClaimAction;
 }
 
 interface TelegramClaimPayload {
@@ -45,6 +49,7 @@ interface TelegramClaimPayload {
   riderPhone: string;
   telegramChatId: string;
   expiresAt: number;
+  action: TelegramClaimAction;
 }
 
 export interface TelegramClaimCallback extends TelegramClaimPayload {
@@ -81,6 +86,7 @@ export function buildTelegramDeepLink(input: TelegramDeepLinkInput): string {
 const TELEGRAM_CALLBACK_TTL_MS = 10 * 60 * 1000;
 
 function normalizeTelegramClaimPayload(input: TelegramClaimCallbackInput): TelegramClaimPayload {
+  const action = input.action === 'decline' ? 'decline' : 'accept';
   return {
     orderId: Number(input.orderId),
     riderId: Number(input.riderId),
@@ -89,6 +95,7 @@ function normalizeTelegramClaimPayload(input: TelegramClaimCallbackInput): Teleg
     riderPhone: String(input.riderPhone || '').trim(),
     telegramChatId: String(input.telegramChatId || '').trim(),
     expiresAt: Number(input.expiresAt || Date.now() + TELEGRAM_CALLBACK_TTL_MS),
+    action,
   };
 }
 
@@ -99,6 +106,7 @@ function validateTelegramClaimPayload(payload: TelegramClaimPayload): void {
   if (!payload.restaurantId) throw new Error('invalid_restaurant_id');
   if (!payload.riderPhone) throw new Error('invalid_rider_phone');
   if (!payload.telegramChatId) throw new Error('invalid_telegram_chat_id');
+  if (payload.action !== 'accept' && payload.action !== 'decline') throw new Error('invalid_callback_action');
   if (!Number.isFinite(payload.expiresAt) || payload.expiresAt <= Date.now()) throw new Error('expired_callback');
 }
 
@@ -150,6 +158,7 @@ function parseSignedTelegramClaimCallback(payload: string): TelegramClaimCallbac
     riderPhone: String(raw.riderPhone || ''),
     telegramChatId: String(raw.telegramChatId || ''),
     expiresAt: Number(raw.expiresAt),
+    action: raw.action,
   });
   validateTelegramClaimPayload(parsed);
 
@@ -207,6 +216,7 @@ function buildShortTelegramClaimCallback(input: TelegramClaimCallbackInput): str
   const callback = signAndValidateTelegramClaim(input);
   const now = Date.now();
   const expiresAt = Math.min(Number(callback.expiresAt), now + TELEGRAM_SHORT_CALLBACK_TTL_MS);
+  const actionPart = callback.action === 'decline' ? 'd' : 'a';
   const orderPart = callback.orderId.toString(36);
   const riderPart = callback.riderId.toString(36);
   const expiresPart = Math.floor(expiresAt / 1000).toString(36);
@@ -214,7 +224,7 @@ function buildShortTelegramClaimCallback(input: TelegramClaimCallbackInput): str
   const phonePart = sanitizeCompactPhone(callback.riderPhone);
   const namePart = sanitizeCompactText(callback.riderName);
   if (!namePart) throw new Error('invalid_rider_name');
-  const shortParts = [orderPart, riderPart, expiresPart, chatPart, phonePart, namePart];
+  const shortParts = [actionPart, orderPart, riderPart, expiresPart, chatPart, phonePart, namePart];
   const sigPart = signShortCallbackParts(shortParts);
   return `${TELEGRAM_SHORT_CALLBACK_PREFIX}${shortParts.join('.')}.${sigPart}`;
 }
@@ -224,15 +234,15 @@ function parseShortTelegramClaimCallback(payload: string): TelegramClaimCallback
   if (!token) throw new Error('invalid_callback_data');
 
   const parts = token.split('.');
-  if (parts.length !== 7) throw new Error('invalid_callback_data');
+  if (parts.length !== 8) throw new Error('invalid_callback_data');
 
-  const [orderPart, riderPart, expiresPart, chatPart, phonePart, namePart, sigPart] = parts;
-  if (!orderPart || !riderPart || !expiresPart || !chatPart || !phonePart || !namePart || !sigPart) throw new Error('invalid_callback_data');
-  if (!/^[A-Za-z0-9_-]+$/.test(chatPart) || !/^[A-Za-z0-9_-]+$/.test(phonePart) || !/^[\p{L}\p{N}_-]+$/u.test(namePart) || !/^[A-Za-z0-9_-]+$/.test(sigPart)) {
+  const [actionPart, orderPart, riderPart, expiresPart, chatPart, phonePart, namePart, sigPart] = parts;
+  if (!actionPart || !orderPart || !riderPart || !expiresPart || !chatPart || !phonePart || !namePart || !sigPart) throw new Error('invalid_callback_data');
+  if (!/^[ad]$/.test(actionPart) || !/^[A-Za-z0-9_-]+$/.test(chatPart) || !/^[A-Za-z0-9_-]+$/.test(phonePart) || !/^[\p{L}\p{N}_-]+$/u.test(namePart) || !/^[A-Za-z0-9_-]+$/.test(sigPart)) {
     throw new Error('invalid_callback_data');
   }
 
-  const expectedSig = signShortCallbackParts([orderPart, riderPart, expiresPart, chatPart, phonePart, namePart]);
+  const expectedSig = signShortCallbackParts([actionPart, orderPart, riderPart, expiresPart, chatPart, phonePart, namePart]);
   if (!safeEqualSignature(sigPart, expectedSig)) throw new Error('invalid_signature');
 
   const expiresAt = readBase36PositiveInt(expiresPart) * 1000;
@@ -246,6 +256,7 @@ function parseShortTelegramClaimCallback(payload: string): TelegramClaimCallback
     riderPhone: sanitizeCompactPhone(phonePart),
     telegramChatId: chatPart,
     expiresAt,
+    action: actionPart === 'd' ? 'decline' : 'accept',
     sig: sigPart,
   };
 }
@@ -286,6 +297,7 @@ export function parseTelegramClaimCallback(
       riderPhone: shortParsed.riderPhone,
       restaurantId: String(options?.restaurantId || '').trim(),
       telegramChatId: chatId,
+      action: shortParsed.action,
     };
   }
   return parseSignedTelegramClaimCallback(payload);
@@ -302,7 +314,7 @@ export function buildTelegramDispatchMessage(input: TelegramDispatchInput): Tele
 
   const phone = String(input.phone || '').trim();
   if (phone && phone !== '-') {
-    primaryButtons.push({ text: `联系门店：${phone}` });
+    primaryButtons.push({ text: `联系门店：${phone}`, url: `tel:${phone}` });
   }
 
   return {
@@ -363,9 +375,12 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
   if (String(input.claimCallbackData || '').trim()) {
     primaryButtons.push({ text: '立即接单', callback_data: String(input.claimCallbackData).trim() });
   }
+  if (String(input.declineCallbackData || '').trim()) {
+    primaryButtons.push({ text: '暂不接单', callback_data: String(input.declineCallbackData).trim() });
+  }
   const phone = String(input.phone || '').trim();
   if (phone && phone !== '-') {
-    primaryButtons.push({ text: `联系门店：${phone}` });
+    primaryButtons.push({ text: `联系门店：${phone}`, url: `tel:${phone}` });
   }
 
   return {

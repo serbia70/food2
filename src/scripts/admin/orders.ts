@@ -42,6 +42,7 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
 
   let res: Response;
   let flushedDeferredRefresh = false;
+  let assignError: Error | null = null;
   const controller = new AbortController();
   try {
     const timeoutId = setTimeout(() => controller.abort('request timeout'), ASSIGN_RIDER_REQUEST_TIMEOUT_MS);
@@ -72,19 +73,21 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
     if (input.debugTelegram === true && typeof alert === 'function') {
       alert(`派单调试: /api/admin/rider-assign 请求失败 ${normalizedDetail}`);
     }
-    throw new Error(normalizedDetail || 'assign rider failed');
+    assignError = new Error(normalizedDetail || 'assign rider failed');
   } finally {
     window.__adminAssignInFlight = false;
     if (window.__adminPendingOrderRefresh) {
       window.__adminPendingOrderRefresh = false;
       flushedDeferredRefresh = true;
-      const refreshOrderList = window.refreshOrderList;
-      if (typeof refreshOrderList === 'function') refreshOrderList();
     }
   }
 
-  if (flushedDeferredRefresh) {
-    return;
+  if (assignError) {
+    if (flushedDeferredRefresh) {
+      const refreshOrderList = window.refreshOrderList;
+      if (typeof refreshOrderList === 'function') refreshOrderList();
+    }
+    throw assignError;
   }
 
   if (input.debugTelegram === true && typeof alert === 'function') {

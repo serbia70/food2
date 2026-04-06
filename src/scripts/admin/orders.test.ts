@@ -327,6 +327,53 @@ test('assignRider flushes deferred order refresh after request finishes', async 
   assert.equal(refreshCount, 1);
 });
 
+test('assignRider does not flush deferred order refresh before debug alerts are emitted', async () => {
+  const alertMessages: string[] = [];
+  let refreshCount = 0;
+  globalThis.alert = ((message?: string) => {
+    alertMessages.push(String(message || ''));
+  }) as typeof alert;
+  globalThis.window = {
+    showToast() {},
+    refreshOrderList() {
+      refreshCount++;
+    },
+    __adminAssignInFlight: false,
+    __adminPendingOrderRefresh: false,
+  } as any;
+
+  globalThis.fetch = async () => {
+    globalThis.window.__adminPendingOrderRefresh = true;
+    return new Response(JSON.stringify({
+      success: true,
+      telegram_notification: {
+        success: true,
+        chatId: 'tg-7',
+        chatIdSource: 'request',
+        shopSlug: 'demo-shop',
+      },
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  await assignRider('470', '7', {
+    shopSlug: 'demo-shop',
+    pickupEtaMinutes: 15,
+    riderTelegramChatId: 'tg-7',
+    debugTelegram: true,
+  });
+
+  assert.deepEqual(alertMessages, [
+    '派单调试: 已进入 assignRider，准备请求 /api/admin/rider-assign',
+    '派单调试: /api/admin/rider-assign 已返回 200',
+    '派单调试: /api/admin/rider-assign 响应 {"success":true,"telegram_notification":{"success":true,"chatId":"tg-7","chatIdSource":"request","shopSlug":"demo-shop"}}',
+    '派单Telegram: success chat=tg-7 source=request shop=demo-shop',
+  ]);
+  assert.equal(refreshCount, 1);
+});
+
 test('orders source keeps assign APIs and removes broadcast helper', async () => {
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
@@ -442,7 +489,6 @@ test('admin page source loads protected master settings instead of public home s
   const source = await readFile(resolve(process.cwd(), 'src/pages/admin/[slug]/index.astro'), 'utf8');
 
   assert.match(source, /async function loadProtectedMasterSettings\(\)/);
-  assert.match(source, /fetch\(new URL\('\/api\/master\/init', Astro\.url\), \{/);
   assert.match(source, /const adminSettingsUrl = new URL\('\/api\/admin\/settings\/master', Astro\.url\);/);
   assert.match(source, /method: 'POST'/);
   assert.match(source, /'success' in adminMasterRaw/);
@@ -450,12 +496,15 @@ test('admin page source loads protected master settings instead of public home s
   assert.match(source, /adminMasterRaw as \{ data\?: unknown; settings\?: unknown \}/);
   assert.match(source, /const resolvedAdminSettings = asObject\(adminMasterData\.settings \|\| adminMasterData\);/);
   assert.match(source, /resolvedAdminSettings\.__adminSettingsDebug = \{/);
+  assert.match(source, /const adminMethod = 'POST';/);
   assert.match(source, /return resolvedAdminSettings;/);
   assert.match(source, /const masterSettingsDiagnostics = \{/);
   assert.match(source, /adminMethod:/);
   assert.match(source, /adminResponsePreview:/);
   assert.match(source, /mergedAdminSettings\.__debugMasterSettings = masterSettingsDiagnostics;/);
   assert.match(source, /const \[statusResp, shopResp, menuResp, ordersResp, billingResp, homeResp, masterSettings\] = await Promise\.all\([\s\S]*loadProtectedMasterSettings\(\),[\s\S]*\]\);/);
+  assert.doesNotMatch(source, /fetch\(new URL\('\/api\/master\/init', Astro\.url\), \{/);
+  assert.doesNotMatch(source, /method: 'GET'[\s\S]*\/api\/admin\/settings\/master/);
   assert.doesNotMatch(source, /const masterSettings = asObject\(homeData\?\.settings \|\| \{\}\);/);
 });
 

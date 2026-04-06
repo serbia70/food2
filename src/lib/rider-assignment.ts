@@ -70,7 +70,7 @@ export function buildAssignedOrderStatusPayload({
   const etaMinutes = Number.isFinite(Number(pickupEtaMinutes)) ? Number(pickupEtaMinutes) : 0;
 
   return {
-    status: 'delivering',
+    status: 'awaiting_courier',
     courierName: riderName,
     courierPhone: riderPhone,
     courier_name: riderName,

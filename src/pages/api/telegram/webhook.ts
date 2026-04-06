@@ -1,4 +1,6 @@
 import type { APIRoute } from 'astro';
+import { SITE_BASE_URL } from '../../../config.ts';
+import { readTelegramRequestSecret } from '../../../lib/telegram-secrets.ts';
 
 export const prerender = false;
 
@@ -10,6 +12,7 @@ type TelegramWebhookBody = {
     };
   };
   callback_query?: {
+    id?: unknown;
     data?: unknown;
     message?: {
       chat?: {
@@ -18,17 +21,6 @@ type TelegramWebhookBody = {
     };
   };
 };
-
-function readTelegramRequestSecret(): string {
-  const env = ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env || {});
-  return String(
-    env.TELEGRAM_WEBHOOK_SECRET
-      || env.TELEGRAM_CALLBACK_SECRET
-      || process.env.TELEGRAM_WEBHOOK_SECRET
-      || process.env.TELEGRAM_CALLBACK_SECRET
-      || '',
-  ).trim();
-}
 
 function isTrustedTelegramRequest(request: Request): boolean {
   const expected = readTelegramRequestSecret();
@@ -41,6 +33,11 @@ function buildJsonResponse(body: Record<string, unknown>, status = 200): Respons
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+function readTelegramSiteOrigin(request: Request): string {
+  const configured = String(SITE_BASE_URL || '').trim().replace(/\/$/, '');
+  return configured || new URL(request.url).origin;
 }
 
 function getBindToken(text: string): string {
@@ -56,9 +53,10 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const body = await request.json().catch(() => ({})) as TelegramWebhookBody;
-  const origin = new URL(request.url).origin;
+  const origin = readTelegramSiteOrigin(request);
   const requestSecret = readTelegramRequestSecret();
 
+  const callbackId = String(body.callback_query?.id || '').trim();
   const callbackData = String(body.callback_query?.data || '').trim();
   const callbackChatId = String(body.callback_query?.message?.chat?.id || '').trim();
   if (callbackData && callbackChatId) {
@@ -74,15 +72,22 @@ export const POST: APIRoute = async ({ request }) => {
       }),
     });
 
+    const upstreamText = await upstream.text();
+    const upstreamJson = upstreamText ? JSON.parse(upstreamText) as Record<string, unknown> : null;
     if (!upstream.ok) {
-      const text = await upstream.text();
-      return new Response(text, {
+      return new Response(upstreamText, {
         status: upstream.status,
         headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
       });
     }
 
-    return buildJsonResponse({ success: true, route: 'rider-claim' });
+    const action = String(upstreamJson?.action || '').trim();
+    const text = action === 'decline' ? '已拒单' : '已接单';
+    return buildJsonResponse(
+      callbackId
+        ? { method: 'answerCallbackQuery', callback_query_id: callbackId, text }
+        : { success: true, route: 'rider-claim' },
+    );
   }
 
   const text = String(body.message?.text || '').trim();

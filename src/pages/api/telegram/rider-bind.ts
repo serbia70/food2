@@ -1,19 +1,9 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
 import { parseRiderTelegramBindToken } from '../../../lib/telegram-rider-bind.ts';
+import { readTelegramRequestSecret } from '../../../lib/telegram-secrets.ts';
 
 export const prerender = false;
-
-function readTelegramRequestSecret(): string {
-  const env = ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env || {});
-  return String(
-    env.TELEGRAM_WEBHOOK_SECRET
-      || env.TELEGRAM_CALLBACK_SECRET
-      || process.env.TELEGRAM_WEBHOOK_SECRET
-      || process.env.TELEGRAM_CALLBACK_SECRET
-      || '',
-  ).trim();
-}
 
 function readTelegramBindSecret(): string {
   const env = ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env || {});

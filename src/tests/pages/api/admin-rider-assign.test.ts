@@ -24,7 +24,7 @@ function createCookies() {
   };
 }
 
-test('manual_assign updates order to delivering for selected available rider', async () => {
+test('manual_assign keeps order awaiting_courier until rider accepts in Telegram', async () => {
   const calls: string[] = [];
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -39,9 +39,26 @@ test('manual_assign updates order to delivering for selected available rider', a
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
+    if (url === 'https://api.test.local/api/admin/orders') {
+      return new Response(JSON.stringify({
+        data: [
+          {
+            id: 470,
+            shopSlug: 'demo-shop',
+            remarksJson: '[]',
+            orderNo: 'A470',
+            tableInfo: 'Cara Lazara 12',
+            userPhone: '061',
+            totalAmount: 1000,
+            items: [{ name: '测试菜', quantity: 1 }],
+          },
+        ],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
     if (url === 'https://api.test.local/api/admin/orders/470/status') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
-      assert.equal(body.status, 'delivering');
+      assert.equal(body.status, 'awaiting_courier');
       assert.equal(body.courierName, '骑手A');
       assert.equal(body.courierPhone, '061');
       assert.equal(body.pickupEtaMinutes, 15);
@@ -69,6 +86,81 @@ test('manual_assign updates order to delivering for selected available rider', a
   assert.equal(response.status, 200);
   assert.equal((await response.json()).success, true);
   assert.ok(calls.includes('https://api.test.local/api/admin/orders/470/status'));
+});
+
+
+test('manual_assign returns telegram_notification failure when callback buttons are unavailable', async () => {
+  const previousCallbackSecret = process.env.TELEGRAM_CALLBACK_SECRET;
+  const previousWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  delete process.env.TELEGRAM_CALLBACK_SECRET;
+  delete process.env.TELEGRAM_WEBHOOK_SECRET;
+
+  try {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url === 'https://api.test.local/api/admin/riders') {
+        return new Response(JSON.stringify({
+          riders: [
+            { id: 13, name: '骑手G', phone: '067', status: 'available', telegramChatId: 'tg-13' },
+          ],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (url === 'https://api.test.local/api/admin/orders/483/status') {
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (url === 'https://api.test.local/api/telegram/send') {
+        const telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        const replyMarkup = telegramBody?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string }>> } | undefined;
+        assert.equal(replyMarkup?.inline_keyboard?.flat().some((button) => button?.text === '立即接单'), false);
+        return new Response(JSON.stringify({ success: true, ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const mod = await loadRoute();
+    const response = await mod.POST({
+      request: new Request('http://localhost:3000/api/admin/rider-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie: 'admin_token=test-token' },
+        body: JSON.stringify({
+          action: 'manual_assign',
+          orderId: '483',
+          riderId: '13',
+          shopSlug: 'demo-shop',
+        }),
+      }),
+      cookies: createCookies(),
+    } as any);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      success: true,
+      rider: {
+        id: 13,
+        name: '骑手G',
+        phone: '067',
+      },
+      telegram_notification: {
+        success: false,
+        error: 'telegram_callback_buttons_unavailable',
+        chatId: 'tg-13',
+        chatIdSource: 'rider',
+        shopSlug: 'demo-shop',
+      },
+    });
+  } finally {
+    if (previousCallbackSecret == null) delete process.env.TELEGRAM_CALLBACK_SECRET;
+    else process.env.TELEGRAM_CALLBACK_SECRET = previousCallbackSecret;
+    if (previousWebhookSecret == null) delete process.env.TELEGRAM_WEBHOOK_SECRET;
+    else process.env.TELEGRAM_WEBHOOK_SECRET = previousWebhookSecret;
+  }
 });
 
 test('manual_assign sends telegram through backend API base url and forwards auth headers', async () => {
@@ -1109,7 +1201,13 @@ test('manual_assign 在请求体已带 telegramBotToken 时透传给本地 teleg
 
     if (url === 'https://api.test.local/api/telegram/send') {
       telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
-      return new Response(JSON.stringify({ success: true, ok: true }), {
+      return new Response(JSON.stringify({
+        success: true,
+        ok: true,
+        hasReplyMarkup: true,
+        inlineKeyboardRows: 1,
+        inlineKeyboardButtons: 2,
+      }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -1150,6 +1248,13 @@ test('manual_assign 在请求体已带 telegramBotToken 时透传给本地 teleg
       chatId: 'tg-12',
       chatIdSource: 'rider',
       shopSlug: 'demo-shop',
+      hasReplyMarkup: true,
+      inlineKeyboardRows: 1,
+      inlineKeyboardButtons: 2,
+      callbackDataLength: 41,
+      upstreamHasReplyMarkup: true,
+      upstreamInlineKeyboardRows: 1,
+      upstreamInlineKeyboardButtons: 2,
     },
   });
 });
@@ -1221,6 +1326,10 @@ test('manual_assign 在仅有 TELEGRAM_WEBHOOK_SECRET 时仍可发送带接单�
         chatId: 'tg-12',
         chatIdSource: 'rider',
         shopSlug: 'demo-shop',
+        hasReplyMarkup: true,
+        inlineKeyboardRows: 1,
+        inlineKeyboardButtons: 2,
+        callbackDataLength: 41,
       },
     });
   } finally {
@@ -1231,15 +1340,14 @@ test('manual_assign 在仅有 TELEGRAM_WEBHOOK_SECRET 时仍可发送带接单�
   }
 });
 
-test('manual_assign 在缺少 callback/webhook secret 时降级发送无按钮通知', async () => {
+test('manual_assign 在缺少 callback/webhook secret 时返回按钮不可用诊断', async () => {
   const previousCallbackSecret = process.env.TELEGRAM_CALLBACK_SECRET;
   const previousWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  let telegramBody: Record<string, unknown> | null = null;
   delete process.env.TELEGRAM_CALLBACK_SECRET;
   delete process.env.TELEGRAM_WEBHOOK_SECRET;
 
   try {
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
 
       if (url === 'https://api.test.local/api/admin/riders') {
@@ -1252,14 +1360,6 @@ test('manual_assign 在缺少 callback/webhook secret 时降级发送无按钮�
 
       if (url === 'https://api.test.local/api/admin/orders/483/status') {
         return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-      }
-
-      if (url === 'https://api.test.local/api/telegram/send') {
-        telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
-        return new Response(JSON.stringify({ success: true, ok: true }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
       }
 
       throw new Error(`Unexpected fetch: ${url}`);
@@ -1283,8 +1383,6 @@ test('manual_assign 在缺少 callback/webhook secret 时降级发送无按钮�
     } as any);
 
     assert.equal(response.status, 200);
-    const replyMarkup = telegramBody?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> } | undefined;
-    assert.equal(replyMarkup?.inline_keyboard?.flat().some((button) => button?.text === '立即接单'), false);
     assert.deepEqual(await response.json(), {
       success: true,
       rider: {
@@ -1293,7 +1391,8 @@ test('manual_assign 在缺少 callback/webhook secret 时降级发送无按钮�
         phone: '067',
       },
       telegram_notification: {
-        success: true,
+        success: false,
+        error: 'telegram_callback_buttons_unavailable',
         chatId: 'tg-13',
         chatIdSource: 'rider',
         shopSlug: 'demo-shop',
@@ -1417,8 +1516,10 @@ test('manual_assign 在 orderSummary.phone 存在时生成合法 tel 按钮', as
 
   assert.equal(response.status, 200);
   const replyMarkup = telegramBody?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string; url?: string }>> } | undefined;
-  assert.equal(replyMarkup?.inline_keyboard?.flat().some((button) => button?.url === 'tel:0613083888'), true);
-  assert.equal((await response.json()).success, true);
+  assert.equal(replyMarkup?.inline_keyboard?.flat().some((button) => button?.url === 'tel:0613083888'), false);
+  const body = await response.json();
+  assert.equal(body.success, true);
+  assert.equal(body.telegram_notification, undefined);
 });
 
 test('manual_assign 调用后端 telegram send 时透传 cookie 与 authorization', async () => {

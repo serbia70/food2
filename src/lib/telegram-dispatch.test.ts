@@ -202,7 +202,7 @@ test('buildAdminAssignedOrderTelegramMessage trims oversized item summary to kee
   ]);
 });
 
-test('buildAdminAssignedOrderTelegramMessage emits tel url button when phone exists', () => {
+test('buildAdminAssignedOrderTelegramMessage omits tel url button even when phone exists', () => {
   const message = buildAdminAssignedOrderTelegramMessage({
     orderNo: 'A600',
     address: 'Ruma 1',
@@ -212,5 +212,5 @@ test('buildAdminAssignedOrderTelegramMessage emits tel url button when phone exi
     itemSummary: ['米饭 x1'],
   });
 
-  assert.equal(message.replyMarkup.inline_keyboard.flat().some((button) => String(button?.url || '').startsWith('tel:0613083888')), true);
+  assert.equal(message.replyMarkup.inline_keyboard.flat().some((button) => String(button?.url || '').startsWith('tel:0613083888')), false);
 });

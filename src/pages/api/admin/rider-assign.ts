@@ -256,7 +256,19 @@ async function notifyAssignedRider({
   inlineTelegramBotToken?: string;
   debugTelegram?: boolean;
 }): Promise<
-  | { success: true; chatId: string; chatIdSource: 'rider' | 'request'; shopSlug: string }
+  | {
+    success: true;
+    chatId: string;
+    chatIdSource: 'rider' | 'request';
+    shopSlug: string;
+    hasReplyMarkup: boolean;
+    inlineKeyboardRows: number;
+    inlineKeyboardButtons: number;
+    callbackDataLength: number;
+    upstreamHasReplyMarkup?: boolean;
+    upstreamInlineKeyboardRows?: number;
+    upstreamInlineKeyboardButtons?: number;
+  }
   | { success: false; error: string; chatId?: string; chatIdSource?: 'rider' | 'request' | 'missing'; shopSlug: string }
 > {
   const riderChatId = String(readRiderChatId(rider) || '').trim();
@@ -285,8 +297,13 @@ async function notifyAssignedRider({
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (message !== 'missing_telegram_callback_secret') throw error;
-      claimCallbackData = '';
-      declineCallbackData = '';
+      return {
+        success: false,
+        error: 'telegram_callback_buttons_unavailable',
+        chatId,
+        chatIdSource,
+        shopSlug,
+      };
     }
 
     const message = buildAdminAssignedOrderTelegramMessage({
@@ -315,6 +332,12 @@ async function notifyAssignedRider({
       text: message.text,
       reply_markup: message.replyMarkup,
     };
+    const inlineKeyboardRows = Array.isArray(message.replyMarkup?.inline_keyboard)
+      ? message.replyMarkup.inline_keyboard.length
+      : 0;
+    const inlineKeyboardButtons = Array.isArray(message.replyMarkup?.inline_keyboard)
+      ? message.replyMarkup.inline_keyboard.reduce((sum, row) => sum + row.length, 0)
+      : 0;
     const callbackData = Array.isArray(message.replyMarkup?.inline_keyboard)
       ? message.replyMarkup.inline_keyboard
         .flat()
@@ -378,7 +401,19 @@ async function notifyAssignedRider({
         shopSlug,
       };
     }
-    return { success: true, chatId, chatIdSource, shopSlug };
+    return {
+      success: true,
+      chatId,
+      chatIdSource,
+      shopSlug,
+      hasReplyMarkup: inlineKeyboardRows > 0,
+      inlineKeyboardRows,
+      inlineKeyboardButtons,
+      callbackDataLength: callbackData.length,
+      ...(typeof parsedResponse?.hasReplyMarkup === 'boolean' ? { upstreamHasReplyMarkup: parsedResponse.hasReplyMarkup } : {}),
+      ...(Number.isFinite(Number(parsedResponse?.inlineKeyboardRows)) ? { upstreamInlineKeyboardRows: Number(parsedResponse?.inlineKeyboardRows) } : {}),
+      ...(Number.isFinite(Number(parsedResponse?.inlineKeyboardButtons)) ? { upstreamInlineKeyboardButtons: Number(parsedResponse?.inlineKeyboardButtons) } : {}),
+    };
   } catch (error) {
     const errorMessage = error instanceof Error
       ? error.message

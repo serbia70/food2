@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../../../config.ts';
 import { buildDispatchMetaRemarks, readDispatchMetaFromRemarks } from '../../../lib/rider-dispatch.ts';
 import { parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
 import { readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
+import { readTelegramRequestSecret } from '../../../lib/telegram-secrets.ts';
 
 export const prerender = false;
 
@@ -49,11 +50,6 @@ async function readRiderIdentityByChatId(request: Request, chatId: string): Prom
   const riderPhone = String(matched.phone || '').trim();
   if (!riderName || !riderPhone) return null;
   return { riderName, riderPhone };
-}
-
-function readTelegramRequestSecret(): string {
-  const env = ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env || {});
-  return String(env.TELEGRAM_WEBHOOK_SECRET || env.TELEGRAM_CALLBACK_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || process.env.TELEGRAM_CALLBACK_SECRET || '').trim();
 }
 
 function safeEqualText(left: string, right: string): boolean {

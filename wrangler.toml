@@ -5,6 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 PUBLIC_API_URL = "https://food2api.serbia70.com"
+PUBLIC_SITE_URL = "https://food2.serbia70.com"
 PUBLIC_MQTT_BROKER = "wss://mqtt.serbia70.com:443/mqtt"
 
 # NOTE: Do not commit real credentials. Provide them via wrangler secrets / env.

@@ -29,6 +29,7 @@ interface TelegramDeepLinkInput {
 }
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { readTelegramCallbackSecret } from './telegram-secrets.ts';
 
 interface TelegramClaimCallbackInput {
   orderId: number;
@@ -111,16 +112,7 @@ function validateTelegramClaimPayload(payload: TelegramClaimPayload): void {
 }
 
 function requireTelegramCallbackSecret(): string {
-  const env = ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env || {});
-  const secret = String(
-    env.TELEGRAM_CALLBACK_SECRET
-      || env.TELEGRAM_WEBHOOK_SECRET
-      || env.JWT_SECRET
-      || process.env.TELEGRAM_CALLBACK_SECRET
-      || process.env.TELEGRAM_WEBHOOK_SECRET
-      || process.env.JWT_SECRET
-      || '',
-  ).trim();
+  const secret = readTelegramCallbackSecret();
   if (!secret) throw new Error('missing_telegram_callback_secret');
   return secret;
 }
@@ -377,10 +369,6 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
   }
   if (String(input.declineCallbackData || '').trim()) {
     primaryButtons.push({ text: '暂不接单', callback_data: String(input.declineCallbackData).trim() });
-  }
-  const phone = String(input.phone || '').trim();
-  if (phone && phone !== '-') {
-    primaryButtons.push({ text: `联系门店：${phone}`, url: `tel:${phone}` });
   }
 
   return {

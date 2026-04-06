@@ -227,48 +227,23 @@ async function loadTelegramBotToken(request: Request, shopSlug: string, inlineTo
     }
   }
 
-  const masterHeaders: Record<string, string> = {};
   const cookie = request.headers.get('cookie') || '';
-  if (cookie) masterHeaders.cookie = cookie;
-
-  diagnostics.masterSettings.requested = true;
-  const masterRes = await fetch(new URL('/api/master/init', request.url).toString(), {
-    method: 'GET',
-    ...(Object.keys(masterHeaders).length > 0 ? { headers: masterHeaders } : {}),
-  });
-  diagnostics.masterSettings.status = masterRes.status;
-  if (masterRes.ok) {
-    const masterData = await masterRes.json().catch(() => ({}));
-    const masterToken = readTelegramBotToken(masterData);
-    diagnostics.masterSettings.tokenFound = Boolean(masterToken);
-    if (masterToken) {
-      return { token: masterToken, tokenSource: 'master', diagnostics };
-    }
-  }
-
   const adminAuthorization = String(request.headers.get('authorization') || '').trim();
-  if (masterRes.status === 401 && (adminAuthorization || cookie)) {
+  if (adminAuthorization || cookie) {
     const adminMasterHeaders: Record<string, string> = {};
     if (adminAuthorization) adminMasterHeaders.authorization = adminAuthorization;
     if (cookie) adminMasterHeaders.cookie = cookie;
 
     diagnostics.adminMasterSettings.requested = true;
     const adminSettingsUrl = new URL('/api/admin/settings/master', request.url).toString();
-    let adminMasterRes = await fetch(adminSettingsUrl, {
-      method: 'GET',
-      ...(Object.keys(adminMasterHeaders).length > 0 ? { headers: adminMasterHeaders } : {}),
+    const adminMasterRes = await fetch(adminSettingsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...adminMasterHeaders,
+      },
+      body: '{}',
     });
-
-    if (adminMasterRes.status === 404) {
-      adminMasterRes = await fetch(adminSettingsUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...adminMasterHeaders,
-        },
-        body: '{}',
-      });
-    }
 
     diagnostics.adminMasterSettings.status = adminMasterRes.status;
     if (adminMasterRes.ok) {
@@ -289,6 +264,24 @@ async function loadTelegramBotToken(request: Request, shopSlug: string, inlineTo
       if (adminMasterToken) {
         return { token: adminMasterToken, tokenSource: 'admin_master', diagnostics };
       }
+    }
+  }
+
+  const masterHeaders: Record<string, string> = {};
+  if (cookie) masterHeaders.cookie = cookie;
+
+  diagnostics.masterSettings.requested = true;
+  const masterRes = await fetch(new URL('/api/master/init', request.url).toString(), {
+    method: 'GET',
+    ...(Object.keys(masterHeaders).length > 0 ? { headers: masterHeaders } : {}),
+  });
+  diagnostics.masterSettings.status = masterRes.status;
+  if (masterRes.ok) {
+    const masterData = await masterRes.json().catch(() => ({}));
+    const masterToken = readTelegramBotToken(masterData);
+    diagnostics.masterSettings.tokenFound = Boolean(masterToken);
+    if (masterToken) {
+      return { token: masterToken, tokenSource: 'master', diagnostics };
     }
   }
 

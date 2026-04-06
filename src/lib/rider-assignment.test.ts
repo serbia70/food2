@@ -70,14 +70,14 @@ test('pickNextAvailableRider falls back to first rider when cursor rider is offl
   assert.equal(rider?.id, 2);
 });
 
-test('buildAssignedOrderStatusPayload writes canonical delivering payload', () => {
+test('buildAssignedOrderStatusPayload writes canonical awaiting_courier payload', () => {
   assert.deepEqual(
     buildAssignedOrderStatusPayload({
       rider: { id: 2, name: 'B', phone: '062', status: 'available' },
       pickupEtaMinutes: 15,
     }),
     {
-      status: 'delivering',
+      status: 'awaiting_courier',
       courierName: 'B',
       courierPhone: '062',
       courier_name: 'B',

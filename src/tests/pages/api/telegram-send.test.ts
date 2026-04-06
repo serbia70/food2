@@ -563,13 +563,7 @@ test('POST telegram send 在 admin settings 200 但未识别 token 时返回 adm
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = String(init?.method || 'GET').toUpperCase();
-    if (url === 'https://food2.serbia70.com/api/master/init') {
-      return new Response(JSON.stringify({ ok: false, error: { code: 'unauthorized', message: 'Unauthorized' } }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'GET') {
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'POST') {
       return new Response(JSON.stringify({
         data: {
           weirdBucket: {
@@ -578,6 +572,12 @@ test('POST telegram send 在 admin settings 200 但未识别 token 时返回 adm
         },
       }), {
         status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url === 'https://food2.serbia70.com/api/master/init') {
+      return new Response(JSON.stringify({ ok: false, error: { code: 'unauthorized', message: 'Unauthorized' } }), {
+        status: 401,
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -705,12 +705,13 @@ test('POST telegram send 在店铺和 master 都缺少 token 时返回 400 与�
   });
 });
 
-test('POST telegram send 请求当前站内 master init 时只透传 cookie', async () => {
-  const calls: string[] = [];
+test('POST telegram send 在 admin 请求中优先 POST admin settings master，并把 cookie 与 authorization 一并透传', async () => {
+  const calls: Array<{ url: string; method: string }> = [];
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    calls.push(url);
+    const method = String(init?.method || 'GET').toUpperCase();
+    calls.push({ url, method });
 
     if (url === 'https://api.test.local/demo-shop/info') {
       return new Response(JSON.stringify({
@@ -723,17 +724,12 @@ test('POST telegram send 请求当前站内 master init 时只透传 cookie', as
       });
     }
 
-    if (url === 'https://food2.serbia70.com/api/master/init') {
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'POST') {
       const headers = init?.headers as Record<string, string> | undefined;
       assert.equal(headers?.cookie, 'master_token=master-cookie-1; admin_token=admin-cookie-1');
-      assert.equal(headers?.authorization, undefined);
+      assert.equal(headers?.authorization, 'Bearer inline-auth-token');
       return new Response(JSON.stringify({
-        success: true,
-        data: {
-          settings: {
-            telegramBotToken: 'master-cookie-token',
-          },
-        },
+        telegramBotToken: 'master-cookie-token',
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -748,7 +744,7 @@ test('POST telegram send 请求当前站内 master init 时只透传 cookie', as
       });
     }
 
-    throw new Error(`Unexpected fetch: ${url}`);
+    throw new Error(`Unexpected fetch: ${method} ${url}`);
   }) as typeof fetch;
 
   const mod = await loadRoute();
@@ -774,8 +770,9 @@ test('POST telegram send 请求当前站内 master init 时只透传 cookie', as
     ok: true,
     result: { message_id: 103 },
   });
-  assert.ok(calls.includes('https://food2.serbia70.com/api/master/init'));
-  assert.ok(calls.includes('https://api.telegram.org/botmaster-cookie-token/sendMessage'));
+  assert.ok(!calls.some((call) => call.url === 'https://food2.serbia70.com/api/master/init'));
+  assert.ok(calls.some((call) => call.url === 'https://food2.serbia70.com/api/admin/settings/master' && call.method === 'POST'));
+  assert.ok(calls.some((call) => call.url === 'https://api.telegram.org/botmaster-cookie-token/sendMessage' && call.method === 'POST'));
 });
 
 test('POST telegram send 在当前站内 master settings 未授权时回退公开 home settings 的 telegram.token', async () => {
@@ -856,12 +853,13 @@ test('POST telegram send 在当前站内 master settings 未授权时回退公�
   assert.ok(calls.includes('https://api.telegram.org/botpublic-home-token/sendMessage'));
 });
 
-test('POST telegram send 在 master init 未授权时回退 admin settings master 获取全局 token', async () => {
-  const calls: string[] = [];
+test('POST telegram send 在 admin authorization 场景直接 POST admin settings master 获取全局 token', async () => {
+  const calls: Array<{ url: string; method: string }> = [];
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    calls.push(url);
+    const method = String(init?.method || 'GET').toUpperCase();
+    calls.push({ url, method });
 
     if (url === 'https://api.test.local/103/info') {
       return new Response(JSON.stringify({
@@ -874,36 +872,13 @@ test('POST telegram send 在 master init 未授权时回退 admin settings maste
       });
     }
 
-    if (url === 'https://food2.serbia70.com/api/master/init') {
-      const headers = init?.headers as Record<string, string> | undefined;
-      assert.equal(headers?.authorization, undefined);
-      assert.equal(headers?.cookie, undefined);
-      return new Response(JSON.stringify({
-        ok: false,
-        error: { code: 'unauthorized', message: 'Unauthorized' },
-      }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (url === 'https://food2.serbia70.com/api/admin/settings/master') {
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'POST') {
       const headers = init?.headers as Record<string, string> | undefined;
       assert.equal(headers?.authorization, 'Bearer admin-only-token');
+      assert.equal(headers?.cookie, undefined);
       return new Response(JSON.stringify({
         telegramBotToken: 'admin-master-token',
         telegram_bot_token: 'admin-master-token',
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (url === 'https://api.test.local/api/home') {
-      return new Response(JSON.stringify({
-        data: {
-          settings: {},
-        },
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -917,7 +892,7 @@ test('POST telegram send 在 master init 未授权时回退 admin settings maste
       });
     }
 
-    throw new Error(`Unexpected fetch: ${url}`);
+    throw new Error(`Unexpected fetch: ${method} ${url}`);
   }) as typeof fetch;
 
   const mod = await loadRoute();
@@ -942,32 +917,20 @@ test('POST telegram send 在 master init 未授权时回退 admin settings maste
     ok: true,
     result: { message_id: 106 },
   });
-  assert.ok(calls.includes('https://food2.serbia70.com/api/master/init'));
-  assert.ok(calls.includes('https://food2.serbia70.com/api/admin/settings/master'));
-  assert.ok(calls.includes('https://api.telegram.org/botadmin-master-token/sendMessage'));
+  assert.ok(!calls.some((call) => call.url === 'https://food2.serbia70.com/api/master/init'));
+  assert.ok(calls.some((call) => call.url === 'https://food2.serbia70.com/api/admin/settings/master' && call.method === 'POST'));
+  assert.ok(calls.some((call) => call.url === 'https://api.telegram.org/botadmin-master-token/sendMessage' && call.method === 'POST'));
 });
 
-test('POST telegram send 在仅有 cookie 的 admin 页面请求里也会回退 admin settings master 获取全局 token', async () => {
-  const calls: string[] = [];
+test('POST telegram send 在仅有 cookie 的 admin 页面请求里直接 POST admin settings master 获取全局 token', async () => {
+  const calls: Array<{ url: string; method: string }> = [];
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    calls.push(url);
+    const method = String(init?.method || 'GET').toUpperCase();
+    calls.push({ url, method });
 
-    if (url === 'https://food2.serbia70.com/api/master/init') {
-      const headers = init?.headers as Record<string, string> | undefined;
-      assert.equal(headers?.cookie, 'admin_session=abc123');
-      assert.equal(headers?.authorization, undefined);
-      return new Response(JSON.stringify({
-        ok: false,
-        error: { code: 'unauthorized', message: 'Unauthorized' },
-      }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (url === 'https://food2.serbia70.com/api/admin/settings/master') {
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'POST') {
       const headers = init?.headers as Record<string, string> | undefined;
       assert.equal(headers?.cookie, 'admin_session=abc123');
       assert.equal(headers?.authorization, undefined);
@@ -986,7 +949,7 @@ test('POST telegram send 在仅有 cookie 的 admin 页面请求里也会回退 
       });
     }
 
-    throw new Error(`Unexpected fetch: ${url}`);
+    throw new Error(`Unexpected fetch: ${method} ${url}`);
   }) as typeof fetch;
 
   const mod = await loadRoute();
@@ -1010,35 +973,18 @@ test('POST telegram send 在仅有 cookie 的 admin 页面请求里也会回退 
     ok: true,
     result: { message_id: 107 },
   });
-  assert.ok(calls.includes('https://food2.serbia70.com/api/master/init'));
-  assert.ok(calls.includes('https://food2.serbia70.com/api/admin/settings/master'));
-  assert.ok(calls.includes('https://api.telegram.org/botadmin-cookie-token/sendMessage'));
+  assert.ok(!calls.some((call) => call.url === 'https://food2.serbia70.com/api/master/init'));
+  assert.ok(calls.some((call) => call.url === 'https://food2.serbia70.com/api/admin/settings/master' && call.method === 'POST'));
+  assert.ok(calls.some((call) => call.url === 'https://api.telegram.org/botadmin-cookie-token/sendMessage' && call.method === 'POST'));
 });
 
-test('POST telegram send 在 admin settings master GET 404 时回退同路径 POST 获取全局 token', async () => {
+test('POST telegram send 在 admin cookie 场景直接 POST admin settings master 获取全局 token，不再触发 master/init 与 GET 404 噪音', async () => {
   const calls: Array<{ url: string; method: string }> = [];
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = String(init?.method || 'GET').toUpperCase();
     calls.push({ url, method });
-
-    if (url === 'https://food2.serbia70.com/api/master/init') {
-      return new Response(JSON.stringify({
-        ok: false,
-        error: { code: 'unauthorized', message: 'Unauthorized' },
-      }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'GET') {
-      return new Response('Not Found', {
-        status: 404,
-        headers: { 'Content-Type': 'text/plain' },
-      });
-    }
 
     if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'POST') {
       return new Response(JSON.stringify({
@@ -1080,7 +1026,8 @@ test('POST telegram send 在 admin settings master GET 404 时回退同路径 PO
     ok: true,
     result: { message_id: 108 },
   });
-  assert.ok(calls.some((call) => call.url === 'https://food2.serbia70.com/api/admin/settings/master' && call.method === 'GET'));
+  assert.ok(!calls.some((call) => call.url === 'https://food2.serbia70.com/api/master/init'));
+  assert.ok(!calls.some((call) => call.url === 'https://food2.serbia70.com/api/admin/settings/master' && call.method === 'GET'));
   assert.ok(calls.some((call) => call.url === 'https://food2.serbia70.com/api/admin/settings/master' && call.method === 'POST'));
   assert.ok(calls.some((call) => call.url === 'https://api.telegram.org/botadmin-post-token/sendMessage' && call.method === 'POST'));
 });
@@ -1090,17 +1037,7 @@ test('POST telegram send 兼容 admin settings master 返回 settings.telegramBo
     const url = String(input);
     const method = String(init?.method || 'GET').toUpperCase();
 
-    if (url === 'https://food2.serbia70.com/api/master/init') {
-      return new Response(JSON.stringify({
-        ok: false,
-        error: { code: 'unauthorized', message: 'Unauthorized' },
-      }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'GET') {
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'POST') {
       return new Response(JSON.stringify({
         settings: {
           telegramBotToken: 'wrapped-admin-token',
@@ -1149,17 +1086,7 @@ test('POST telegram send 兼容 admin settings master 返回 data.server.telegra
     const url = String(input);
     const method = String(init?.method || 'GET').toUpperCase();
 
-    if (url === 'https://food2.serbia70.com/api/master/init') {
-      return new Response(JSON.stringify({
-        ok: false,
-        error: { code: 'unauthorized', message: 'Unauthorized' },
-      }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'GET') {
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'POST') {
       return new Response(JSON.stringify({
         data: {
           server: {

@@ -42,43 +42,19 @@ const authHeaders = { Authorization: `Bearer ${token}` };
 
 async function loadProtectedMasterSettings(): Promise<Record<string, unknown>> {
   const cookie = Astro.request.headers.get('cookie') || '';
-  const masterInitHeaders: Record<string, string> = {};
-  if (cookie) masterInitHeaders.cookie = cookie;
-
-  const masterInitRes = await fetch(new URL('/api/master/init', Astro.url), {
-    method: 'GET',
-    ...(Object.keys(masterInitHeaders).length > 0 ? { headers: masterInitHeaders } : {}),
-  }).catch(() => null);
-
-  if (masterInitRes?.ok) {
-    const masterInitRaw = await masterInitRes.json().catch(() => ({}));
-    const masterInitData = asObject(masterInitRaw && typeof masterInitRaw === 'object' && 'ok' in masterInitRaw && (masterInitRaw as { ok?: unknown }).ok === true
-      ? (masterInitRaw as { data?: unknown }).data
-      : masterInitRaw);
-    return asObject(masterInitData.settings || {});
-  }
-
   const adminMasterHeaders: Record<string, string> = { Authorization: `Bearer ${token}` };
   if (cookie) adminMasterHeaders.cookie = cookie;
 
   const adminSettingsUrl = new URL('/api/admin/settings/master', Astro.url);
-  let adminMethod = 'GET';
-  let adminMasterRes = await fetch(adminSettingsUrl, {
-    method: 'GET',
-    headers: adminMasterHeaders,
+  const adminMethod = 'POST';
+  const adminMasterRes = await fetch(adminSettingsUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...adminMasterHeaders,
+    },
+    body: '{}',
   }).catch(() => null);
-
-  if (!adminMasterRes || adminMasterRes.status === 404) {
-    adminMethod = 'POST';
-    adminMasterRes = await fetch(adminSettingsUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...adminMasterHeaders,
-      },
-      body: '{}',
-    }).catch(() => null);
-  }
 
   if (!adminMasterRes?.ok) return {};
   const adminMasterText = await adminMasterRes.text().catch(() => '');

@@ -35,8 +35,12 @@ function buildForwardHeaders(request: Request): Record<string, string> {
   return headers;
 }
 
+function readInternalApiBaseUrl(): string {
+  return String(process.env.PUBLIC_API_URL || API_BASE_URL || '').trim().replace(/\/$/, '');
+}
+
 async function readRiderIdentityByChatId(request: Request, chatId: string): Promise<{ riderName: string; riderPhone: string } | null> {
-  const upstream = await fetch(`${new URL(request.url).origin}/api/rider/status?action=list_available`, {
+  const upstream = await fetch(`${readInternalApiBaseUrl()}/api/rider/status?action=list_available`, {
     headers: buildForwardHeaders(request),
   });
   const text = await upstream.text();
@@ -71,7 +75,7 @@ function isTrustedTelegramRequest(request: Request): boolean {
 }
 
 async function readOrderDispatchMeta(request: Request, orderId: string): Promise<string> {
-  const upstream = await fetch(`${new URL(request.url).origin}/api/admin/orders`, {
+  const upstream = await fetch(`${readInternalApiBaseUrl()}/api/admin/orders`, {
     headers: buildForwardHeaders(request),
   });
   const text = await upstream.text();
@@ -90,7 +94,7 @@ async function writeOrderDispatchMeta(
   nextMeta: Parameters<typeof buildDispatchMetaRemarks>[1],
 ): Promise<void> {
   const existingRemarks = await readOrderDispatchMeta(request, orderId);
-  const upstream = await fetch(`${new URL(request.url).origin}/api/admin/orders/remarks`, {
+  const upstream = await fetch(`${readInternalApiBaseUrl()}/api/admin/orders/remarks`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -232,7 +236,7 @@ export const POST: APIRoute = async ({ request }) => {
     declinedRiderIds: [],
   });
 
-  const upstream = await fetch(`${new URL(request.url).origin}/api/order/update_status`, {
+  const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

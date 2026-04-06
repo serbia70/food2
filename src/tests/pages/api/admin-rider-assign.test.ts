@@ -707,7 +707,7 @@ test('manual_assign sends short callback token and rider-claim can consume it', 
       });
     }
 
-    if (url === 'http://localhost:3000/api/rider/status?action=list_available') {
+    if (url === 'https://api.test.local/api/rider/status?action=list_available') {
       return new Response(JSON.stringify({
         success: true,
         riders: [
@@ -719,21 +719,21 @@ test('manual_assign sends short callback token and rider-claim can consume it', 
       });
     }
 
-    if (url === 'http://localhost:3000/api/admin/orders') {
+    if (url === 'https://api.test.local/api/admin/orders') {
       return new Response(JSON.stringify([{ id: 476, remarksJson: '' }]), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    if (url === 'http://localhost:3000/api/admin/orders/remarks') {
+    if (url === 'https://api.test.local/api/admin/orders/remarks') {
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    if (url === 'http://localhost:3000/api/order/update_status') {
+    if (url === 'https://api.test.local/api/order/update_status') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.equal(body.id, 476);
       assert.equal(body.status, 'delivering');
@@ -888,7 +888,7 @@ test('manual_assign short callback keeps original rider full name when rider/sta
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (url === 'http://localhost:3000/api/rider/status?action=list_available') {
+    if (url === 'https://api.test.local/api/rider/status?action=list_available') {
       return new Response(JSON.stringify({
         success: true,
         riders: [
@@ -900,21 +900,21 @@ test('manual_assign short callback keeps original rider full name when rider/sta
       });
     }
 
-    if (url === 'http://localhost:3000/api/admin/orders') {
+    if (url === 'https://api.test.local/api/admin/orders') {
       return new Response(JSON.stringify([{ id: 478, remarksJson: '' }]), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    if (url === 'http://localhost:3000/api/admin/orders/remarks') {
+    if (url === 'https://api.test.local/api/admin/orders/remarks') {
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    if (url === 'http://localhost:3000/api/order/update_status') {
+    if (url === 'https://api.test.local/api/order/update_status') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.equal(body.courier_name, '骑手超长完整姓名A');
       assert.equal(body.courier_phone, '063');

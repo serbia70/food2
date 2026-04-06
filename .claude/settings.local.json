@@ -149,7 +149,8 @@
       "Bash(printf '\\\\n---SPLIT---\\\\n')",
       "Bash(nslookup:*)",
       "WebSearch",
-      "Bash(powershell.exe:*)"
+      "Bash(powershell.exe:*)",
+      "Bash(bash \"/d/ai/food/.worktrees/260311/food2astro/上传3.bat\")"
     ]
   }
 }

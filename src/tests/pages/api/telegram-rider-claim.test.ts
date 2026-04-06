@@ -1,6 +1,7 @@
 process.env.TELEGRAM_CALLBACK_SECRET = 'test-telegram-callback-secret';
 process.env.TELEGRAM_WEBHOOK_SECRET = 'test-telegram-callback-secret';
 process.env.JWT_SECRET = 'test-telegram-callback-secret';
+process.env.PUBLIC_API_URL = 'http://localhost';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -123,6 +124,74 @@ test('POST rider-claim 在 JSON 非法时返回 invalid_json', async () => {
     success: false,
     error: 'invalid_json',
   });
+});
+
+test('POST rider-claim 在生产基址下会通过 API_BASE_URL 调用内部代理而不是当前 origin', async () => {
+  const calls: string[] = [];
+  const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    calls.push(url);
+
+    if (url === 'http://localhost/api/rider/status?action=list_available') {
+      return jsonResponse({
+        success: true,
+        riders: [
+          { id: 31, name: '线上骑手', phone: '06131', status: 'available', telegramChatId: 'chat-31' },
+        ],
+      });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(131)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
+    if (url === 'http://localhost/api/order/update_status') {
+      assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
+        id: 131,
+        expected_current_status: 'awaiting_courier',
+        status: 'delivering',
+        courier_name: '线上骑手',
+        courier_phone: '06131',
+      });
+      return jsonResponse({ success: true });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
+  try {
+    const callbackData = buildTelegramClaimCallback({
+      orderId: 131,
+      riderId: 31,
+      riderName: '线上骑手',
+      riderPhone: '06131',
+      restaurantId: '103',
+      telegramChatId: 'chat-31',
+      expiresAt: Date.now() + 60_000,
+    });
+
+    const request = new Request('https://food2.serbia70.com/api/telegram/rider-claim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-telegram-claim-secret': 'test-telegram-callback-secret',
+      },
+      body: JSON.stringify({ callbackData, chatId: 'chat-31' }),
+    });
+
+    const response = await POST({ request } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true });
+    assert.deepEqual(calls, [
+      'http://localhost/api/rider/status?action=list_available',
+      'http://localhost/api/admin/orders',
+      'http://localhost/api/admin/orders',
+      'http://localhost/api/admin/orders/remarks',
+      'http://localhost/api/order/update_status',
+    ]);
+  } finally {
+    restoreFetch();
+  }
 });
 
 test('POST rider-claim 在 callbackData 缺失时返回 callback_data_required', async () => {

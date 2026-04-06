@@ -20,6 +20,8 @@ dev-server.err.log
 # environment variables
 .env
 .env.production
+.env.local
+.claude/settings.local.json
 
 # macOS-specific files
 .DS_Store

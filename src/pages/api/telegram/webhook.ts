@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { SITE_BASE_URL } from '../../../config.ts';
 import { readTelegramRequestSecret } from '../../../lib/telegram-secrets.ts';
+import { handleTelegramRiderClaim } from './rider-claim.ts';
 
 export const prerender = false;
 
@@ -60,17 +61,20 @@ export const POST: APIRoute = async ({ request }) => {
   const callbackData = String(body.callback_query?.data || '').trim();
   const callbackChatId = String(body.callback_query?.message?.chat?.id || '').trim();
   if (callbackData && callbackChatId) {
-    const upstream = await fetch(`${origin}/api/telegram/rider-claim`, {
+    const claimRequest = new Request(`${origin}/api/telegram/rider-claim`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-telegram-claim-secret': requestSecret,
+        'cookie': request.headers.get('cookie') || '',
+        'authorization': request.headers.get('authorization') || '',
       },
       body: JSON.stringify({
         callbackData,
         chatId: callbackChatId,
       }),
     });
+    const upstream = await handleTelegramRiderClaim(claimRequest);
 
     const upstreamText = await upstream.text();
     const upstreamJson = upstreamText ? JSON.parse(upstreamText) as Record<string, unknown> : null;

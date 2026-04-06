@@ -108,14 +108,7 @@ async function writeOrderDispatchMeta(
   if (!upstream.ok) throw new Error('dispatch_feedback_write_failed');
 }
 
-export const POST: APIRoute = async ({ request }) => {
-  if (!isTrustedTelegramRequest(request)) {
-    return new Response(JSON.stringify({ success: false, error: 'unauthorized_telegram_request' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
+export async function handleTelegramRiderClaim(request: Request): Promise<Response> {
   let parsedBody: TelegramClaimBody;
 
   try {
@@ -253,4 +246,15 @@ export const POST: APIRoute = async ({ request }) => {
     status: upstream.status,
     headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
   });
+}
+
+export const POST: APIRoute = async ({ request }) => {
+  if (!isTrustedTelegramRequest(request)) {
+    return new Response(JSON.stringify({ success: false, error: 'unauthorized_telegram_request' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  return handleTelegramRiderClaim(request);
 };

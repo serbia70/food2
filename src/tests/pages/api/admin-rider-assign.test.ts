@@ -733,7 +733,7 @@ test('manual_assign sends short callback token and rider-claim can consume it', 
       });
     }
 
-    if (url === 'https://api.test.local/api/order/update_status') {
+    if (url === 'https://api.test.local/api/order/update_status/476') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.equal(body.id, 476);
       assert.equal(body.status, 'delivering');
@@ -914,7 +914,7 @@ test('manual_assign short callback keeps original rider full name when rider/sta
       });
     }
 
-    if (url === 'https://api.test.local/api/order/update_status') {
+    if (url === 'https://api.test.local/api/order/update_status/478') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.equal(body.courier_name, '骑手超长完整姓名A');
       assert.equal(body.courier_phone, '063');

@@ -229,7 +229,7 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
     declinedRiderIds: [],
   });
 
-  const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status`, {
+  const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status/${encodeURIComponent(String(callback.orderId || '').trim())}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

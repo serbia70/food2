@@ -99,7 +99,7 @@ test('POST telegram webhook 在 callback_query 时直接执行 rider-claim 逻�
         });
       }
 
-      if (url === 'https://api.test.local/api/order/update_status') {
+      if (url === 'https://api.test.local/api/order/update_status/88') {
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -247,7 +247,7 @@ test('POST telegram webhook 在 callback_query 成功后返回 answerCallbackQue
         });
       }
 
-      if (url === 'https://api.test.local/api/order/update_status') {
+      if (url === 'https://api.test.local/api/order/update_status/90') {
         return new Response(JSON.stringify({ success: true, action: 'accept' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -331,7 +331,7 @@ test('POST telegram webhook 在配置 PUBLIC_SITE_URL 时 callback 仍直接执�
         });
       }
 
-      if (url === 'https://api.test.local/api/order/update_status') {
+      if (url === 'https://api.test.local/api/order/update_status/91') {
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },

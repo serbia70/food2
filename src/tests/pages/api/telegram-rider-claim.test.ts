@@ -80,7 +80,7 @@ test('POST rider-claim 支持 x-telegram-bot-api-secret-token 作为备用鉴权
     if (url === 'http://localhost/api/admin/orders/remarks') {
       return jsonResponse({ success: true });
     }
-    assert.equal(url, 'http://localhost/api/order/update_status');
+    assert.equal(url, 'http://localhost/api/order/update_status/108');
     assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
       id: 108,
       expected_current_status: 'awaiting_courier',
@@ -146,7 +146,7 @@ test('POST rider-claim 在生产基址下会通过 API_BASE_URL 调用内部代�
     if (url === 'http://localhost/api/admin/orders/remarks') {
       return jsonResponse({ success: true });
     }
-    if (url === 'http://localhost/api/order/update_status') {
+    if (url === 'http://localhost/api/order/update_status/131') {
       assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
         id: 131,
         expected_current_status: 'awaiting_courier',
@@ -187,7 +187,7 @@ test('POST rider-claim 在生产基址下会通过 API_BASE_URL 调用内部代�
       'http://localhost/api/admin/orders',
       'http://localhost/api/admin/orders',
       'http://localhost/api/admin/orders/remarks',
-      'http://localhost/api/order/update_status',
+      'http://localhost/api/order/update_status/131',
     ]);
   } finally {
     restoreFetch();
@@ -248,7 +248,7 @@ test('POST rider-claim consumes short callback payload', async () => {
     if (url === 'http://localhost/api/admin/orders/remarks') {
       return jsonResponse({ success: true });
     }
-    if (url === 'http://localhost/api/order/update_status') {
+    if (url === 'http://localhost/api/order/update_status/88') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.deepEqual(body, {
         id: 88,
@@ -308,7 +308,7 @@ test('POST rider-claim 在 decline callback 合法时写回拒单反馈且不更
     if (url === 'http://localhost/api/admin/orders/remarks') {
       return jsonResponse({ success: true });
     }
-    if (url === 'http://localhost/api/order/update_status') {
+    if (url.startsWith('http://localhost/api/order/update_status/')) {
       updateStatusCalled = true;
       throw new Error('decline should not update order status');
     }
@@ -373,7 +373,7 @@ test('POST rider-claim 在 accept callback 合法时先写回接单反馈再更�
       remarksPayload = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return jsonResponse({ success: true });
     }
-    assert.equal(url, 'http://localhost/api/order/update_status');
+    assert.equal(url, 'http://localhost/api/order/update_status/108');
     assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
       id: 108,
       expected_current_status: 'awaiting_courier',
@@ -413,7 +413,7 @@ test('POST rider-claim 在 accept callback 合法时先写回接单反馈再更�
       declinedRiderIds: [],
     });
     assert.ok(!Number.isNaN(Date.parse(String((acceptMeta.lastRiderDecision as Record<string, unknown>)?.at || ''))));
-    assert.ok(calls.indexOf('http://localhost/api/admin/orders/remarks') < calls.indexOf('http://localhost/api/order/update_status'));
+    assert.ok(calls.indexOf('http://localhost/api/admin/orders/remarks') < calls.indexOf('http://localhost/api/order/update_status/108'));
   } finally {
     restoreFetch();
   }
@@ -436,7 +436,7 @@ test('POST rider-claim updates order to delivering with courier info from signed
     if (url === 'http://localhost/api/admin/orders/remarks') {
       return jsonResponse({ success: true });
     }
-    assert.equal(url, 'http://localhost/api/order/update_status');
+    assert.equal(url, 'http://localhost/api/order/update_status/108');
     assert.deepEqual(JSON.parse(String(init?.body || '{}')), {
       id: 108,
       expected_current_status: 'awaiting_courier',
@@ -588,7 +588,7 @@ test('POST rider-claim 在 list_available 不可用时仍可按签名 payload �
     if (url === 'http://localhost/api/admin/orders/remarks') {
       return jsonResponse({ success: true });
     }
-    if (url === 'http://localhost/api/order/update_status') {
+    if (url === 'http://localhost/api/order/update_status/88') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.deepEqual(body, {
         id: 88,
@@ -646,7 +646,7 @@ test('POST rider-claim 使用短 callback 时优先回写 rider/status 返回的
     if (url === 'http://localhost/api/admin/orders/remarks') {
       return jsonResponse({ success: true });
     }
-    if (url === 'http://localhost/api/order/update_status') {
+    if (url === 'http://localhost/api/order/update_status/188') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.deepEqual(body, {
         id: 188,
@@ -698,7 +698,7 @@ test('POST rider-claim 使用短 callback 时在 rider/status 不可用仍可接
     if (url === 'http://localhost/api/admin/orders/remarks') {
       return jsonResponse({ success: true });
     }
-    if (url === 'http://localhost/api/order/update_status') {
+    if (url === 'http://localhost/api/order/update_status/188') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.deepEqual(body, {
         id: 188,
@@ -729,7 +729,7 @@ test('POST rider-claim 使用短 callback 时在 rider/status 不可用仍可接
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { success: true });
-    assert.equal(calls.includes('http://localhost/api/order/update_status'), true);
+    assert.equal(calls.includes('http://localhost/api/order/update_status/188'), true);
   } finally {
     restoreFetch();
   }

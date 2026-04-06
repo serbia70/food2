@@ -419,6 +419,58 @@ test('POST rider-claim 在 accept callback 合法时先写回接单反馈再更�
   }
 });
 
+test('POST rider-claim 在 remarks 写回未授权时仍继续更新订单状态', async () => {
+  let updateStatusPayload: Record<string, unknown> | null = null;
+  const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url === 'http://localhost/api/rider/status?action=list_available') {
+      return jsonResponse({
+        success: true,
+        riders: [
+          { id: 6, name: '骑手888', phone: '0613888', status: 'available', telegramChatId: 'chat-888' },
+        ],
+      });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(108)]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: false, error: 'Unauthorized' }, 401);
+    }
+    if (url === 'http://localhost/api/order/update_status/108') {
+      updateStatusPayload = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      return jsonResponse({ success: true });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
+  try {
+    const callbackData = buildTelegramClaimCallback({
+      orderId: 108,
+      riderId: 6,
+      riderName: '骑手888',
+      riderPhone: '0613888',
+      restaurantId: '101',
+      telegramChatId: 'chat-888',
+      expiresAt: Date.now() + 60_000,
+    });
+
+    const request = createClaimRequest(JSON.stringify({ callbackData, chatId: 'chat-888' }));
+    const response = await POST({ request } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true });
+    assert.deepEqual(updateStatusPayload, {
+      id: 108,
+      expected_current_status: 'awaiting_courier',
+      status: 'delivering',
+      courier_name: '骑手888',
+      courier_phone: '0613888',
+    });
+  } finally {
+    restoreFetch();
+  }
+});
+
 test('POST rider-claim updates order to delivering with courier info from signed callback', async () => {
   const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);

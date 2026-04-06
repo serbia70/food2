@@ -92,20 +92,24 @@ async function writeOrderDispatchMeta(
   request: Request,
   orderId: string,
   nextMeta: Parameters<typeof buildDispatchMetaRemarks>[1],
-): Promise<void> {
-  const existingRemarks = await readOrderDispatchMeta(request, orderId);
-  const upstream = await fetch(`${readInternalApiBaseUrl()}/api/admin/orders/remarks`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...buildForwardHeaders(request),
-    },
-    body: JSON.stringify({
-      orderId,
-      remarks: buildDispatchMetaRemarks(existingRemarks, nextMeta),
-    }),
-  });
-  if (!upstream.ok) throw new Error('dispatch_feedback_write_failed');
+): Promise<boolean> {
+  try {
+    const existingRemarks = await readOrderDispatchMeta(request, orderId);
+    const upstream = await fetch(`${readInternalApiBaseUrl()}/api/admin/orders/remarks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildForwardHeaders(request),
+      },
+      body: JSON.stringify({
+        orderId,
+        remarks: buildDispatchMetaRemarks(existingRemarks, nextMeta),
+      }),
+    });
+    return upstream.ok;
+  } catch {
+    return false;
+  }
 }
 
 export async function handleTelegramRiderClaim(request: Request): Promise<Response> {
@@ -192,7 +196,7 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   const existingMeta = readDispatchMetaFromRemarks(await readOrderDispatchMeta(request, orderIdText));
 
   if (callback.action === 'decline') {
-    await writeOrderDispatchMeta(request, orderIdText, {
+    const feedbackWritten = await writeOrderDispatchMeta(request, orderIdText, {
       lastRiderDecision: {
         action: 'declined',
         riderId: String(callback.riderId || '').trim(),
@@ -211,6 +215,7 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
       riderName: resolvedName,
       riderPhone: resolvedPhone,
       chatId,
+      feedbackWritten,
     }));
     return new Response(JSON.stringify({ success: true, action: 'decline' }), {
       status: 200,
@@ -218,7 +223,7 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
     });
   }
 
-  await writeOrderDispatchMeta(request, orderIdText, {
+  const feedbackWritten = await writeOrderDispatchMeta(request, orderIdText, {
     lastRiderDecision: {
       action: 'accepted',
       riderId: String(callback.riderId || '').trim(),
@@ -242,6 +247,13 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   });
 
   const text = await upstream.text();
+  if (!feedbackWritten) {
+    console.warn('[telegram/rider-claim:feedback-write-skipped]', JSON.stringify({
+      orderId: callback.orderId,
+      riderId: callback.riderId,
+      chatId,
+    }));
+  }
   return new Response(text, {
     status: upstream.status,
     headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },

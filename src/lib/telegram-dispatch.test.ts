@@ -140,7 +140,7 @@ test('telegram claim callback rejects missing signature', () => {
   assert.throws(() => parseTelegramClaimCallback(unsigned), /invalid_signature/);
 });
 
-test('buildTelegramDispatchMessage 在无 callback data 时只保留查看入口和电话', () => {
+test('buildTelegramDispatchMessage 在无 callback data 时只保留查看入口和电话文本', () => {
   const message = buildTelegramDispatchMessage({
     shopName: '101 店',
     address: 'Main St 1',
@@ -152,7 +152,7 @@ test('buildTelegramDispatchMessage 在无 callback data 时只保留查看入口
 
   assert.deepEqual(message.replyMarkup.inline_keyboard[0], [
     { text: '查看并接单', url: 'https://food.example.com/rider/dashboard?orderId=88&restaurantId=101' },
-    { text: '联系门店', url: 'tel:0601' },
+    { text: '联系门店：0601' },
   ]);
 });
 
@@ -173,4 +173,17 @@ test('buildAdminAssignedOrderTelegramMessage trims oversized item summary to kee
   assert.match(message.text, /预约送达：2026-04-04 12:30:00/);
   assert.match(message.text, /菜品过多，已截断/);
   assert.equal(message.replyMarkup.inline_keyboard[0]?.[0]?.text, '立即接单');
+});
+
+test('buildAdminAssignedOrderTelegramMessage does not emit tel url button because Telegram rejects tel scheme', () => {
+  const message = buildAdminAssignedOrderTelegramMessage({
+    orderNo: 'A600',
+    address: 'Ruma 1',
+    totalAmount: 905,
+    phone: '0613083888',
+    pickupEtaMinutes: 15,
+    itemSummary: ['米饭 x1'],
+  });
+
+  assert.equal(message.replyMarkup.inline_keyboard.flat().some((button) => String(button?.url || '').startsWith('tel:')), false);
 });

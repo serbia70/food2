@@ -1,7 +1,6 @@
 type ImportCategory = {
   category?: string;
   categorySub?: string;
-  category_sub?: string;
   items?: any[];
 };
 
@@ -56,7 +55,7 @@ async function ensureCategoryIdByName(name: string, subName: string) {
   const res = await fetch("/api/admin/categories", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, sub_name: subName || name }),
+    body: JSON.stringify({ name, subName: subName || name }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.success === false || data?.ok === false) return 0;
@@ -163,7 +162,7 @@ export async function importData() {
   let failed = 0;
   for (const c of data) {
     const name = String(c?.category || "").trim();
-    const subName = String(c?.categorySub ?? c?.category_sub ?? '').trim() || name;
+    const subName = String(c?.categorySub || "").trim() || name;
     if (!name) {
       failed++;
       continue;
@@ -184,13 +183,13 @@ export async function importData() {
       }
       const payload = {
         name: productName,
-        sub_name: String(item?.subName ?? item?.sub_name ?? '').trim() || productName,
+        subName: String(item?.subName || "").trim() || productName,
         price: Number(item?.price || 0),
         img: String(item?.img || ""),
         description: String(item?.description || ""),
         stock: Number(item?.stock || 0),
-        is_available: Number(item?.isAvailable ?? item?.is_available ?? 1),
-        category_id: categoryId,
+        isAvailable: Number(item?.isAvailable ?? 1),
+        categoryId: categoryId,
       };
 
       const ok = await createProduct(payload);

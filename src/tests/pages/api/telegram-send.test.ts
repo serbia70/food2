@@ -13,6 +13,44 @@ test.afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
+test('POST telegram send 优先使用请求体里的 telegramBotToken', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+
+    if (url === 'https://api.telegram.org/botinline-body-token/sendMessage') {
+      const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      assert.equal(body.chat_id, 'chat-inline');
+      assert.equal(body.text, 'inline token message');
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 100 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId: 'chat-inline',
+        text: 'inline token message',
+        telegramBotToken: 'inline-body-token',
+      }),
+    }),
+  } as any);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    success: true,
+    ok: true,
+    result: { message_id: 100 },
+  });
+});
+
 test('POST telegram send 读取店铺 settings 里的 token 并转发到 Telegram Bot API', async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
 
@@ -147,6 +185,312 @@ test('POST telegram send 在店铺未配置 token 时回退读取当前站内 ma
   assert.ok(calls.includes('https://api.telegram.org/botmaster-bot-token/sendMessage'));
 });
 
+test('POST telegram send 在 Telegram 上游卡住时快速返回 502 而不是长时间挂起', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+
+    if (url === 'https://api.test.local/demo-shop/info') {
+      return new Response(JSON.stringify({
+        id: 21,
+        slug: 'demo-shop',
+        settings: JSON.stringify({
+          telegram: {
+            token: 'bot-token-timeout',
+          },
+        }),
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://api.telegram.org/botbot-token-timeout/sendMessage') {
+      const signal = init?.signal as AbortSignal | undefined;
+      await new Promise((_, reject) => {
+        signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const startedAt = Date.now();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopSlug: 'demo-shop',
+        chatId: 'chat-7',
+        text: '新订单',
+      }),
+    }),
+  } as any);
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.equal(response.status, 502);
+  assert.ok(elapsedMs < 9000, `expected telegram send to fail within 9s, got ${elapsedMs}ms`);
+  assert.deepEqual(await response.json(), {
+    success: false,
+    error: 'telegram_send_failed',
+    message: 'fetch aborted',
+    cause: 'Telegram request timed out after 8000ms',
+    code: 'TELEGRAM_REQUEST_TIMEOUT',
+  });
+});
+
+test('POST telegram send 在 Telegram 连接超时时返回明确连通性诊断', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === 'https://api.test.local/demo-shop/info') {
+      return new Response(JSON.stringify({
+        id: 21,
+        slug: 'demo-shop',
+        settings: JSON.stringify({
+          telegram: {
+            token: 'bot-token-connect-timeout',
+          },
+        }),
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://api.telegram.org/botbot-token-connect-timeout/sendMessage') {
+      throw Object.assign(new TypeError('fetch failed'), {
+        cause: Object.assign(new Error('Connect Timeout Error (attempted address: api.telegram.org:443, timeout: 10000ms)'), {
+          code: 'UND_ERR_CONNECT_TIMEOUT',
+        }),
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopSlug: 'demo-shop',
+        chatId: 'chat-7',
+        text: '新订单',
+      }),
+    }),
+  } as any);
+
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), {
+    success: false,
+    error: 'telegram_send_failed',
+    message: 'fetch failed',
+    cause: 'Connect Timeout Error (attempted address: api.telegram.org:443, timeout: 10000ms)',
+    code: 'UND_ERR_CONNECT_TIMEOUT',
+  });
+});
+
+test('POST telegram send 在顶层异常已带 cause/code 时继续透出原始诊断', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === 'https://api.test.local/demo-shop/info') {
+      return new Response(JSON.stringify({
+        id: 21,
+        slug: 'demo-shop',
+        settings: JSON.stringify({
+          telegram: {
+            token: 'bot-token-top-level-error',
+          },
+        }),
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://api.telegram.org/botbot-token-top-level-error/sendMessage') {
+      throw Object.assign(new Error('fetch_failed'), {
+        cause: 'socket hang up',
+        code: 'ECONNRESET',
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopSlug: 'demo-shop',
+        chatId: 'chat-7',
+        text: '新订单',
+      }),
+    }),
+  } as any);
+
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), {
+    success: false,
+    error: 'telegram_send_failed',
+    message: 'fetch_failed',
+    cause: 'socket hang up',
+    code: 'ECONNRESET',
+  });
+});
+
+test('POST telegram send 在异常没有 cause/code 时补充原始异常摘要', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === 'https://api.test.local/demo-shop/info') {
+      return new Response(JSON.stringify({
+        id: 21,
+        slug: 'demo-shop',
+        settings: JSON.stringify({
+          telegram: {
+            token: 'bot-token-generic-error',
+          },
+        }),
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://api.telegram.org/botbot-token-generic-error/sendMessage') {
+      throw new TypeError('fetch_failed');
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopSlug: 'demo-shop',
+        chatId: 'chat-7',
+        text: '新订单',
+      }),
+    }),
+  } as any);
+
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), {
+    success: false,
+    error: 'telegram_send_failed',
+    message: 'fetch_failed',
+    cause: 'TypeError: fetch_failed',
+    debugShape: '{"ctor":"TypeError","ownKeys":["stack","message"],"name":"TypeError","message":"fetch_failed","causeType":"undefined"}',
+  });
+});
+
+test('POST telegram send 在抛出 primitive 异常值时返回 debugShape', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === 'https://api.test.local/demo-shop/info') {
+      return new Response(JSON.stringify({
+        id: 21,
+        slug: 'demo-shop',
+        settings: JSON.stringify({
+          telegram: {
+            token: 'bot-token-primitive-error',
+          },
+        }),
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://api.telegram.org/botbot-token-primitive-error/sendMessage') {
+      throw 'fetch_failed';
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopSlug: 'demo-shop',
+        chatId: 'chat-7',
+        text: '新订单',
+      }),
+    }),
+  } as any);
+
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), {
+    success: false,
+    error: 'telegram_send_failed',
+    message: 'fetch_failed',
+    debugShape: '{"primitiveType":"string","primitiveValue":"fetch_failed"}',
+  });
+});
+
+test('POST telegram send 将 primitive telegram_request_timeout 映射为明确超时诊断', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === 'https://api.test.local/demo-shop/info') {
+      return new Response(JSON.stringify({
+        id: 21,
+        slug: 'demo-shop',
+        settings: JSON.stringify({
+          telegram: {
+            token: 'bot-token-primitive-timeout',
+          },
+        }),
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://api.telegram.org/botbot-token-primitive-timeout/sendMessage') {
+      throw 'telegram_request_timeout';
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopSlug: 'demo-shop',
+        chatId: 'chat-7',
+        text: '新订单',
+      }),
+    }),
+  } as any);
+
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), {
+    success: false,
+    error: 'telegram_send_failed',
+    message: 'fetch aborted',
+    cause: 'Telegram request timed out after 8000ms',
+    code: 'TELEGRAM_REQUEST_TIMEOUT',
+  });
+});
+
 test('POST telegram send 兼容 master settings 的 server.telegramBotToken 嵌套结构', async () => {
   const calls: string[] = [];
 
@@ -215,6 +559,82 @@ test('POST telegram send 兼容 master settings 的 server.telegramBotToken 嵌�
   assert.ok(calls.includes('https://api.telegram.org/botnested-master-bot-token/sendMessage'));
 });
 
+test('POST telegram send 在 admin settings 200 但未识别 token 时返回 admin 原始结构诊断', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = String(init?.method || 'GET').toUpperCase();
+    if (url === 'https://food2.serbia70.com/api/master/init') {
+      return new Response(JSON.stringify({ ok: false, error: { code: 'unauthorized', message: 'Unauthorized' } }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'GET') {
+      return new Response(JSON.stringify({
+        data: {
+          weirdBucket: {
+            token_value: 'abc',
+          },
+        },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url === 'https://api.test.local/api/home') {
+      return new Response(JSON.stringify({ data: { settings: {} } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error(`Unexpected fetch: ${method} ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: 'admin_session=abc123',
+      },
+      body: JSON.stringify({
+        chatId: 'chat-7',
+        text: '新订单',
+      }),
+    }),
+  } as any);
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    success: false,
+    error: 'telegram_bot_token_not_configured',
+    tokenSource: 'missing_after_shop_master_admin_home_fallback',
+    diagnostics: {
+      shopInfo: {
+        requested: false,
+        tokenFound: false,
+      },
+      masterSettings: {
+        requested: true,
+        status: 401,
+        tokenFound: false,
+      },
+      adminMasterSettings: {
+        requested: true,
+        status: 200,
+        tokenFound: false,
+        responsePreview: '{"data":{"weirdBucket":{"token_value":"abc"}}}',
+      },
+      homeSettings: {
+        requested: true,
+        status: 200,
+        tokenFound: false,
+      },
+    },
+  });
+});
+
 test('POST telegram send 在店铺和 master 都缺少 token 时返回 400 与诊断信息', async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -260,7 +680,7 @@ test('POST telegram send 在店铺和 master 都缺少 token 时返回 400 与�
   assert.deepEqual(await response.json(), {
     success: false,
     error: 'telegram_bot_token_not_configured',
-    tokenSource: 'missing_after_shop_master_home_fallback',
+    tokenSource: 'missing_after_shop_master_admin_home_fallback',
     diagnostics: {
       shopInfo: {
         requested: true,
@@ -269,6 +689,11 @@ test('POST telegram send 在店铺和 master 都缺少 token 时返回 400 与�
       masterSettings: {
         requested: true,
         status: 200,
+        tokenFound: false,
+      },
+      adminMasterSettings: {
+        requested: false,
+        status: null,
         tokenFound: false,
       },
       homeSettings: {
@@ -353,7 +778,7 @@ test('POST telegram send 请求当前站内 master init 时只透传 cookie', as
   assert.ok(calls.includes('https://api.telegram.org/botmaster-cookie-token/sendMessage'));
 });
 
-test('POST telegram send 在当前站内 master settings 未授权时回退公开 home settings 的全局 token', async () => {
+test('POST telegram send 在当前站内 master settings 未授权时回退公开 home settings 的 telegram.token', async () => {
   const calls: string[] = [];
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -385,7 +810,9 @@ test('POST telegram send 在当前站内 master settings 未授权时回退公�
       return new Response(JSON.stringify({
         data: {
           settings: {
-            telegramBotToken: 'public-home-token',
+            telegram: {
+              token: 'public-home-token',
+            },
           },
         },
       }), {
@@ -429,7 +856,7 @@ test('POST telegram send 在当前站内 master settings 未授权时回退公�
   assert.ok(calls.includes('https://api.telegram.org/botpublic-home-token/sendMessage'));
 });
 
-test('POST telegram send 请求当前站内 master init 时不会转发 admin authorization', async () => {
+test('POST telegram send 在 master init 未授权时回退 admin settings master 获取全局 token', async () => {
   const calls: string[] = [];
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -460,12 +887,22 @@ test('POST telegram send 请求当前站内 master init 时不会转发 admin au
       });
     }
 
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master') {
+      const headers = init?.headers as Record<string, string> | undefined;
+      assert.equal(headers?.authorization, 'Bearer admin-only-token');
+      return new Response(JSON.stringify({
+        telegramBotToken: 'admin-master-token',
+        telegram_bot_token: 'admin-master-token',
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     if (url === 'https://api.test.local/api/home') {
       return new Response(JSON.stringify({
         data: {
-          settings: {
-            telegramBotToken: 'public-home-token',
-          },
+          settings: {},
         },
       }), {
         status: 200,
@@ -473,7 +910,7 @@ test('POST telegram send 请求当前站内 master init 时不会转发 admin au
       });
     }
 
-    if (url === 'https://api.telegram.org/botpublic-home-token/sendMessage') {
+    if (url === 'https://api.telegram.org/botadmin-master-token/sendMessage') {
       return new Response(JSON.stringify({ ok: true, result: { message_id: 106 } }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -506,7 +943,266 @@ test('POST telegram send 请求当前站内 master init 时不会转发 admin au
     result: { message_id: 106 },
   });
   assert.ok(calls.includes('https://food2.serbia70.com/api/master/init'));
-  assert.ok(calls.includes('https://api.telegram.org/botpublic-home-token/sendMessage'));
+  assert.ok(calls.includes('https://food2.serbia70.com/api/admin/settings/master'));
+  assert.ok(calls.includes('https://api.telegram.org/botadmin-master-token/sendMessage'));
+});
+
+test('POST telegram send 在仅有 cookie 的 admin 页面请求里也会回退 admin settings master 获取全局 token', async () => {
+  const calls: string[] = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push(url);
+
+    if (url === 'https://food2.serbia70.com/api/master/init') {
+      const headers = init?.headers as Record<string, string> | undefined;
+      assert.equal(headers?.cookie, 'admin_session=abc123');
+      assert.equal(headers?.authorization, undefined);
+      return new Response(JSON.stringify({
+        ok: false,
+        error: { code: 'unauthorized', message: 'Unauthorized' },
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master') {
+      const headers = init?.headers as Record<string, string> | undefined;
+      assert.equal(headers?.cookie, 'admin_session=abc123');
+      assert.equal(headers?.authorization, undefined);
+      return new Response(JSON.stringify({
+        telegramBotToken: 'admin-cookie-token',
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://api.telegram.org/botadmin-cookie-token/sendMessage') {
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 107 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: 'admin_session=abc123',
+      },
+      body: JSON.stringify({
+        chat_id: '1033472638',
+        text: 'cookie admin fallback',
+      }),
+    }),
+  } as any);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    success: true,
+    ok: true,
+    result: { message_id: 107 },
+  });
+  assert.ok(calls.includes('https://food2.serbia70.com/api/master/init'));
+  assert.ok(calls.includes('https://food2.serbia70.com/api/admin/settings/master'));
+  assert.ok(calls.includes('https://api.telegram.org/botadmin-cookie-token/sendMessage'));
+});
+
+test('POST telegram send 在 admin settings master GET 404 时回退同路径 POST 获取全局 token', async () => {
+  const calls: Array<{ url: string; method: string }> = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = String(init?.method || 'GET').toUpperCase();
+    calls.push({ url, method });
+
+    if (url === 'https://food2.serbia70.com/api/master/init') {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: { code: 'unauthorized', message: 'Unauthorized' },
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'GET') {
+      return new Response('Not Found', {
+        status: 404,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    }
+
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'POST') {
+      return new Response(JSON.stringify({
+        telegramBotToken: 'admin-post-token',
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://api.telegram.org/botadmin-post-token/sendMessage') {
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 108 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${method} ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: 'admin_session=abc123',
+      },
+      body: JSON.stringify({
+        chat_id: '1033472638',
+        text: 'admin settings post fallback',
+      }),
+    }),
+  } as any);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    success: true,
+    ok: true,
+    result: { message_id: 108 },
+  });
+  assert.ok(calls.some((call) => call.url === 'https://food2.serbia70.com/api/admin/settings/master' && call.method === 'GET'));
+  assert.ok(calls.some((call) => call.url === 'https://food2.serbia70.com/api/admin/settings/master' && call.method === 'POST'));
+  assert.ok(calls.some((call) => call.url === 'https://api.telegram.org/botadmin-post-token/sendMessage' && call.method === 'POST'));
+});
+
+test('POST telegram send 兼容 admin settings master 返回 settings.telegramBotToken 包裹结构', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = String(init?.method || 'GET').toUpperCase();
+
+    if (url === 'https://food2.serbia70.com/api/master/init') {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: { code: 'unauthorized', message: 'Unauthorized' },
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'GET') {
+      return new Response(JSON.stringify({
+        settings: {
+          telegramBotToken: 'wrapped-admin-token',
+        },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://api.telegram.org/botwrapped-admin-token/sendMessage') {
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 109 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${method} ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: 'admin_session=abc123',
+      },
+      body: JSON.stringify({
+        chat_id: '1033472638',
+        text: 'wrapped admin settings token',
+      }),
+    }),
+  } as any);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    success: true,
+    ok: true,
+    result: { message_id: 109 },
+  });
+});
+
+test('POST telegram send 兼容 admin settings master 返回 data.server.telegramBotToken 结构', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = String(init?.method || 'GET').toUpperCase();
+
+    if (url === 'https://food2.serbia70.com/api/master/init') {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: { code: 'unauthorized', message: 'Unauthorized' },
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://food2.serbia70.com/api/admin/settings/master' && method === 'GET') {
+      return new Response(JSON.stringify({
+        data: {
+          server: {
+            telegramBotToken: 'admin-data-server-token',
+          },
+        },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === 'https://api.telegram.org/botadmin-data-server-token/sendMessage') {
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 110 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${method} ${url}`);
+  }) as typeof fetch;
+
+  const mod = await loadRoute();
+  const response = await mod.POST({
+    request: new Request('https://food2.serbia70.com/api/telegram/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: 'admin_session=abc123',
+      },
+      body: JSON.stringify({
+        chat_id: '1033472638',
+        text: 'admin data server token',
+      }),
+    }),
+  } as any);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    success: true,
+    ok: true,
+    result: { message_id: 110 },
+  });
 });
 
 test('POST telegram send 在缺少 shopSlug 时仍可使用全局 token 发送', async () => {
@@ -864,7 +1560,7 @@ test('telegram send source uses canonical internal request fields', async () => 
   assert.match(source, /if \(cookie\) masterHeaders\.cookie = cookie;/);
   assert.match(source, /const TELEGRAM_SEND_MAX_ATTEMPTS = 2;/);
   assert.match(source, /const TELEGRAM_SEND_RETRY_DELAY_MS = 250;/);
-  assert.match(source, /const TELEGRAM_SEND_REQUEST_TIMEOUT_MS = 12000;/);
+  assert.match(source, /const TELEGRAM_SEND_REQUEST_TIMEOUT_MS = 8000;/);
   assert.match(source, /await wait\(TELEGRAM_SEND_RETRY_DELAY_MS \* attempt\);/);
   assert.doesNotMatch(source, /const authorization = request\.headers\.get\('authorization'\) \|\| '';/);
   assert.doesNotMatch(source, /passthroughHeaders\.authorization = authorization/);

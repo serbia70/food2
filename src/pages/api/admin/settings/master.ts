@@ -4,6 +4,15 @@ import { proxyAdminRequest } from '../../../../lib/admin-api-route';
 
 export const prerender = false;
 
+export const GET: APIRoute = async ({ request, cookies }) => {
+  return proxyAdminRequest({
+    request,
+    cookies,
+    url: `${API_BASE_URL}/api/admin/settings/master`,
+    method: 'GET',
+  });
+};
+
 export const POST: APIRoute = async ({ request, cookies }) => {
   const body = await request.text();
 

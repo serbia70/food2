@@ -302,7 +302,7 @@ export function buildTelegramDispatchMessage(input: TelegramDispatchInput): Tele
 
   const phone = String(input.phone || '').trim();
   if (phone && phone !== '-') {
-    primaryButtons.push({ text: '联系门店', url: `tel:${phone}` });
+    primaryButtons.push({ text: `联系门店：${phone}` });
   }
 
   return {
@@ -365,7 +365,7 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
   }
   const phone = String(input.phone || '').trim();
   if (phone && phone !== '-') {
-    primaryButtons.push({ text: '联系门店', url: `tel:${phone}` });
+    primaryButtons.push({ text: `联系门店：${phone}` });
   }
 
   return {

@@ -209,7 +209,8 @@ test('POST rider-dispatch publish 支持 /api/admin/orders 直接返回数组', 
       assert.equal(body.chat_id, 'chat-7');
       assert.equal(body.text, '店铺有新单\n约 15 分钟后可取\n地址：hui, 0613083888, ruma1\n金额：905 RSD\n联系电话：0613083888');
       assert.equal(body.reply_markup?.inline_keyboard?.[0]?.[1]?.url, 'https://food2.serbia70.com/rider/dashboard?orderId=447&restaurantId=demo-shop');
-      assert.equal(body.reply_markup?.inline_keyboard?.[0]?.[2]?.url, 'tel:0613083888');
+      assert.equal(body.reply_markup?.inline_keyboard?.[0]?.[2]?.text, '联系门店：0613083888');
+      assert.equal(body.reply_markup?.inline_keyboard?.[0]?.[2]?.url, undefined);
       assert.equal(typeof body.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data, 'string');
       assert.ok(body.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data.length > 10);
       return new Response(JSON.stringify({ success: true, ok: true }), {
@@ -695,7 +696,7 @@ test('POST rider-dispatch 在缺少 TELEGRAM_CALLBACK_SECRET 时降级为无 cal
     assert.equal(body.telegram_dispatch.failedCount, 0);
     assert.equal(telegramSendBody?.replyMarkup?.inline_keyboard?.[0]?.[0]?.text, '查看并接单');
     assert.equal(telegramSendBody?.replyMarkup?.inline_keyboard?.[0]?.[0]?.url, 'https://food2.serbia70.com/rider/dashboard?orderId=462&restaurantId=demo-shop');
-    assert.equal(telegramSendBody?.replyMarkup?.inline_keyboard?.[0]?.[1]?.text, '联系门店');
+    assert.equal(telegramSendBody?.replyMarkup?.inline_keyboard?.[0]?.[1]?.text, '联系门店：0613083888');
     assert.equal(telegramSendBody?.replyMarkup?.inline_keyboard?.[0]?.some((item: Record<string, unknown>) => typeof item.callback_data === 'string'), false);
   } finally {
     if (previousSecret == null) delete process.env.TELEGRAM_CALLBACK_SECRET;

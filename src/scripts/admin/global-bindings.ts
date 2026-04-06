@@ -70,6 +70,10 @@ export function bindAdminGlobals() {
     playAudio();
   });
   registerAdminGlobal('refreshOrderList', () => {
+    if (window.__adminAssignInFlight) {
+      window.__adminPendingOrderRefresh = true;
+      return;
+    }
     location.reload();
   });
 

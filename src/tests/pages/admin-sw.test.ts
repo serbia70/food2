@@ -23,7 +23,8 @@ test('admin service worker 使用版本化脚本与缓存名，避免长期命�
   assert.match(swCode, /const CACHE_NAME = `\$\{CACHE_PREFIX\}\$\{[^`]+\}`;/);
   assert.doesNotMatch(swCode, /const CACHE_NAME = `\$\{CACHE_PREFIX\}1`;/);
   assert.match(configCode, /export const APP_VERSION = String\(Date\.now\(\)\);/);
-  assert.match(adminPageCode, /serviceWorker=\{`\/admin-sw\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`\}/);
+  assert.match(adminPageCode, /const adminServiceWorker = import\.meta\.env\.DEV \? undefined : `\/admin-sw\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`;/);
+  assert.match(adminPageCode, /serviceWorker=\{adminServiceWorker\}/);
   assert.match(adminLoginCode, /register\('\/admin-sw\.js\?v=' \+ encodeURIComponent\(appVersion\)/);
 });
 
@@ -42,4 +43,26 @@ test('admin service worker 激活时清理 scope 下旧导航缓存，避免继�
   assert.match(swCode, /const staleNavigationKeys = \[scopePath, `\$\{scopePath\}\/`\];/);
   assert.match(swCode, /cache\.delete\(key\)/);
   assert.match(swCode, /Promise\.all\(staleNavigationKeys\.map\(\(key\) => cache\.delete\(key\)\)\)/);
+});
+
+test('admin 页面与登录页在开发环境主动注销旧 service worker，避免旧脚本继续接管', async () => {
+  const [adminPageCode, adminLoginCode] = await Promise.all([
+    readText(adminPagePath),
+    readText(adminLoginPath),
+  ]);
+
+  assert.match(adminPageCode, /const adminServiceWorker = import\.meta\.env\.DEV \? undefined : `\/admin-sw\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`;/);
+  assert.match(adminPageCode, /serviceWorker=\{adminServiceWorker\}/);
+  assert.match(adminPageCode, /\{import\.meta\.env\.DEV \? \(/);
+  assert.match(adminPageCode, /if \('serviceWorker' in navigator\) \{/);
+  assert.match(adminPageCode, /navigator\.serviceWorker\.getRegistrations\(\)/);
+  assert.match(adminPageCode, /registration\.scope\.includes\('\/admin\/'\)/);
+  assert.match(adminPageCode, /registration\.unregister\(\)/);
+  assert.match(adminPageCode, /sessionStorage\.getItem\('__admin_sw_dev_reload__'\)/);
+  assert.match(adminPageCode, /window\.location\.reload\(\)/);
+  assert.match(adminLoginCode, /\{import\.meta\.env\.DEV \? \(/);
+  assert.match(adminLoginCode, /navigator\.serviceWorker\.getRegistrations\(\)/);
+  assert.match(adminLoginCode, /registration\.scope\.includes\('\/admin\/'\)/);
+  assert.match(adminLoginCode, /registration\.unregister\(\)/);
+  assert.match(adminLoginCode, /if \(!ios12 && swScope && 'serviceWorker' in navigator\) \{/);
 });

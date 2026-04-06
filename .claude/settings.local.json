@@ -147,7 +147,9 @@
       "Bash([ -d \"$d/food2astro\" ])",
       "Bash(printf '%s\\\\n' __TRACKED_VAR__/food2astro)",
       "Bash(printf '\\\\n---SPLIT---\\\\n')",
-      "Bash(nslookup:*)"
+      "Bash(nslookup:*)",
+      "WebSearch",
+      "Bash(powershell.exe:*)"
     ]
   }
 }

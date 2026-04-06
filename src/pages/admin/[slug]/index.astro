@@ -30,6 +30,7 @@ export const prerender = false;
 const { slug } = Astro.params;
 if (!slug) return new Response('Not Found', { status: 404 });
 const safeSlug = encodeURIComponent(slug);
+const adminServiceWorker = import.meta.env.DEV ? undefined : `/admin-sw.js?v=${encodeURIComponent(APP_VERSION)}`;
 
 const token = Astro.cookies.get('admin_token')?.value;
 if (!token) {
@@ -39,13 +40,77 @@ if (!token) {
 
 const authHeaders = { Authorization: `Bearer ${token}` };
 
-const [statusResp, shopResp, menuResp, ordersResp, billingResp, homeResp] = await Promise.all([
+async function loadProtectedMasterSettings(): Promise<Record<string, unknown>> {
+  const cookie = Astro.request.headers.get('cookie') || '';
+  const masterInitHeaders: Record<string, string> = {};
+  if (cookie) masterInitHeaders.cookie = cookie;
+
+  const masterInitRes = await fetch(new URL('/api/master/init', Astro.url), {
+    method: 'GET',
+    ...(Object.keys(masterInitHeaders).length > 0 ? { headers: masterInitHeaders } : {}),
+  }).catch(() => null);
+
+  if (masterInitRes?.ok) {
+    const masterInitRaw = await masterInitRes.json().catch(() => ({}));
+    const masterInitData = asObject(masterInitRaw && typeof masterInitRaw === 'object' && 'ok' in masterInitRaw && (masterInitRaw as { ok?: unknown }).ok === true
+      ? (masterInitRaw as { data?: unknown }).data
+      : masterInitRaw);
+    return asObject(masterInitData.settings || {});
+  }
+
+  const adminMasterHeaders: Record<string, string> = { Authorization: `Bearer ${token}` };
+  if (cookie) adminMasterHeaders.cookie = cookie;
+
+  const adminSettingsUrl = new URL('/api/admin/settings/master', Astro.url);
+  let adminMethod = 'GET';
+  let adminMasterRes = await fetch(adminSettingsUrl, {
+    method: 'GET',
+    headers: adminMasterHeaders,
+  }).catch(() => null);
+
+  if (!adminMasterRes || adminMasterRes.status === 404) {
+    adminMethod = 'POST';
+    adminMasterRes = await fetch(adminSettingsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...adminMasterHeaders,
+      },
+      body: '{}',
+    }).catch(() => null);
+  }
+
+  if (!adminMasterRes?.ok) return {};
+  const adminMasterText = await adminMasterRes.text().catch(() => '');
+  let adminMasterRaw: unknown = {};
+  if (adminMasterText) {
+    try {
+      adminMasterRaw = JSON.parse(adminMasterText);
+    } catch {
+      adminMasterRaw = {};
+    }
+  }
+  const adminMasterData = asObject(
+    adminMasterRaw && typeof adminMasterRaw === 'object' && 'success' in adminMasterRaw && (adminMasterRaw as { success?: unknown }).success === true
+      ? (adminMasterRaw as { data?: unknown; settings?: unknown }).data || (adminMasterRaw as { data?: unknown; settings?: unknown }).settings || adminMasterRaw
+      : adminMasterRaw,
+  );
+  const resolvedAdminSettings = asObject(adminMasterData.settings || adminMasterData);
+  resolvedAdminSettings.__adminSettingsDebug = {
+    adminMethod,
+    adminResponsePreview: adminMasterText.slice(0, 400),
+  };
+  return resolvedAdminSettings;
+}
+
+const [statusResp, shopResp, menuResp, ordersResp, billingResp, homeResp, masterSettings] = await Promise.all([
   fetchJSON(`${API_BASE_URL}/api/admin/status`, { headers: authHeaders }),
   fetchJSON(`${API_BASE_URL}/${encodeURIComponent(slug)}/info`),
   fetchJSON(`${API_BASE_URL}/${encodeURIComponent(slug)}/menu`),
   fetchJSON(`${API_BASE_URL}/api/admin/orders?_=${Date.now()}`, { headers: authHeaders }),
   fetchJSON(`${API_BASE_URL}/api/admin/billing`, { headers: authHeaders }),
   fetchJSON(`${API_BASE_URL}/api/home`),
+  loadProtectedMasterSettings(),
 ]);
 const homeData = asObject(homeResp.data);
 
@@ -88,8 +153,28 @@ const shop = {
 };
 
 const settings = asObject(parseMaybeJSON(shop.settings));
-const masterSettings = asObject(homeData?.settings || {});
-const mergedAdminSettings = { ...masterSettings, ...settings };
+const adminSettingsDebug = asObject(masterSettings.__adminSettingsDebug);
+const masterSettingsDiagnostics = {
+  topLevelKeys: Object.keys(masterSettings),
+  telegramKeys: Object.keys(asObject(masterSettings.telegram)),
+  serverKeys: Object.keys(asObject(masterSettings.server)),
+  successValue: masterSettings.success,
+  adminMethod: String(adminSettingsDebug.adminMethod || ''),
+  adminResponsePreview: String(adminSettingsDebug.adminResponsePreview || ''),
+};
+const mergedAdminSettings = {
+  ...masterSettings,
+  ...settings,
+  telegram: {
+    ...asObject(masterSettings.telegram),
+    ...asObject(settings.telegram),
+  },
+  server: {
+    ...asObject(masterSettings.server),
+    ...asObject(settings.server),
+  },
+};
+mergedAdminSettings.__debugMasterSettings = masterSettingsDiagnostics;
 const resolvedDisplaySettings = resolveShopDisplaySettings(shop, settings, masterSettings);
 
 const billingPlanTier = String(rawShop?.billingPlanType || rawShop?.billing_plan_type || '').trim();
@@ -240,7 +325,7 @@ const cities = {
 <Layout
   title={`后台管理 - ${shop.name}`}
   manifest={`/admin/${safeSlug}/manifest.webmanifest`}
-  serviceWorker={`/admin-sw.js?v=${encodeURIComponent(APP_VERSION)}`}
+  serviceWorker={adminServiceWorker}
   serviceWorkerScope={`/admin/${safeSlug}`}
   themeColor="#0b3b60"
 >
@@ -372,10 +457,31 @@ const cities = {
     shopId={shop.id}
     shopSlug={shop.slug}
     tableConfig={tableConfig}
-    settings={settings}
+    settings={mergedAdminSettings}
     brokerIp={brokerIp}
     shop={shop}
   />
+
+  {import.meta.env.DEV ? (
+    <script is:inline>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.getRegistrations().then(function (registrations) {
+            return Promise.all(
+              registrations
+                .filter(function (registration) { return registration.scope.includes('/admin/'); })
+                .map(function (registration) { return registration.unregister(); })
+            ).then(function (results) {
+              if (results.some(Boolean) && !sessionStorage.getItem('__admin_sw_dev_reload__')) {
+                sessionStorage.setItem('__admin_sw_dev_reload__', '1');
+                window.location.reload();
+              }
+            });
+          }).catch(function () {});
+        });
+      }
+    </script>
+  ) : null}
 
   <div id="reject-modal" class="modal-overlay" style="display:none;" onclick="if(event.target === this) window.closeRejectModal()">
     <div class="modal-content" style="max-width:400px; background:#fff; padding:20px; border-radius:8px;">

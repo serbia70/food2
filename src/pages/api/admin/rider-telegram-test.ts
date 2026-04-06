@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { API_BASE_URL } from '../../../config.ts';
 import { readAdminAuth } from '../../../lib/admin-api-route.ts';
 
 export const prerender = false;
@@ -31,19 +32,23 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const riderName = String(body.riderName || '').trim() || '骑手';
+  const inlineTelegramBotToken = String(body.telegramBotToken || body.telegram_bot_token || '').trim();
   const now = new Date().toISOString();
 
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     const cookie = request.headers.get('cookie') || '';
+    const authorization = String(request.headers.get('authorization') || '').trim();
     if (cookie) headers.cookie = cookie;
+    if (authorization) headers.authorization = authorization;
 
-    const upstreamResponse = await fetch(`${new URL(request.url).origin}/api/telegram/send`, {
+    const upstreamResponse = await fetch(`${API_BASE_URL}/api/telegram/send`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         shop_slug: shopSlug,
         chat_id: riderChatId,
+        ...(inlineTelegramBotToken ? { telegramBotToken: inlineTelegramBotToken } : {}),
         text: `Admin 骑手 Telegram 测试\n店铺：${shopSlug}\n骑手：${riderName}\n时间：${now}`,
       }),
     });
@@ -59,10 +64,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       status: upstreamResponse.status,
       headers: contentType ? { 'Content-Type': contentType } : undefined,
     });
-  } catch {
+  } catch (error) {
     return jsonResponse(502, {
       success: false,
       error: 'telegram_test_failed',
+      message: error instanceof Error ? error.message : 'telegram_test_failed',
     });
   }
 };

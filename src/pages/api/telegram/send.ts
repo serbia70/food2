@@ -9,6 +9,8 @@ type TelegramSendBody = {
   chatId?: unknown;
   chat_id?: unknown;
   text?: unknown;
+  telegramBotToken?: unknown;
+  telegram_bot_token?: unknown;
   reply_markup?: unknown;
   parse_mode?: unknown;
   disable_web_page_preview?: unknown;
@@ -37,23 +39,50 @@ function parseShopSettings(raw: unknown): Record<string, unknown> {
 
 function readTelegramBotToken(raw: unknown): string {
   const settings = asRecord(raw);
-  const dataSettings = asRecord(asRecord(settings.data).settings);
+  const directSettings = asRecord(settings.settings);
+  const data = asRecord(settings.data);
+  const dataSettings = asRecord(data.settings);
   const serverSettings = asRecord(settings.server);
-  const dataServerSettings = asRecord(dataSettings.server);
+  const directServerSettings = asRecord(directSettings.server);
+  const dataServerSettings = asRecord(data.server || dataSettings.server);
+  const telegramSettings = asRecord(settings.telegram);
+  const directTelegramSettings = asRecord(directSettings.telegram);
+  const dataTelegramSettings = asRecord(data.telegram || dataSettings.telegram);
   return String(
     settings.telegram_bot_token
       || settings.telegramBotToken
+      || telegramSettings.token
+      || telegramSettings.telegram_bot_token
+      || telegramSettings.telegramBotToken
+      || directSettings.telegram_bot_token
+      || directSettings.telegramBotToken
+      || directTelegramSettings.token
+      || directTelegramSettings.telegram_bot_token
+      || directTelegramSettings.telegramBotToken
       || dataSettings.telegram_bot_token
       || dataSettings.telegramBotToken
+      || dataTelegramSettings.token
+      || dataTelegramSettings.telegram_bot_token
+      || dataTelegramSettings.telegramBotToken
       || serverSettings.telegram_bot_token
       || serverSettings.telegramBotToken
+      || directServerSettings.telegram_bot_token
+      || directServerSettings.telegramBotToken
       || dataServerSettings.telegram_bot_token
       || dataServerSettings.telegramBotToken
       || '',
   ).trim();
 }
 
-function describeFetchError(error: unknown): { message: string; cause?: string; code?: string } {
+function describeFetchError(error: unknown): { message: string; cause?: string; code?: string; debugShape?: string } {
+  if (error === 'telegram_request_timeout') {
+    return {
+      message: 'fetch aborted',
+      cause: `Telegram request timed out after ${TELEGRAM_SEND_REQUEST_TIMEOUT_MS}ms`,
+      code: 'TELEGRAM_REQUEST_TIMEOUT',
+    };
+  }
+
   if (error instanceof DOMException && error.name === 'AbortError') {
     return {
       message: 'fetch aborted',
@@ -64,13 +93,45 @@ function describeFetchError(error: unknown): { message: string; cause?: string; 
 
   const fallback = {
     message: error instanceof Error ? error.message : 'fetch_failed',
-  } as { message: string; cause?: string; code?: string };
+  } as { message: string; cause?: string; code?: string; debugShape?: string };
 
-  if (!error || typeof error !== 'object') return fallback;
+  if (error instanceof Error) {
+    const rawSummary = String(error.stack || `${error.name}: ${error.message}` || '').trim();
+    if (rawSummary) fallback.cause = rawSummary.split('\n')[0]?.trim() || rawSummary;
+  }
+
+  if (!error || typeof error !== 'object') {
+    fallback.debugShape = JSON.stringify({
+      primitiveType: typeof error,
+      primitiveValue: String(error),
+    });
+    return fallback;
+  }
 
   const errorRecord = error as Record<string, unknown>;
+  const ownKeys = Object.getOwnPropertyNames(errorRecord).slice(0, 12);
+  const summary = {
+    ctor: errorRecord.constructor && typeof errorRecord.constructor === 'function'
+      ? String((errorRecord.constructor as { name?: unknown }).name || '')
+      : '',
+    ownKeys,
+    name: typeof errorRecord.name === 'string' ? errorRecord.name : undefined,
+    message: typeof errorRecord.message === 'string' ? errorRecord.message : undefined,
+    code: typeof errorRecord.code === 'string' ? errorRecord.code : undefined,
+    errno: typeof errorRecord.errno === 'string' || typeof errorRecord.errno === 'number' ? String(errorRecord.errno) : undefined,
+    type: typeof errorRecord.type === 'string' ? errorRecord.type : undefined,
+    causeType: errorRecord.cause == null ? String(errorRecord.cause) : typeof errorRecord.cause,
+  };
+  const directCause = typeof errorRecord.cause === 'string' ? errorRecord.cause.trim() : '';
+  const directCode = typeof errorRecord.code === 'string' ? errorRecord.code.trim() : '';
+  if (directCause) fallback.cause = directCause;
+  if (directCode) fallback.code = directCode;
+
   const cause = errorRecord.cause;
-  if (!cause || typeof cause !== 'object') return fallback;
+  if (!cause || typeof cause !== 'object') {
+    if (!directCause && !directCode) fallback.debugShape = JSON.stringify(summary);
+    return fallback;
+  }
 
   const causeRecord = cause as Record<string, unknown>;
   const causeMessage = typeof causeRecord.message === 'string' ? causeRecord.message.trim() : '';
@@ -78,15 +139,16 @@ function describeFetchError(error: unknown): { message: string; cause?: string; 
 
   if (causeMessage) fallback.cause = causeMessage;
   if (code) fallback.code = code;
+  if (!directCause && !directCode && !causeMessage && !code) fallback.debugShape = JSON.stringify(summary);
   return fallback;
 }
 
 const TELEGRAM_SEND_MAX_ATTEMPTS = 2;
 const TELEGRAM_SEND_RETRY_DELAY_MS = 250;
-const TELEGRAM_SEND_REQUEST_TIMEOUT_MS = 12000;
+const TELEGRAM_SEND_REQUEST_TIMEOUT_MS = 8000;
 
 function shouldRetryTelegramSend(error: unknown): boolean {
-  if (error instanceof DOMException && error.name === 'AbortError') return true;
+  if (error instanceof DOMException && error.name === 'AbortError') return false;
   const details = describeFetchError(error);
   return details.code === 'UND_ERR_CONNECT_TIMEOUT' || details.code === 'ECONNRESET' || details.code === 'ETIMEDOUT';
 }
@@ -128,20 +190,27 @@ async function sendTelegramMessage(token: string, telegramPayload: Record<string
   throw lastError instanceof Error ? lastError : new Error('telegram_send_failed');
 }
 
-async function loadTelegramBotToken(request: Request, shopSlug: string): Promise<{
+async function loadTelegramBotToken(request: Request, shopSlug: string, inlineToken: string): Promise<{
   token: string;
-  tokenSource: 'shop' | 'master' | 'home' | 'missing_after_shop_master_home_fallback';
+  tokenSource: 'shop' | 'master' | 'admin_master' | 'home' | 'missing_after_shop_master_admin_home_fallback';
   diagnostics: {
     shopInfo: { requested: boolean; tokenFound: boolean };
     masterSettings: { requested: boolean; status: number | null; tokenFound: boolean };
+    adminMasterSettings: { requested: boolean; status: number | null; tokenFound: boolean; responsePreview?: string };
     homeSettings: { requested: boolean; status: number | null; tokenFound: boolean };
   };
 }> {
   const diagnostics = {
     shopInfo: { requested: false, tokenFound: false },
     masterSettings: { requested: false, status: null as number | null, tokenFound: false },
+    adminMasterSettings: { requested: false, status: null as number | null, tokenFound: false, responsePreview: undefined as string | undefined },
     homeSettings: { requested: false, status: null as number | null, tokenFound: false },
   };
+
+  const normalizedInlineToken = String(inlineToken || '').trim();
+  if (normalizedInlineToken) {
+    return { token: normalizedInlineToken, tokenSource: 'shop', diagnostics };
+  }
 
   const normalizedShopSlug = String(shopSlug || '').trim();
   if (normalizedShopSlug) {
@@ -177,6 +246,52 @@ async function loadTelegramBotToken(request: Request, shopSlug: string): Promise
     }
   }
 
+  const adminAuthorization = String(request.headers.get('authorization') || '').trim();
+  if (masterRes.status === 401 && (adminAuthorization || cookie)) {
+    const adminMasterHeaders: Record<string, string> = {};
+    if (adminAuthorization) adminMasterHeaders.authorization = adminAuthorization;
+    if (cookie) adminMasterHeaders.cookie = cookie;
+
+    diagnostics.adminMasterSettings.requested = true;
+    const adminSettingsUrl = new URL('/api/admin/settings/master', request.url).toString();
+    let adminMasterRes = await fetch(adminSettingsUrl, {
+      method: 'GET',
+      ...(Object.keys(adminMasterHeaders).length > 0 ? { headers: adminMasterHeaders } : {}),
+    });
+
+    if (adminMasterRes.status === 404) {
+      adminMasterRes = await fetch(adminSettingsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...adminMasterHeaders,
+        },
+        body: '{}',
+      });
+    }
+
+    diagnostics.adminMasterSettings.status = adminMasterRes.status;
+    if (adminMasterRes.ok) {
+      const adminMasterText = await adminMasterRes.text();
+      let adminMasterData: unknown = {};
+      if (adminMasterText) {
+        try {
+          adminMasterData = JSON.parse(adminMasterText);
+        } catch {
+          adminMasterData = {};
+        }
+      }
+      const adminMasterToken = readTelegramBotToken(adminMasterData);
+      diagnostics.adminMasterSettings.tokenFound = Boolean(adminMasterToken);
+      if (!adminMasterToken && adminMasterText) {
+        diagnostics.adminMasterSettings.responsePreview = adminMasterText.slice(0, 400);
+      }
+      if (adminMasterToken) {
+        return { token: adminMasterToken, tokenSource: 'admin_master', diagnostics };
+      }
+    }
+  }
+
   diagnostics.homeSettings.requested = true;
   const homeRes = await fetch(`${API_BASE_URL}/api/home`);
   diagnostics.homeSettings.status = homeRes.status;
@@ -190,7 +305,7 @@ async function loadTelegramBotToken(request: Request, shopSlug: string): Promise
 
   return {
     token: '',
-    tokenSource: 'missing_after_shop_master_home_fallback',
+    tokenSource: 'missing_after_shop_master_admin_home_fallback',
     diagnostics,
   };
 }
@@ -200,20 +315,22 @@ export const POST: APIRoute = async ({ request }) => {
   const shopSlug = String(body.shopSlug || body.shop_slug || '').trim();
   const chatId = String(body.chatId || body.chat_id || '').trim();
   const text = String(body.text || '').trim();
+  const inlineTelegramBotToken = String(body.telegramBotToken || body.telegram_bot_token || '').trim();
 
   if (!chatId || !text) {
     return json({ success: false, error: 'invalid_send_request' }, 400);
   }
 
   let token = '';
-  let tokenSource: 'shop' | 'master' | 'home' | 'missing_after_shop_master_home_fallback' = 'missing_after_shop_master_home_fallback';
+  let tokenSource: 'shop' | 'master' | 'admin_master' | 'home' | 'missing_after_shop_master_admin_home_fallback' = 'missing_after_shop_master_admin_home_fallback';
   let diagnostics = {
     shopInfo: { requested: false, tokenFound: false },
     masterSettings: { requested: false, status: null as number | null, tokenFound: false },
+    adminMasterSettings: { requested: false, status: null as number | null, tokenFound: false, responsePreview: undefined as string | undefined },
     homeSettings: { requested: false, status: null as number | null, tokenFound: false },
   };
   try {
-    const tokenResult = await loadTelegramBotToken(request, shopSlug);
+    const tokenResult = await loadTelegramBotToken(request, shopSlug, inlineTelegramBotToken);
     token = tokenResult.token;
     tokenSource = tokenResult.tokenSource;
     diagnostics = tokenResult.diagnostics;

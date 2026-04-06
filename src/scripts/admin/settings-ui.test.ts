@@ -250,19 +250,66 @@ test('clicking rider telegram test action sends request and shows success toast'
 
     const button = ctx.listEl.querySelector('[data-admin-action="test-rider-telegram"]');
     assert.ok(button);
+    ctx.tokenInput.value = 'dom-inline-token';
+    (globalThis.window as any).__adminRuntime.currentSettings = {};
 
     await (globalThis.window as any).__adminHandlers['test-rider-telegram'](button);
 
     assert.equal(postBody?.riderName, '陈工');
     assert.equal(postBody?.riderChatId, 'chat-1');
-    assert.equal('telegramBotToken' in (postBody || {}), false);
+    assert.equal(postBody?.telegramBotToken, 'dom-inline-token');
     assert.ok(toasts.some((message) => message.includes('测试消息已发送')));
   } finally {
     ctx.restore();
   }
 });
 
-test('clicking rider telegram test action logs backend payload on failure', async () => {
+test('clicking rider telegram test action falls back to runtime shop telegramToken', async () => {
+  const ctx = installMockDom();
+  let postBody: AnyRecord | null = null;
+
+  try {
+    (globalThis.window as any).__adminRuntime.currentSettings = {};
+    (globalThis.window as any).__adminRuntime.shop = { telegramToken: 'shop-runtime-token' };
+
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url === '/api/rider/status?action=list_available') {
+        return new Response(JSON.stringify({
+          riders: [
+            { name: '陈工', phone: '111', status: 'available', telegramChatId: 'chat-1' },
+          ],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/admin/rider-telegram-test') {
+        postBody = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    };
+
+    const initSettingsUI = await loadInitSettingsUI();
+    initSettingsUI(() => {});
+    await (globalThis.window as any).__adminHandlers['load-drivers']();
+
+    const button = ctx.listEl.querySelector('[data-admin-action="test-rider-telegram"]');
+    assert.ok(button);
+
+    await (globalThis.window as any).__adminHandlers['test-rider-telegram'](button);
+
+    assert.equal(postBody?.telegramBotToken, 'shop-runtime-token');
+  } finally {
+    ctx.restore();
+  }
+});
+
+test('clicking rider telegram test action logs frontend token sources on failure', async () => {
   const ctx = installMockDom();
   const consoleCalls: AnyRecord[] = [];
   const originalConsoleError = console.error;
@@ -271,6 +318,18 @@ test('clicking rider telegram test action logs backend payload on failure', asyn
     console.error = (...args: any[]) => {
       consoleCalls.push(args);
     };
+
+    (globalThis.window as any).__adminRuntime.currentSettings = {
+      telegram: { chatId: 'only-chat-id' },
+      __debugMasterSettings: {
+        topLevelKeys: ['success', 'telegram', 'server'],
+        telegramKeys: [],
+        serverKeys: [],
+        successValue: true,
+      },
+    };
+    (globalThis.window as any).__adminRuntime.shop = { telegramChatId: 'shop-chat-only' };
+    ctx.tokenInput.value = '';
 
     globalThis.fetch = async (input: string | URL | Request) => {
       const url = String(input instanceof Request ? input.url : input);
@@ -288,10 +347,11 @@ test('clicking rider telegram test action logs backend payload on failure', asyn
         return new Response(JSON.stringify({
           success: false,
           error: 'telegram_bot_token_not_configured',
-          tokenSource: 'missing_after_shop_master_home_fallback',
+          tokenSource: 'missing_after_shop_master_admin_home_fallback',
           diagnostics: {
             shopInfo: { requested: true, tokenFound: false },
             masterSettings: { requested: true, status: 401, tokenFound: false },
+            adminMasterSettings: { requested: true, status: 200, tokenFound: false, responsePreview: '{"success":true}' },
             homeSettings: { requested: true, status: 200, tokenFound: false },
           },
         }), {
@@ -312,11 +372,125 @@ test('clicking rider telegram test action logs backend payload on failure', asyn
     await (globalThis.window as any).__adminHandlers['test-rider-telegram'](button);
 
     assert.ok(consoleCalls.some((args) => String(args[0]).includes('[admin/rider-telegram-test]')));
-    assert.ok(consoleCalls.some((args) => JSON.stringify(args).includes('missing_after_shop_master_home_fallback')));
-    assert.ok(consoleCalls.some((args) => JSON.stringify(args).includes('masterSettings')));
-    assert.ok(consoleCalls.some((args) => JSON.stringify(args).includes('401')));
+    assert.ok(consoleCalls.some((args) => JSON.stringify(args).includes('missing_after_shop_master_admin_home_fallback')));
+    assert.ok(consoleCalls.some((args) => JSON.stringify(args).includes('frontendTokenSources')));
+    assert.ok(consoleCalls.some((args) => JSON.stringify(args).includes('formTokenPresent')));
+    assert.ok(consoleCalls.some((args) => JSON.stringify(args).includes('runtimeTelegramKeys')));
+    assert.ok(consoleCalls.some((args) => JSON.stringify(args).includes('shopTelegramKeys')));
+    assert.ok(consoleCalls.some((args) => JSON.stringify(args).includes('__debugMasterSettings')));
+    assert.ok(consoleCalls.some((args) => JSON.stringify(args).includes('topLevelKeys')));
+    assert.ok(consoleCalls.some((args) => typeof args[2] === 'string' && args[2].includes('"inlineTokenPresent":false')));
+    assert.ok(consoleCalls.some((args) => typeof args[2] === 'string' && args[2].includes('"shopTokenPresent":false')));
   } finally {
     console.error = originalConsoleError;
+    ctx.restore();
+  }
+});
+
+test('clicking rider telegram test action shows connectivity timeout details from backend', async () => {
+  const ctx = installMockDom();
+  const toasts: string[] = [];
+
+  try {
+    (globalThis.window as any).showToast = (message: string) => {
+      toasts.push(String(message));
+    };
+
+    (globalThis.window as any).__adminRuntime.currentSettings = {};
+    (globalThis.window as any).__adminRuntime.shop = {};
+
+    globalThis.fetch = async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url === '/api/rider/status?action=list_available') {
+        return new Response(JSON.stringify({
+          riders: [
+            { name: '陈工', phone: '111', status: 'available', telegramChatId: 'chat-1' },
+          ],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/admin/rider-telegram-test') {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'telegram_send_failed',
+          message: 'fetch failed',
+          cause: 'Connect Timeout Error (attempted address: api.telegram.org:443, timeout: 10000ms)',
+          code: 'UND_ERR_CONNECT_TIMEOUT',
+        }), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    };
+
+    const initSettingsUI = await loadInitSettingsUI();
+    initSettingsUI(() => {});
+    await (globalThis.window as any).__adminHandlers['load-drivers']();
+
+    const button = ctx.listEl.querySelector('[data-admin-action="test-rider-telegram"]');
+    assert.ok(button);
+
+    await (globalThis.window as any).__adminHandlers['test-rider-telegram'](button);
+
+    assert.ok(toasts.some((message) => message.includes('telegram_send_failed')));
+    assert.ok(toasts.some((message) => message.includes('UND_ERR_CONNECT_TIMEOUT')));
+    assert.ok(toasts.some((message) => message.includes('Connect Timeout Error')));
+  } finally {
+    ctx.restore();
+  }
+});
+
+test('clicking rider telegram test action keeps backend message when code and cause are missing', async () => {
+  const ctx = installMockDom();
+  const toasts: string[] = [];
+
+  try {
+    (globalThis.window as any).showToast = (message: string) => {
+      toasts.push(String(message));
+    };
+
+    (globalThis.window as any).__adminRuntime.currentSettings = {};
+    (globalThis.window as any).__adminRuntime.shop = {};
+
+    globalThis.fetch = async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url === '/api/rider/status?action=list_available') {
+        return new Response(JSON.stringify({
+          riders: [
+            { name: '陈工', phone: '111', status: 'available', telegramChatId: 'chat-1' },
+          ],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/admin/rider-telegram-test') {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'telegram_send_failed',
+          message: 'fetch_failed',
+        }), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    };
+
+    const initSettingsUI = await loadInitSettingsUI();
+    initSettingsUI(() => {});
+    await (globalThis.window as any).__adminHandlers['load-drivers']();
+
+    const button = ctx.listEl.querySelector('[data-admin-action="test-rider-telegram"]');
+    assert.ok(button);
+
+    await (globalThis.window as any).__adminHandlers['test-rider-telegram'](button);
+
+    assert.ok(toasts.includes('telegram_send_failed | fetch_failed'));
+  } finally {
     ctx.restore();
   }
 });

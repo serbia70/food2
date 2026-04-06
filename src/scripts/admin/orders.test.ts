@@ -41,6 +41,7 @@ test('assignRider posts manual_assign payload with eta selected rider telegram c
     shopSlug: 'demo-shop',
     pickupEtaMinutes: 15,
     riderTelegramChatId: 'tg-7',
+    telegramBotToken: '',
     debugTelegram: false,
   });
 });
@@ -107,7 +108,34 @@ test('autoAssignRider throws telegram notification failure details when assignme
   );
 });
 
-test('assignRider shows blocking telegram diagnostics when debugTelegram is enabled and notify succeeds', async () => {
+test('assignRider emits preflight debug alert before request when debugTelegram is enabled', async () => {
+  const alertMessages: string[] = [];
+  let fetchStarted = false;
+  globalThis.alert = ((message?: string) => {
+    alertMessages.push(String(message || ''));
+  }) as typeof alert;
+  globalThis.window = { showToast() {}, refreshOrderList() {} } as any;
+
+  globalThis.fetch = async () => {
+    fetchStarted = true;
+    assert.deepEqual(alertMessages, ['派单调试: 已进入 assignRider，准备请求 /api/admin/rider-assign']);
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  await assignRider('470', '7', {
+    shopSlug: 'demo-shop',
+    pickupEtaMinutes: 15,
+    riderTelegramChatId: 'tg-7',
+    debugTelegram: true,
+  });
+
+  assert.equal(fetchStarted, true);
+});
+
+test('assignRider shows response-stage debug alerts when debugTelegram is enabled and notify succeeds', async () => {
   const toastMessages: string[] = [];
   const alertMessages: string[] = [];
   let refreshed = false;
@@ -144,12 +172,160 @@ test('assignRider shows blocking telegram diagnostics when debugTelegram is enab
   });
 
   assert.deepEqual(alertMessages, [
+    '派单调试: 已进入 assignRider，准备请求 /api/admin/rider-assign',
+    '派单调试: /api/admin/rider-assign 已返回 200',
+    '派单调试: /api/admin/rider-assign 响应 {"success":true,"telegram_notification":{"success":true,"chatId":"tg-7","chatIdSource":"request","shopSlug":"demo-shop"}}',
     '派单Telegram: success chat=tg-7 source=request shop=demo-shop',
   ]);
   assert.deepEqual(toastMessages, []);
   assert.equal(refreshed, true);
 });
 
+test('assignRider aborts hanging rider-assign request and shows timeout debug alert', async () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const alertMessages: string[] = [];
+  globalThis.alert = ((message?: string) => {
+    alertMessages.push(String(message || ''));
+  }) as typeof alert;
+  globalThis.window = { showToast() {}, refreshOrderList() {} } as any;
+
+  globalThis.setTimeout = ((handler: TimerHandler) => {
+    queueMicrotask(() => {
+      if (typeof handler === 'function') handler();
+    });
+    return 1 as any;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => undefined) as typeof clearTimeout;
+
+  globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const signal = init?.signal as AbortSignal | undefined;
+    await new Promise((resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(signal.reason || new Error('aborted')), { once: true });
+    });
+    throw new Error('unreachable');
+  };
+
+  await assert.rejects(
+    () => assignRider('470', '7', {
+      shopSlug: 'demo-shop',
+      pickupEtaMinutes: 15,
+      riderTelegramChatId: 'tg-7',
+      debugTelegram: true,
+    }),
+    /request timeout/i,
+  );
+
+  assert.deepEqual(alertMessages, [
+    '派单调试: 已进入 assignRider，准备请求 /api/admin/rider-assign',
+    '派单调试: /api/admin/rider-assign 请求失败 request timeout',
+  ]);
+
+  globalThis.setTimeout = originalSetTimeout;
+  globalThis.clearTimeout = originalClearTimeout;
+});
+
+test('assignRider treats aborted fetch with browser Failed to fetch message as request timeout', async () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const alertMessages: string[] = [];
+  globalThis.alert = ((message?: string) => {
+    alertMessages.push(String(message || ''));
+  }) as typeof alert;
+  globalThis.window = { showToast() {}, refreshOrderList() {} } as any;
+
+  globalThis.setTimeout = ((handler: TimerHandler) => {
+    queueMicrotask(() => {
+      if (typeof handler === 'function') handler();
+    });
+    return 1 as any;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => undefined) as typeof clearTimeout;
+
+  globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const signal = init?.signal as AbortSignal | undefined;
+    await new Promise((resolve) => {
+      signal?.addEventListener('abort', resolve, { once: true });
+    });
+    throw new TypeError('Failed to fetch');
+  };
+
+  await assert.rejects(
+    () => assignRider('470', '7', {
+      shopSlug: 'demo-shop',
+      pickupEtaMinutes: 15,
+      riderTelegramChatId: 'tg-7',
+      debugTelegram: true,
+    }),
+    /request timeout/i,
+  );
+
+  assert.deepEqual(alertMessages, [
+    '派单调试: 已进入 assignRider，准备请求 /api/admin/rider-assign',
+    '派单调试: /api/admin/rider-assign 请求失败 request timeout',
+  ]);
+
+  globalThis.setTimeout = originalSetTimeout;
+  globalThis.clearTimeout = originalClearTimeout;
+});
+
+test('assignRider keeps plain Failed to fetch when request was not aborted', async () => {
+  const alertMessages: string[] = [];
+  globalThis.alert = ((message?: string) => {
+    alertMessages.push(String(message || ''));
+  }) as typeof alert;
+  globalThis.window = { showToast() {}, refreshOrderList() {} } as any;
+
+  globalThis.fetch = async () => {
+    throw new TypeError('Failed to fetch');
+  };
+
+  await assert.rejects(
+    () => assignRider('470', '7', {
+      shopSlug: 'demo-shop',
+      pickupEtaMinutes: 15,
+      riderTelegramChatId: 'tg-7',
+      debugTelegram: true,
+    }),
+    /Failed to fetch/i,
+  );
+
+  assert.deepEqual(alertMessages, [
+    '派单调试: 已进入 assignRider，准备请求 /api/admin/rider-assign',
+    '派单调试: /api/admin/rider-assign 请求失败 Failed to fetch',
+  ]);
+});
+
+test('assignRider flushes deferred order refresh after request finishes', async () => {
+  let refreshCount = 0;
+  globalThis.window = {
+    showToast() {},
+    refreshOrderList() {
+      refreshCount++;
+    },
+    __adminAssignInFlight: false,
+    __adminPendingOrderRefresh: false,
+  } as any;
+
+  globalThis.fetch = async () => {
+    assert.equal(globalThis.window.__adminAssignInFlight, true);
+    globalThis.window.__adminPendingOrderRefresh = true;
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  await assignRider('470', '7', {
+    shopSlug: 'demo-shop',
+    pickupEtaMinutes: 15,
+    riderTelegramChatId: 'tg-7',
+  });
+
+  assert.equal(globalThis.window.__adminAssignInFlight, false);
+  assert.equal(globalThis.window.__adminPendingOrderRefresh, false);
+  assert.equal(refreshCount, 1);
+});
 
 test('orders source keeps assign APIs and removes broadcast helper', async () => {
   const { readFile } = await import('node:fs/promises');
@@ -248,7 +424,39 @@ test('settings ui source uses canonical rider telegram and settings payload fiel
   assert.doesNotMatch(source, /chat_id:/);
   assert.doesNotMatch(source, /delivery_type:/);
   assert.doesNotMatch(source, /free_threshold:/);
-  assert.doesNotMatch(source, /telegram_chat_id/);
+  assert.doesNotMatch(source, /telegram_chat_id:/);
+});
+
+test('admin page source injects merged admin settings into runtime scripts', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/pages/admin/[slug]/index.astro'), 'utf8');
+
+  assert.match(source, /<AdminScripts[\s\S]*settings=\{mergedAdminSettings\}/);
+  assert.doesNotMatch(source, /<AdminScripts[\s\S]*settings=\{settings\}/);
+});
+
+test('admin page source loads protected master settings instead of public home settings', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/pages/admin/[slug]/index.astro'), 'utf8');
+
+  assert.match(source, /async function loadProtectedMasterSettings\(\)/);
+  assert.match(source, /fetch\(new URL\('\/api\/master\/init', Astro\.url\), \{/);
+  assert.match(source, /const adminSettingsUrl = new URL\('\/api\/admin\/settings\/master', Astro\.url\);/);
+  assert.match(source, /method: 'POST'/);
+  assert.match(source, /'success' in adminMasterRaw/);
+  assert.match(source, /\.success === true/);
+  assert.match(source, /adminMasterRaw as \{ data\?: unknown; settings\?: unknown \}/);
+  assert.match(source, /const resolvedAdminSettings = asObject\(adminMasterData\.settings \|\| adminMasterData\);/);
+  assert.match(source, /resolvedAdminSettings\.__adminSettingsDebug = \{/);
+  assert.match(source, /return resolvedAdminSettings;/);
+  assert.match(source, /const masterSettingsDiagnostics = \{/);
+  assert.match(source, /adminMethod:/);
+  assert.match(source, /adminResponsePreview:/);
+  assert.match(source, /mergedAdminSettings\.__debugMasterSettings = masterSettingsDiagnostics;/);
+  assert.match(source, /const \[statusResp, shopResp, menuResp, ordersResp, billingResp, homeResp, masterSettings\] = await Promise\.all\([\s\S]*loadProtectedMasterSettings\(\),[\s\S]*\]\);/);
+  assert.doesNotMatch(source, /const masterSettings = asObject\(homeData\?\.settings \|\| \{\}\);/);
 });
 
 test('table management source uses canonical order fields', async () => {
@@ -392,6 +600,8 @@ test('tab tables source uses canonical order surface fields', async () => {
   assert.match(source, /data-user-phone=\{o\.userPhone\}/);
   assert.match(source, /data-rider-broadcasted-at=\{o\.riderBroadcastedAt\}/);
   assert.match(source, /data-rider-remind-count=\{o\.riderRemindCount\}/);
+  assert.match(source, /<button class="btn-xs" type="button" data-admin-action="assign-rider"/);
+  assert.match(source, /<button class="btn-xs" type="button" data-admin-action="auto-assign-rider"/);
 
   assert.doesNotMatch(source, /order_no/);
   assert.doesNotMatch(source, /table_info/);
@@ -495,6 +705,16 @@ test('tab settings source uses canonical telegram and settings fields', async ()
   assert.doesNotMatch(source, /print_on_checkout \|\|/);
 });
 
+test('admin page source injects merged admin settings into runtime scripts', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/pages/admin/[slug]/index.astro'), 'utf8');
+
+  assert.match(source, /const mergedAdminSettings = \{[\s\S]*telegram: \{[\s\S]*\.\.\.asObject\(masterSettings\.telegram\)[\s\S]*\.\.\.asObject\(settings\.telegram\)[\s\S]*\}[\s\S]*server: \{[\s\S]*\.\.\.asObject\(masterSettings\.server\)[\s\S]*\.\.\.asObject\(settings\.server\)[\s\S]*\}[\s\S]*\};/);
+  assert.match(source, /<AdminScripts[\s\S]*settings=\{mergedAdminSettings\}/);
+  assert.doesNotMatch(source, /<AdminScripts[\s\S]*settings=\{settings\}/);
+});
+
 test('settings payload source uses canonical settings fields', async () => {
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
@@ -555,6 +775,8 @@ test('click delegation source uses canonical admin payload fields', async () => 
 
   assert.match(source, /body: JSON\.stringify\(\{ newPassword: newPassword \}\),/);
   assert.match(source, /const payload = \{ name, subName: sub \|\| name \};/);
+  assert.match(source, /else if \(action === 'assign-rider' \|\| action === 'auto-assign-rider'\) \{/);
+  assert.match(source, /await invokeAdminAction\(getAdminHandlers\(\), action, el, e\);/);
 
   assert.doesNotMatch(source, /open-delivery/);
   assert.doesNotMatch(source, /confirm-delivery/);

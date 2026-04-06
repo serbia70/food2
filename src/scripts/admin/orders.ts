@@ -8,6 +8,8 @@ type TelegramNotificationDiagnostics = {
   shopSlug?: unknown;
 };
 
+const ASSIGN_RIDER_REQUEST_TIMEOUT_MS = 15000;
+
 function formatTelegramDiagnostics(notification: TelegramNotificationDiagnostics): string {
   const status = notification.success === true ? 'success' : 'failed';
   const chatId = String(notification.chatId || '-').trim() || '-';
@@ -30,22 +32,78 @@ export async function fetchAvailableRiders() {
   return buildContactableRiderRows(rows);
 }
 
-export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number; riderTelegramChatId?: string; debugTelegram?: boolean } = {}) {
-  const res = await fetch('/api/admin/rider-assign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'manual_assign',
-      orderId,
-      riderId,
-      shopSlug: input.shopSlug || '',
-      pickupEtaMinutes: Number(input.pickupEtaMinutes || 0),
-      riderTelegramChatId: String(input.riderTelegramChatId || '').trim(),
-      debugTelegram: input.debugTelegram === true,
-    }),
-  });
+export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number; riderTelegramChatId?: string; telegramBotToken?: string; debugTelegram?: boolean } = {}) {
+  if (input.debugTelegram === true && typeof alert === 'function') {
+    alert('派单调试: 已进入 assignRider，准备请求 /api/admin/rider-assign');
+  }
 
-  const data = await res.json().catch(() => ({}));
+  window.__adminAssignInFlight = true;
+  window.__adminPendingOrderRefresh = false;
+
+  let res: Response;
+  let flushedDeferredRefresh = false;
+  const controller = new AbortController();
+  try {
+    const timeoutId = setTimeout(() => controller.abort('request timeout'), ASSIGN_RIDER_REQUEST_TIMEOUT_MS);
+    res = await fetch('/api/admin/rider-assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'manual_assign',
+        orderId,
+        riderId,
+        shopSlug: input.shopSlug || '',
+        pickupEtaMinutes: Number(input.pickupEtaMinutes || 0),
+        riderTelegramChatId: String(input.riderTelegramChatId || '').trim(),
+        telegramBotToken: String(input.telegramBotToken || '').trim(),
+        debugTelegram: input.debugTelegram === true,
+      }),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
+  } catch (error) {
+    const detail = error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : 'assign rider failed';
+    const normalizedDetail = controller.signal.aborted && String(detail || '').trim() === 'Failed to fetch'
+      ? 'request timeout'
+      : (detail || 'assign rider failed');
+    if (input.debugTelegram === true && typeof alert === 'function') {
+      alert(`派单调试: /api/admin/rider-assign 请求失败 ${normalizedDetail}`);
+    }
+    throw new Error(normalizedDetail || 'assign rider failed');
+  } finally {
+    window.__adminAssignInFlight = false;
+    if (window.__adminPendingOrderRefresh) {
+      window.__adminPendingOrderRefresh = false;
+      flushedDeferredRefresh = true;
+      const refreshOrderList = window.refreshOrderList;
+      if (typeof refreshOrderList === 'function') refreshOrderList();
+    }
+  }
+
+  if (flushedDeferredRefresh) {
+    return;
+  }
+
+  if (input.debugTelegram === true && typeof alert === 'function') {
+    alert(`派单调试: /api/admin/rider-assign 已返回 ${res.status}`);
+  }
+
+  const responseText = await res.text().catch(() => '');
+  if (input.debugTelegram === true && typeof alert === 'function') {
+    alert(`派单调试: /api/admin/rider-assign 响应 ${responseText.slice(0, 300) || '<empty>'}`);
+  }
+
+  let data: Record<string, unknown> = {};
+  if (responseText) {
+    try {
+      data = JSON.parse(responseText) as Record<string, unknown>;
+    } catch {
+      data = {};
+    }
+  }
   if (!res.ok || data?.success === false) {
     const detail = String(data?.error || 'assign rider failed').trim() || 'assign rider failed';
     if (input.debugTelegram === true && typeof alert === 'function') alert(`派单失败: ${detail}`);

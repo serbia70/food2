@@ -12,6 +12,8 @@ declare global {
   interface Window {
     __adminRuntime?: AdminRuntimeState;
     __adminHandlers?: Record<string, any>;
+    __adminAssignInFlight?: boolean;
+    __adminPendingOrderRefresh?: boolean;
   }
 }
 

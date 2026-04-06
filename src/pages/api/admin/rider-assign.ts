@@ -21,11 +21,18 @@ type RiderFetchResult =
 type OrderSummaryItem = { name?: unknown; quantity?: unknown };
 type OrderSummaryInput = {
   orderNo?: unknown;
+  order_no?: unknown;
   tableInfo?: unknown;
+  table_info?: unknown;
   userPhone?: unknown;
+  user_phone?: unknown;
   totalAmount?: unknown;
+  total_amount?: unknown;
   scheduledFor?: unknown;
+  scheduled_for?: unknown;
   items?: unknown;
+  itemsJson?: unknown;
+  items_json?: unknown;
 };
 
 function readJsonObject(text: string): Record<string, unknown> | null {
@@ -41,6 +48,20 @@ function readRiderChatId(rider: AssignableRider): string {
   return String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
 }
 
+function readOrderSummaryItems(raw: OrderSummaryInput): OrderSummaryItem[] {
+  if (Array.isArray(raw.items)) return raw.items as OrderSummaryItem[];
+
+  const rawItemsJson = raw.itemsJson ?? raw.items_json;
+  if (typeof rawItemsJson !== 'string' || !rawItemsJson.trim()) return [];
+
+  try {
+    const parsed = JSON.parse(rawItemsJson) as unknown;
+    return Array.isArray(parsed) ? parsed as OrderSummaryItem[] : [];
+  } catch {
+    return [];
+  }
+}
+
 function readOrderSummary(body: Record<string, unknown>, orderId: string): {
   orderNo: string;
   address: string;
@@ -52,16 +73,16 @@ function readOrderSummary(body: Record<string, unknown>, orderId: string): {
   const raw = (body.orderSummary && typeof body.orderSummary === 'object')
     ? body.orderSummary as OrderSummaryInput
     : {};
-  const items = Array.isArray(raw.items) ? raw.items as OrderSummaryItem[] : [];
+  const items = readOrderSummaryItems(raw);
 
-  const parsedTotalAmount = Number(raw.totalAmount);
+  const parsedTotalAmount = Number(raw.totalAmount ?? raw.total_amount);
 
   return {
-    orderNo: String(raw.orderNo || orderId || '').trim(),
-    address: String(raw.tableInfo || '').trim() || '未提供地址',
-    phone: String(raw.userPhone || '').trim() || '-',
+    orderNo: String(raw.orderNo ?? raw.order_no ?? orderId ?? '').trim(),
+    address: String(raw.tableInfo ?? raw.table_info ?? '').trim() || '未提供地址',
+    phone: String(raw.userPhone ?? raw.user_phone ?? '').trim() || '-',
     totalAmount: Number.isFinite(parsedTotalAmount) ? parsedTotalAmount : 0,
-    scheduledFor: String(raw.scheduledFor || '').trim(),
+    scheduledFor: String(raw.scheduledFor ?? raw.scheduled_for ?? '').trim(),
     itemSummary: items
       .map((item) => {
         const name = String(item?.name || '').trim();

@@ -58,7 +58,7 @@ function pickDispatchEtaMinutes() {
 
 
 registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
-  const orderId = String(el?.dataset?.orderId || '').trim();
+  const orderId = String(el?.dataset?.orderId || el?.dataset?.oid || '').trim();
   if (!orderId) return;
 
   try {
@@ -99,7 +99,7 @@ registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
 }, false);
 
 registerAdminGlobal('auto-assign-rider', async (el: HTMLElement) => {
-  const orderId = String(el?.dataset?.orderId || '').trim();
+  const orderId = String(el?.dataset?.orderId || el?.dataset?.oid || '').trim();
   if (!orderId) return;
 
   try {
@@ -117,7 +117,7 @@ registerAdminGlobal('auto-assign-rider', async (el: HTMLElement) => {
 }, false);
 
 registerAdminGlobal('mark-picked-up', async (el: HTMLElement) => {
-  const orderId = String(el?.dataset?.orderId || '').trim();
+  const orderId = String(el?.dataset?.orderId || el?.dataset?.oid || '').trim();
   if (!orderId) return;
   if (!confirm('确认已取餐，开始配送？')) return;
 
@@ -149,7 +149,7 @@ registerAdminGlobal('mark-picked-up', async (el: HTMLElement) => {
 }, false);
 
 registerAdminGlobal('mark-delivered', async (el: HTMLElement) => {
-  const orderId = String(el?.dataset?.orderId || '').trim();
+  const orderId = String(el?.dataset?.orderId || el?.dataset?.oid || '').trim();
   if (!orderId) return;
   if (!confirm('确认已送达并收款？')) return;
 

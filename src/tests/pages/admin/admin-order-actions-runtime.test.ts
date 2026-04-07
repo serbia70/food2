@@ -14,6 +14,13 @@ test('assign rider source does not force telegram debug alerts during normal adm
   assert.match(source, /await assignRider\(orderId, String\(target\.id \|\| ''\), \{/);
 });
 
+test('assign rider source falls back to data-oid when data-order-id is missing', async () => {
+  const source = await readFile(orderActionsPath, 'utf8');
+
+  assert.match(source, /const orderId = String\(el\?\.dataset\?\.orderId \|\| el\?\.dataset\?\.oid \|\| ''\)\.trim\(\);/);
+  assert.match(source, /const hidden = document\.querySelector\(`\.hidden-data\[data-order-id="\$\{orderId\}"\]`\) as HTMLElement \| null\s*\|\| document\.querySelector\(`\.hidden-data\[data-oid="\$\{orderId\}"\]`\) as HTMLElement \| null;/);
+});
+
 test('admin orders source does not use delayed full page reload for refreshOrderList', async () => {
   const source = await readFile(ordersPath, 'utf8');
 

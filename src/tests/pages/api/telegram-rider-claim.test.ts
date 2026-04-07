@@ -282,9 +282,8 @@ test('POST rider-claim consumes short callback payload', async () => {
   }
 });
 
-test('POST rider-claim 在 decline callback 合法时写回拒单反馈且不更新订单状态', async () => {
-  let updateStatusCalled = false;
-  let remarksPayload: Record<string, unknown> | null = null;
+test('POST rider-claim 在 decline callback 合法时通过 update_status 持久化拒单反馈且不改订单状态', async () => {
+  let updateStatusPayload: Record<string, unknown> | null = null;
   const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'http://localhost/api/rider/status?action=list_available') {
@@ -298,19 +297,9 @@ test('POST rider-claim 在 decline callback 合法时写回拒单反馈且不更
     if (url === 'http://localhost/api/admin/orders') {
       return jsonResponse([buildOrderRow(89)]);
     }
-    if (url === 'http://localhost/api/admin/orders/remarks') {
-      remarksPayload = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+    if (url === 'http://localhost/api/order/update_status/89') {
+      updateStatusPayload = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       return jsonResponse({ success: true });
-    }
-    if (url === 'http://localhost/api/admin/orders') {
-      return jsonResponse([buildOrderRow(88)]);
-    }
-    if (url === 'http://localhost/api/admin/orders/remarks') {
-      return jsonResponse({ success: true });
-    }
-    if (url.startsWith('http://localhost/api/order/update_status/')) {
-      updateStatusCalled = true;
-      throw new Error('decline should not update order status');
     }
     throw new Error(`unexpected fetch: ${url}`);
   });
@@ -331,10 +320,12 @@ test('POST rider-claim 在 decline callback 合法时写回拒单反馈且不更
     const response = await POST({ request } as any);
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { success: true, action: 'decline' });
-    assert.equal(updateStatusCalled, false);
-    assert.equal(remarksPayload?.orderId, '89');
-    assert.ok(Array.isArray(remarksPayload?.remarks));
-    const declineMeta = JSON.parse(String((remarksPayload?.remarks as unknown[])[0] || '').replace(/^dispatch_meta:/, '')) as Record<string, unknown>;
+    assert.equal(updateStatusPayload?.id, 89);
+    assert.equal(updateStatusPayload?.status, 'awaiting_courier');
+    const remarksJson = String(updateStatusPayload?.remarks_json || '');
+    assert.ok(remarksJson.includes('dispatch_meta:'));
+    const persistedRemarks = JSON.parse(remarksJson) as string[];
+    const declineMeta = JSON.parse(String(persistedRemarks[0] || '').replace(/^dispatch_meta:/, '')) as Record<string, unknown>;
     assert.deepEqual(declineMeta, {
       lastRiderDecision: {
         action: 'declined',

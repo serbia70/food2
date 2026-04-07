@@ -170,7 +170,7 @@ test('POST telegram webhook 在 decline callback_query 时直接执行 rider-cla
         });
       }
 
-      if (url === 'https://api.test.local/api/admin/orders/remarks') {
+      if (url === 'https://api.test.local/api/order/update_status/89') {
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },

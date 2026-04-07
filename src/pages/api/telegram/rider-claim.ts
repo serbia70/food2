@@ -196,7 +196,7 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   const existingMeta = readDispatchMetaFromRemarks(await readOrderDispatchMeta(request, orderIdText));
 
   if (callback.action === 'decline') {
-    const feedbackWritten = await writeOrderDispatchMeta(request, orderIdText, {
+    const nextRemarks = buildDispatchMetaRemarks(await readOrderDispatchMeta(request, orderIdText), {
       lastRiderDecision: {
         action: 'declined',
         riderId: String(callback.riderId || '').trim(),
@@ -209,6 +209,17 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
         String(callback.riderId || '').trim(),
       ].filter(Boolean))),
     });
+    const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status/${encodeURIComponent(orderIdText)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: callback.orderId,
+        expected_current_status: 'awaiting_courier',
+        status: 'awaiting_courier',
+        remarks_json: JSON.stringify(nextRemarks),
+      }),
+    });
+    const feedbackWritten = upstream.ok;
     console.info('[telegram/rider-claim:decline]', JSON.stringify({
       orderId: callback.orderId,
       riderId: callback.riderId,

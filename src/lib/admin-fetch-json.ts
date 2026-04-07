@@ -34,13 +34,19 @@ export async function fetchJSON<T = unknown>(url: string, init: RequestInit = {}
     try {
       const res = await fetch(url, mergedInit);
       const text = await res.text();
-      let data: T | null = null;
+      let parsed: unknown = null;
+      let parsedOk = false;
       try {
-        const parsed = text ? JSON.parse(text) : null;
-        data = unwrapCanonicalData<T>(parsed);
+        parsed = text ? JSON.parse(text) : null;
+        parsedOk = true;
       } catch {
-        data = null;
+        parsed = null;
       }
+      const data = parsedOk ? unwrapCanonicalData<T>(parsed) : null;
+      const shouldRetryGet = method === 'GET' && attempt === 0 && (
+        res.status === 502 || res.status === 503 || res.status === 504 || (!parsedOk && text.trim() !== '')
+      );
+      if (shouldRetryGet) continue;
       return { ok: res.ok, status: res.status, data };
     } catch {
       if (method === 'GET' && attempt === 0) continue;

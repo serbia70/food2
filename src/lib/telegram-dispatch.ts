@@ -22,6 +22,15 @@ interface AdminAssignedOrderTelegramInput {
 
 type TelegramClaimAction = 'accept' | 'decline';
 
+interface RiderDeliveryCompleteTelegramInput {
+  orderNo: string;
+  address: string;
+  phone: string;
+  totalAmount: number;
+  pickupEtaMinutes: number;
+  completeCallbackData?: string;
+}
+
 interface TelegramDeepLinkInput {
   baseUrl: string;
   restaurantId: string;
@@ -297,11 +306,11 @@ export function parseTelegramClaimCallback(
 
 export function buildTelegramDispatchMessage(input: TelegramDispatchInput): TelegramDispatchMessage {
   const primaryButtons: TelegramInlineKeyboardButton[] = [
-    { text: '查看并接单', url: input.dashboardLink },
+    { text: '查看订单', url: input.dashboardLink },
   ];
 
   if (input.claimCallbackData) {
-    primaryButtons.unshift({ text: '立即接单', callback_data: input.claimCallbackData });
+    primaryButtons.unshift({ text: '接单', callback_data: input.claimCallbackData });
   }
 
   const phone = String(input.phone || '').trim();
@@ -312,7 +321,7 @@ export function buildTelegramDispatchMessage(input: TelegramDispatchInput): Tele
   return {
     text: [
       `${input.shopName}有新单`,
-      `约 ${input.pickupEtaMinutes} 分钟后可取`,
+      `约 ${input.pickupEtaMinutes} 分钟后送达`,
       `地址：${input.address}`,
       `金额：${input.totalAmount} RSD`,
       `联系电话：${input.phone}`,
@@ -365,7 +374,7 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
 
   const primaryButtons: TelegramInlineKeyboardButton[] = [];
   if (String(input.claimCallbackData || '').trim()) {
-    primaryButtons.push({ text: '立即接单', callback_data: String(input.claimCallbackData).trim() });
+    primaryButtons.push({ text: '接单', callback_data: String(input.claimCallbackData).trim() });
   }
   if (String(input.declineCallbackData || '').trim()) {
     primaryButtons.push({ text: '暂不接单', callback_data: String(input.declineCallbackData).trim() });
@@ -375,6 +384,24 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
     text: trimTelegramLinesToByteLimit(lines, TELEGRAM_ADMIN_ASSIGNED_TEXT_MAX_BYTES),
     replyMarkup: {
       inline_keyboard: primaryButtons.length > 0 ? [primaryButtons] : [],
+    },
+  };
+}
+
+export function buildRiderDeliveryCompleteTelegramMessage(input: RiderDeliveryCompleteTelegramInput): TelegramDispatchMessage {
+  return {
+    text: [
+      '配送中',
+      `订单号：${input.orderNo}`,
+      `地址：${input.address}`,
+      `电话：${input.phone}`,
+      `金额：${input.totalAmount} RSD`,
+      `预计还需 ${input.pickupEtaMinutes} 分钟送达`,
+    ].join('\n'),
+    replyMarkup: {
+      inline_keyboard: String(input.completeCallbackData || '').trim()
+        ? [[{ text: '送餐完成', callback_data: String(input.completeCallbackData).trim() }]]
+        : [],
     },
   };
 }

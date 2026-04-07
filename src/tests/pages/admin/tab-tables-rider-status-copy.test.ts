@@ -39,3 +39,22 @@ test('admin 外卖卡片在 delivering 场景展示骑手兜底链路', async ()
   assert.ok(courierPhoneIndex > courierNameIndex, '姓名缺失时应回退到骑手电话');
   assert.ok(fallbackNameIndex > courierPhoneIndex, '电话缺失时应回退为未命名骑手');
 });
+
+test('admin 外卖卡片在 awaiting_courier 且骑手拒单时展示拒单反馈', async () => {
+  const source = await readTabTablesSource();
+
+  assert.match(source, /readDispatchMetaFromRemarks/);
+
+  assert.match(source, /const riderDeclinedAwaitingCourier = o\.status === ['"]awaiting_courier['"] && lastRiderDecision\?\.action === ['"]declined['"];/);
+
+  const declinedStatusWindow = sliceAround(source, '骑手已拒单', 320, 260).replace(/\s+/g, ' ');
+  assert.match(declinedStatusWindow, /riderDeclinedAwaitingCourier \? ['"]骑手已拒单['"]/);
+
+  const feedbackWindow = sliceAround(source, '骑手反馈：', 320, 260).replace(/\s+/g, ' ');
+  assert.match(feedbackWindow, /lastRiderDecision\?\.riderName/);
+  assert.match(feedbackWindow, /已拒单/);
+  assert.match(feedbackWindow, /formatBelgradeHHmm\(lastRiderDecision\?\.at\)/);
+
+  const hiddenDataWindow = sliceAround(source, 'data-remarks=', 120, 180).replace(/\s+/g, ' ');
+  assert.match(hiddenDataWindow, /data-remarks=\{o\.remarksJson\}/);
+});

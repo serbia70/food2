@@ -23,6 +23,16 @@ export const MQTT_PASSWORD = '';
 export const APP_NAME = 'MeituanGo';
 export const APP_VERSION = String(Date.now());
 
+export function parsePositiveIntConfig(value: unknown, fallback: number): number {
+  const parsed = Number(String(value ?? '').trim());
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : fallback;
+}
+
+export const DISPATCH_AUTO_REASSIGN_MINUTES = parsePositiveIntConfig(
+  (import.meta as any).env?.PUBLIC_DISPATCH_AUTO_REASSIGN_MINUTES ?? process.env.PUBLIC_DISPATCH_AUTO_REASSIGN_MINUTES,
+  5,
+);
+
 export function formatPrice(amount: number): string {
   return `RSD ${amount.toLocaleString()}`;
 }

@@ -1,9 +1,9 @@
 import type { APIRoute } from 'astro';
 import { timingSafeEqual } from 'node:crypto';
 import { API_BASE_URL } from '../../../config.ts';
-import { buildDispatchMetaRemarks, readDispatchMetaFromRemarks } from '../../../lib/rider-dispatch.ts';
+import { buildDispatchMetaRemarks, getRiderDispatchState, readDispatchMetaFromRemarks } from '../../../lib/rider-dispatch.ts';
 import { parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
-import { readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
+import { pickNextAvailableRider, readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
 import { readTelegramRequestSecret } from '../../../lib/telegram-secrets.ts';
 
 export const prerender = false;
@@ -63,6 +63,19 @@ function safeEqualText(left: string, right: string): boolean {
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
+function hasDispatchMetaConstraints(remarksJson: string, meta: ReturnType<typeof readDispatchMetaFromRemarks>): boolean {
+  if (remarksJson.includes('dispatch_meta:')) return true;
+  return !!(
+    meta.lastRiderDecision
+    || meta.declinedRiderIds.length > 0
+    || meta.currentRiderId
+    || meta.currentAssignedAt
+    || meta.currentExpiresAt
+    || meta.invalidatedRiderIds.length > 0
+    || meta.lastInvalidationReason
+  );
+}
+
 function isTrustedTelegramRequest(request: Request): boolean {
   const expected = readTelegramRequestSecret();
   if (!expected) return false;
@@ -74,18 +87,34 @@ function isTrustedTelegramRequest(request: Request): boolean {
   return provided !== '' && safeEqualText(provided, expected);
 }
 
-async function readOrderDispatchMeta(request: Request, orderId: string): Promise<string> {
+async function readOrderDispatchSnapshot(
+  request: Request,
+  orderId: string,
+): Promise<{ status: string; remarksJson: string }> {
   const upstream = await fetch(`${readInternalApiBaseUrl()}/api/admin/orders`, {
     headers: buildForwardHeaders(request),
   });
   const text = await upstream.text();
-  if (!upstream.ok || !text) return '';
-  const parsed = JSON.parse(text) as unknown;
+  if (!upstream.ok || !text) return { status: '', remarksJson: '' };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    return { status: '', remarksJson: '' };
+  }
+
   const rows = Array.isArray(parsed) ? parsed : [];
   const matched = rows.find((row) => String((row as Record<string, unknown>)?.id || '').trim() === orderId);
-  return matched && typeof matched === 'object'
-    ? String((matched as Record<string, unknown>).remarksJson || (matched as Record<string, unknown>).remarks_json || '').trim()
-    : '';
+  if (!matched || typeof matched !== 'object') return { status: '', remarksJson: '' };
+  return {
+    status: String((matched as Record<string, unknown>).status || '').trim(),
+    remarksJson: String((matched as Record<string, unknown>).remarksJson || (matched as Record<string, unknown>).remarks_json || '').trim(),
+  };
+}
+
+async function readOrderDispatchMeta(request: Request, orderId: string): Promise<string> {
+  return (await readOrderDispatchSnapshot(request, orderId)).remarksJson;
 }
 
 async function writeOrderDispatchMeta(
@@ -193,21 +222,58 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   }
 
   const orderIdText = String(callback.orderId || '').trim();
-  const existingMeta = readDispatchMetaFromRemarks(await readOrderDispatchMeta(request, orderIdText));
+  const riderIdText = String(callback.riderId || '').trim();
+  const nowIso = new Date().toISOString();
+  const orderSnapshot = await readOrderDispatchSnapshot(request, orderIdText);
+  const existingMeta = readDispatchMetaFromRemarks(orderSnapshot.remarksJson);
+  const dispatchState = getRiderDispatchState(
+    { status: orderSnapshot.status || 'awaiting_courier' },
+    existingMeta,
+    riderIdText,
+    nowIso,
+  );
 
-  if (callback.action === 'decline') {
-    const nextRemarks = buildDispatchMetaRemarks(await readOrderDispatchMeta(request, orderIdText), {
+  const enforceDispatchConstraints = hasDispatchMetaConstraints(orderSnapshot.remarksJson, existingMeta);
+  if (dispatchState.invalidReason) {
+    return new Response(JSON.stringify({ success: false, error: 'dispatch_invalidated', reason: dispatchState.invalidReason }), {
+      status: 409,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const isDeclineAction = callback.action === 'decline';
+  const actionAllowed = isDeclineAction ? dispatchState.canDecline : dispatchState.canAccept;
+  if (enforceDispatchConstraints && !actionAllowed) {
+    return new Response(JSON.stringify({ success: false, error: 'dispatch_invalidated', reason: '已改派' }), {
+      status: 409,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (isDeclineAction) {
+    const declinedRiderIds = Array.from(new Set([
+      ...existingMeta.declinedRiderIds,
+      riderIdText,
+    ].filter(Boolean)));
+    const invalidatedRiderIds = Array.from(new Set([
+      ...existingMeta.invalidatedRiderIds,
+      riderIdText,
+    ].filter(Boolean)));
+
+    const nextRemarks = buildDispatchMetaRemarks(orderSnapshot.remarksJson, {
       lastRiderDecision: {
         action: 'declined',
-        riderId: String(callback.riderId || '').trim(),
+        riderId: riderIdText,
         riderName: resolvedName,
         riderPhone: resolvedPhone,
-        at: new Date().toISOString(),
+        at: nowIso,
       },
-      declinedRiderIds: Array.from(new Set([
-        ...existingMeta.declinedRiderIds,
-        String(callback.riderId || '').trim(),
-      ].filter(Boolean))),
+      declinedRiderIds,
+      currentRiderId: '',
+      currentAssignedAt: '',
+      currentExpiresAt: '',
+      invalidatedRiderIds,
+      lastInvalidationReason: 'declined',
     });
     const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status/${encodeURIComponent(orderIdText)}`, {
       method: 'POST',
@@ -219,16 +285,56 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
         remarks_json: JSON.stringify(nextRemarks),
       }),
     });
-    const feedbackWritten = upstream.ok;
+
+    if (!upstream.ok) {
+      const text = await upstream.text();
+      return new Response(text || JSON.stringify({ success: false, error: 'decline_feedback_failed' }), {
+        status: upstream.status,
+        headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
+      });
+    }
+
+    let reassigned = false;
+    try {
+      const riderListUpstream = await fetch(`${readInternalApiBaseUrl()}/api/rider/status?action=list_available`, {
+        headers: buildForwardHeaders(request),
+      });
+      const riders = readOnlineRiders((readJsonObject(await riderListUpstream.text()) || {}).riders);
+      const nextRider = pickNextAvailableRider({
+        riders,
+        lastAssignedRiderId: riderIdText,
+        excludedRiderIds: Array.from(new Set([...declinedRiderIds, ...invalidatedRiderIds])),
+      });
+
+      if (nextRider) {
+        const redispatch = await fetch(`${readInternalApiBaseUrl()}/api/admin/rider-dispatch`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...buildForwardHeaders(request),
+          },
+          body: JSON.stringify({
+            orderId: callback.orderId,
+            action: 'publish',
+            forceRiderId: String(nextRider.id || '').trim(),
+          }),
+        });
+        reassigned = redispatch.ok;
+      }
+    } catch {
+      reassigned = false;
+    }
+
     console.info('[telegram/rider-claim:decline]', JSON.stringify({
       orderId: callback.orderId,
       riderId: callback.riderId,
       riderName: resolvedName,
       riderPhone: resolvedPhone,
       chatId,
-      feedbackWritten,
+      feedbackWritten: true,
+      reassigned,
     }));
-    return new Response(JSON.stringify({ success: true, action: 'decline' }), {
+    return new Response(JSON.stringify({ success: true, action: 'decline', reassigned }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -237,10 +343,10 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   const feedbackWritten = await writeOrderDispatchMeta(request, orderIdText, {
     lastRiderDecision: {
       action: 'accepted',
-      riderId: String(callback.riderId || '').trim(),
+      riderId: riderIdText,
       riderName: resolvedName,
       riderPhone: resolvedPhone,
-      at: new Date().toISOString(),
+      at: nowIso,
     },
     declinedRiderIds: [],
   });

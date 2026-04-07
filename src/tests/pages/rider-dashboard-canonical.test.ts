@@ -52,6 +52,13 @@ test('rider dashboard source uses canonical rider and order fields', async () =>
   assert.match(source, /poolTitle\.textContent = '待接单池';/);
   assert.match(source, /mineTitle\.textContent = '我的配送';/);
   assert.match(source, /const etaMinutes = Number\(o\.pickupEtaMinutes \|\| 0\);/);
+  assert.match(source, /const dispatchMeta = readDispatchMetaFromRemarks\(o\.remarksJson \|\| o\.remarks_json\);/);
+  assert.match(source, /const actionState = getRiderDispatchState\(o, dispatchMeta, rider\?\.id\);/);
+  assert.match(source, /const invalidReason = String\(actionState\.invalidReason \|\| ''\)\.trim\(\);/);
+  assert.match(source, /invalidReason === '已改派' \|\| invalidReason === '接单超时'/);
+  assert.match(source, /button\.disabled = true;/);
+  assert.match(source, /button\.classList\.add\('btn-disabled'\);/);
+  assert.match(source, /button\.textContent = actionState\.invalidReason;/);
   assert.match(source, /const error = String\(data\.error \|\| 'load_orders_failed'\);/);
   assert.match(source, /const failed = document\.createElement\('div'\);/);
   assert.match(source, /failed\.className = 'empty-tip';/);
@@ -62,7 +69,7 @@ test('rider dashboard source uses canonical rider and order fields', async () =>
   assert.match(source, /shop\.textContent = o\.shopName \|\| 'Shop';/);
   assert.match(source, /total\.textContent = `\$\{o\.totalAmount \|\| 0\} RSD`;/);
   assert.match(source, /status\.textContent = getAdminDispatchStatusCopy\(o\.status\);/);
-  assert.match(source, /import \{[^}]*getAdminDispatchStatusCopy[^}]*\} from '\.\.\/\.\.\/lib\/rider-dispatch\.ts';/);
+  assert.match(source, /import \{[^}]*getAdminDispatchStatusCopy[^}]*getRiderDispatchState[^}]*readDispatchMetaFromRemarks[^}]*\} from '\.\.\/\.\.\/lib\/rider-dispatch\.ts';/);
   assert.match(source, /String\(o\.courierPhone \|\| ''\)\.trim\(\) === String\(rider\?\.phone \|\| ''\)\.trim\(\)/);
 
   assert.doesNotMatch(source, /status\.textContent = o\.status;/);

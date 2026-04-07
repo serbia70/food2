@@ -11,9 +11,24 @@ export interface DispatchDecisionMeta {
 export interface DispatchMeta {
   lastRiderDecision: DispatchDecisionMeta | null;
   declinedRiderIds: string[];
+  currentRiderId: string;
+  currentAssignedAt: string;
+  currentExpiresAt: string;
+  invalidatedRiderIds: string[];
+  lastInvalidationReason: 'declined' | 'timeout' | 'reassigned' | null;
 }
 
 const DISPATCH_META_PREFIX = 'dispatch_meta:';
+
+const EMPTY_DISPATCH_META: DispatchMeta = {
+  lastRiderDecision: null,
+  declinedRiderIds: [],
+  currentRiderId: '',
+  currentAssignedAt: '',
+  currentExpiresAt: '',
+  invalidatedRiderIds: [],
+  lastInvalidationReason: null,
+};
 
 export function formatPickupEtaLabel(minutes: number | null | undefined): string {
   const value = Number(minutes || 0);
@@ -49,6 +64,25 @@ export function isRiderClaimableOrder(order: {
   return isAwaitingCourierOrder(order);
 }
 
+export function getRiderActionFlags(
+  order: {
+    status?: string | null;
+    courierPhone?: string | null;
+    courier_phone?: string | null;
+  },
+  riderPhone?: string | null,
+) {
+  const status = String(order?.status || '').trim();
+  const phone = String(riderPhone || '').trim();
+  const orderPhone = String(order?.courierPhone || order?.courier_phone || '').trim();
+
+  return {
+    canAccept: status === 'awaiting_courier',
+    canDecline: status === 'awaiting_courier',
+    canComplete: status === 'delivering' && !!phone && phone === orderPhone,
+  };
+}
+
 export function pickAvailableRiders<T extends Pick<Rider, 'id' | 'name' | 'phone' | 'status'>>(riders: T[]): T[] {
   return riders.filter((rider) => rider.status === 'available' && String(rider.phone || '').trim() !== '');
 }
@@ -80,18 +114,35 @@ export function readDispatchMetaFromRemarks(remarksJson: string | null | undefin
             at: String(parsed.lastRiderDecision.at || '').trim(),
           }
         : null;
+
+      const lastInvalidationReason = parsed.lastInvalidationReason === 'declined'
+        || parsed.lastInvalidationReason === 'timeout'
+        || parsed.lastInvalidationReason === 'reassigned'
+        ? parsed.lastInvalidationReason
+        : null;
+
+      const currentAssignedAt = String(parsed.currentAssignedAt || '').trim();
+      const currentExpiresAt = String(parsed.currentExpiresAt || '').trim();
+
       return {
         lastRiderDecision: last && last.riderId && last.riderName && last.riderPhone && last.at ? last : null,
         declinedRiderIds: Array.isArray(parsed.declinedRiderIds)
           ? parsed.declinedRiderIds.map((item) => String(item || '').trim()).filter(Boolean)
           : [],
+        currentRiderId: String(parsed.currentRiderId || '').trim(),
+        currentAssignedAt: parseTimestamp(currentAssignedAt) > 0 ? currentAssignedAt : '',
+        currentExpiresAt: parseTimestamp(currentExpiresAt) > 0 ? currentExpiresAt : '',
+        invalidatedRiderIds: Array.isArray(parsed.invalidatedRiderIds)
+          ? parsed.invalidatedRiderIds.map((item) => String(item || '').trim()).filter(Boolean)
+          : [],
+        lastInvalidationReason,
       };
     } catch {
-      return { lastRiderDecision: null, declinedRiderIds: [] };
+      continue;
     }
   }
 
-  return { lastRiderDecision: null, declinedRiderIds: [] };
+  return { ...EMPTY_DISPATCH_META };
 }
 
 export function buildDispatchMetaRemarks(
@@ -111,12 +162,102 @@ export function buildDispatchMetaRemarks(
   return filtered;
 }
 
+export function getRiderDispatchState(
+  order: {
+    status?: string | null;
+    courierPhone?: string | null;
+    courier_phone?: string | null;
+  },
+  meta: DispatchMeta,
+  riderId?: string | null,
+  nowIso?: string,
+): {
+  canAccept: boolean;
+  canDecline: boolean;
+  canComplete: boolean;
+  invalidReason: string;
+} {
+  const status = String(order?.status || '').trim();
+  const currentRiderId = String(meta.currentRiderId || '').trim();
+  const currentId = String(riderId || '').trim();
+
+  if (status === 'delivering') {
+    return {
+      canAccept: false,
+      canDecline: false,
+      canComplete: !!currentId && currentId === currentRiderId,
+      invalidReason: '',
+    };
+  }
+
+  if (status !== 'awaiting_courier') {
+    return {
+      canAccept: false,
+      canDecline: false,
+      canComplete: false,
+      invalidReason: '',
+    };
+  }
+
+  if (meta.invalidatedRiderIds.includes(currentId)) {
+    return {
+      canAccept: false,
+      canDecline: false,
+      canComplete: false,
+      invalidReason: '已改派',
+    };
+  }
+
+  const now = parseTimestamp(nowIso || new Date().toISOString());
+  const expiresAt = parseTimestamp(meta.currentExpiresAt);
+  const isCurrentRider = !!currentId && currentId === currentRiderId;
+
+  if (isCurrentRider && now > 0 && expiresAt > 0 && now > expiresAt) {
+    return {
+      canAccept: false,
+      canDecline: false,
+      canComplete: false,
+      invalidReason: '接单超时',
+    };
+  }
+
+  if (isCurrentRider && now > 0 && expiresAt > 0 && now <= expiresAt) {
+    return {
+      canAccept: true,
+      canDecline: true,
+      canComplete: false,
+      invalidReason: '',
+    };
+  }
+
+  if (currentRiderId && currentId && currentId !== currentRiderId) {
+    return {
+      canAccept: false,
+      canDecline: false,
+      canComplete: false,
+      invalidReason: '已改派',
+    };
+  }
+
+  return {
+    canAccept: false,
+    canDecline: false,
+    canComplete: false,
+    invalidReason: '',
+  };
+}
+
 export function filterAvailableRidersForOrder<T extends Pick<Rider, 'id' | 'name' | 'phone' | 'status'>>(
   riders: T[],
   remarksJson: string | null | undefined,
 ): T[] {
-  const declined = new Set(readDispatchMetaFromRemarks(remarksJson).declinedRiderIds);
-  return buildContactableRiderRows(riders).filter((rider) => !declined.has(String(rider.id || '').trim()));
+  const meta = readDispatchMetaFromRemarks(remarksJson);
+  const declined = new Set(meta.declinedRiderIds);
+  const invalidated = new Set(meta.invalidatedRiderIds);
+  return buildContactableRiderRows(riders).filter((rider) => {
+    const riderId = String(rider.id || '').trim();
+    return !declined.has(riderId) && !invalidated.has(riderId);
+  });
 }
 
 const STALE_AWAITING_ORDER_MS = 6 * 60 * 60 * 1000;

@@ -70,6 +70,60 @@ test('pickNextAvailableRider falls back to first rider when cursor rider is offl
   assert.equal(rider?.id, 2);
 });
 
+test('pickNextAvailableRider skips excluded riders and current rider', () => {
+  const rider = pickNextAvailableRider({
+    riders: [
+      { id: 1, name: 'A', phone: '061', status: 'available' },
+      { id: 2, name: 'B', phone: '062', status: 'available' },
+      { id: 3, name: 'C', phone: '063', status: 'available' },
+    ],
+    lastAssignedRiderId: '3',
+    excludedRiderIds: ['1'],
+  });
+
+  assert.equal(rider?.id, 2);
+});
+
+test('pickNextAvailableRider excludes riders regardless of type or whitespace', () => {
+  const result = pickNextAvailableRider({
+    riders: [
+      { id: '1', name: 'A', phone: '123', status: 'available' },
+      { id: '2', name: 'B', phone: '123', status: 'available' },
+      { id: '3', name: 'C', phone: '123', status: 'available' },
+      { id: '4', name: 'D', phone: '123', status: 'available' },
+    ],
+    lastAssignedRiderId: '1',
+    excludedRiderIds: [' 2 ', 3],
+  });
+
+  assert.strictEqual(result?.id, '4');
+});
+
+test('pickNextAvailableRider returns null when only current rider remains', () => {
+  const rider = pickNextAvailableRider({
+    riders: [
+      { id: '1', name: 'A', phone: '061', status: 'available' },
+      { id: '2', name: 'B', phone: '062', status: 'available' },
+    ],
+    lastAssignedRiderId: '1',
+    excludedRiderIds: ['2'],
+  });
+
+  assert.equal(rider, null);
+});
+
+test('pickNextAvailableRider returns null when no rider remains after exclusion', () => {
+  const rider = pickNextAvailableRider({
+    riders: [
+      { id: 1, name: 'A', phone: '061', status: 'available' },
+    ],
+    lastAssignedRiderId: '1',
+    excludedRiderIds: ['1'],
+  });
+
+  assert.equal(rider, null);
+});
+
 test('buildAssignedOrderStatusPayload writes canonical awaiting_courier payload', () => {
   assert.deepEqual(
     buildAssignedOrderStatusPayload({

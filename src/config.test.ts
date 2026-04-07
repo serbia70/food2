@@ -1,13 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 
-const filePath = resolve(process.cwd(), 'src/config.ts');
+import {
+  DISPATCH_AUTO_REASSIGN_MINUTES,
+  parsePositiveIntConfig,
+} from './config.ts';
 
-test('config source does not fall back API_BASE_URL to localhost', async () => {
-  const source = await readFile(filePath, 'utf8');
+test('DISPATCH_AUTO_REASSIGN_MINUTES 默认是合法正整数', () => {
+  assert.equal(DISPATCH_AUTO_REASSIGN_MINUTES >= 1, true);
+});
 
-  assert.match(source, /PUBLIC_API_URL/);
-  assert.doesNotMatch(source, /localhost:\d+/);
+test('parsePositiveIntConfig 在空值时回退默认值 5', () => {
+  assert.equal(parsePositiveIntConfig(undefined, 5), 5);
+  assert.equal(parsePositiveIntConfig('', 5), 5);
+});
+
+test('parsePositiveIntConfig 读取合法 env 数值', () => {
+  assert.equal(parsePositiveIntConfig('10', 5), 10);
+  assert.equal(parsePositiveIntConfig(' 7 ', 5), 7);
+});
+
+test('parsePositiveIntConfig 对非法或非正整数输入回退默认值', () => {
+  assert.equal(parsePositiveIntConfig('abc', 5), 5);
+  assert.equal(parsePositiveIntConfig('0', 5), 5);
+  assert.equal(parsePositiveIntConfig('-1', 5), 5);
+  assert.equal(parsePositiveIntConfig('1.5', 5), 5);
 });

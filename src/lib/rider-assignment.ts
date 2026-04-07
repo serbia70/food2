@@ -46,15 +46,23 @@ export function readOnlineRiders(input: unknown): AssignableRider[] {
 export function pickNextAvailableRider({
   riders,
   lastAssignedRiderId,
+  excludedRiderIds = [],
 }: {
   riders: AssignableRider[];
   lastAssignedRiderId: string;
+  excludedRiderIds?: Array<string | number>;
 }): AssignableRider | null {
   if (!Array.isArray(riders) || riders.length === 0) return null;
 
-  const currentIndex = riders.findIndex((row) => String(row.id || '').trim() === String(lastAssignedRiderId || '').trim());
-  if (currentIndex === -1) return riders[0] || null;
-  return riders[(currentIndex + 1) % riders.length] || null;
+  const excluded = new Set(excludedRiderIds.map((id) => String(id ?? '').trim()).filter(Boolean));
+  const availableRiders = riders.filter((rider) => !excluded.has(String(rider.id || '').trim()));
+  if (availableRiders.length === 0) return null;
+
+  const currentRiderId = String(lastAssignedRiderId || '').trim();
+  const currentIndex = availableRiders.findIndex((row) => String(row.id || '').trim() === currentRiderId);
+  if (currentIndex === -1) return availableRiders[0] || null;
+  if (availableRiders.length === 1) return null;
+  return availableRiders[(currentIndex + 1) % availableRiders.length] || null;
 }
 
 export function buildAssignedOrderStatusPayload({

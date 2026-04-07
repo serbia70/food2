@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildAdminAssignedOrderTelegramMessage,
+  buildRiderDeliveryCompleteTelegramMessage,
   buildTelegramClaimCallback,
   buildTelegramDispatchMessage,
   buildTelegramDeepLink,
@@ -30,8 +31,8 @@ test('buildTelegramDispatchMessage includes eta and action labels', () => {
   });
 
   assert.match(message.text, /101 店有新单/);
-  assert.match(message.text, /约 15 分钟后可取/);
-  assert.equal(message.replyMarkup.inline_keyboard[0]?.[0]?.text, '查看并接单');
+  assert.match(message.text, /约 15 分钟后送达/);
+  assert.equal(message.replyMarkup.inline_keyboard[0]?.[0]?.text, '查看订单');
 });
 
 test('telegram short claim callback fits Telegram callback_data limit and can be parsed', () => {
@@ -174,7 +175,7 @@ test('buildTelegramDispatchMessage 在无 callback data 时保留查看入口和
   });
 
   assert.deepEqual(message.replyMarkup.inline_keyboard[0], [
-    { text: '查看并接单', url: 'https://food.example.com/rider/dashboard?orderId=88&restaurantId=101' },
+    { text: '查看订单', url: 'https://food.example.com/rider/dashboard?orderId=88&restaurantId=101' },
     { text: '联系门店：0601', url: 'tel:0601' },
   ]);
 });
@@ -197,7 +198,7 @@ test('buildAdminAssignedOrderTelegramMessage trims oversized item summary to kee
   assert.match(message.text, /预约送达：2026-04-04 12:30:00/);
   assert.match(message.text, /菜品过多，已截断/);
   assert.deepEqual(message.replyMarkup.inline_keyboard[0]?.slice(0, 2), [
-    { text: '立即接单', callback_data: 'rc2.test' },
+    { text: '接单', callback_data: 'rc2.test' },
     { text: '暂不接单', callback_data: 'rc2.decline' },
   ]);
 });
@@ -213,4 +214,38 @@ test('buildAdminAssignedOrderTelegramMessage omits tel url button even when phon
   });
 
   assert.equal(message.replyMarkup.inline_keyboard.flat().some((button) => String(button?.url || '').startsWith('tel:0613083888')), false);
+});
+
+test('buildAdminAssignedOrderTelegramMessage renders accept and decline buttons only for awaiting_courier stage', () => {
+  const message = buildAdminAssignedOrderTelegramMessage({
+    orderNo: 'NO501',
+    address: 'Beograd 1',
+    totalAmount: 1200,
+    phone: '0601',
+    pickupEtaMinutes: 15,
+    itemSummary: ['可乐 x1'],
+    claimCallbackData: 'claim-1',
+    declineCallbackData: 'decline-1',
+  });
+
+  assert.deepEqual(message.replyMarkup.inline_keyboard, [[
+    { text: '接单', callback_data: 'claim-1' },
+    { text: '暂不接单', callback_data: 'decline-1' },
+  ]]);
+});
+
+test('buildRiderDeliveryCompleteTelegramMessage renders complete button for delivering stage', () => {
+  const message = buildRiderDeliveryCompleteTelegramMessage({
+    orderNo: 'NO501',
+    address: 'Beograd 1',
+    phone: '0601',
+    totalAmount: 1200,
+    pickupEtaMinutes: 15,
+    completeCallbackData: 'complete-1',
+  });
+
+  assert.deepEqual(message.replyMarkup.inline_keyboard, [[
+    { text: '送餐完成', callback_data: 'complete-1' },
+  ]]);
+  assert.match(message.text, /配送中/);
 });

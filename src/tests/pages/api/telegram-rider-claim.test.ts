@@ -242,12 +242,6 @@ test('POST rider-claim consumes short callback payload', async () => {
     if (url === 'http://localhost/api/admin/orders/remarks') {
       return jsonResponse({ success: true });
     }
-    if (url === 'http://localhost/api/admin/orders') {
-      return jsonResponse([buildOrderRow(88)]);
-    }
-    if (url === 'http://localhost/api/admin/orders/remarks') {
-      return jsonResponse({ success: true });
-    }
     if (url === 'http://localhost/api/order/update_status/88') {
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.deepEqual(body, {
@@ -319,7 +313,7 @@ test('POST rider-claim 在 decline callback 合法时通过 update_status 持久
     const request = createClaimRequest(JSON.stringify({ callbackData, chatId: 'chat-4' }));
     const response = await POST({ request } as any);
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { success: true, action: 'decline' });
+    assert.deepEqual(await response.json(), { success: true, action: 'decline', reassigned: false });
     assert.equal(updateStatusPayload?.id, 89);
     assert.equal(updateStatusPayload?.status, 'awaiting_courier');
     const remarksJson = String(updateStatusPayload?.remarks_json || '');
@@ -335,6 +329,11 @@ test('POST rider-claim 在 decline callback 合法时通过 update_status 持久
         at: String((declineMeta.lastRiderDecision as Record<string, unknown>)?.at || ''),
       },
       declinedRiderIds: ['4'],
+      currentRiderId: '',
+      currentAssignedAt: '',
+      currentExpiresAt: '',
+      invalidatedRiderIds: ['4'],
+      lastInvalidationReason: 'declined',
     });
     assert.ok(!Number.isNaN(Date.parse(String((declineMeta.lastRiderDecision as Record<string, unknown>)?.at || ''))));
   } finally {
@@ -342,6 +341,237 @@ test('POST rider-claim 在 decline callback 合法时通过 update_status 持久
   }
 });
 
+test('POST rider-claim 在骑手已失效时返回 dispatch_invalidated 409', async () => {
+  const remarksJson = JSON.stringify([
+    'dispatch_meta:{"lastRiderDecision":null,"declinedRiderIds":[],"currentRiderId":"8","currentAssignedAt":"2026-04-07T10:00:00.000Z","currentExpiresAt":"2099-04-07T10:05:00.000Z","invalidatedRiderIds":["7"],"lastInvalidationReason":"reassigned"}',
+  ]);
+
+  const restoreFetch = withMockedFetch(async (input: string | URL | Request) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url === 'http://localhost/api/rider/status?action=list_available') {
+      return jsonResponse({
+        success: true,
+        riders: [{ id: 7, name: '骑手A', phone: '0617', status: 'available', telegramChatId: 'chat-7' }],
+      });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(201, remarksJson)]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
+  try {
+    const callbackData = buildTelegramShortClaimCallback({
+      orderId: 201,
+      riderId: 7,
+      riderName: '骑手A',
+      riderPhone: '0617',
+      restaurantId: '101',
+      telegramChatId: 'chat-7',
+      expiresAt: Date.now() + 60_000,
+    });
+    const response = await POST({ request: createClaimRequest(JSON.stringify({ callbackData, chatId: 'chat-7' })) } as any);
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), {
+      success: false,
+      error: 'dispatch_invalidated',
+      reason: '已改派',
+    });
+  } finally {
+    restoreFetch();
+  }
+});
+
+test('POST rider-claim 在当前有效骑手为空时也拒绝旧 callback', async () => {
+  const remarksJson = JSON.stringify([
+    'dispatch_meta:{"lastRiderDecision":{"action":"declined","riderId":"9","riderName":"别的骑手","riderPhone":"0619","at":"2026-04-07T10:01:00.000Z"},"declinedRiderIds":["9"],"currentRiderId":"","currentAssignedAt":"","currentExpiresAt":"","invalidatedRiderIds":["9"],"lastInvalidationReason":"declined"}',
+  ]);
+
+  const restoreFetch = withMockedFetch(async (input: string | URL | Request) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url === 'http://localhost/api/rider/status?action=list_available') {
+      return jsonResponse({
+        success: true,
+        riders: [{ id: 7, name: '骑手A', phone: '0617', status: 'available', telegramChatId: 'chat-7' }],
+      });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(203, remarksJson)]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
+  try {
+    const callbackData = buildTelegramShortClaimCallback({
+      orderId: 203,
+      riderId: 7,
+      riderName: '骑手A',
+      riderPhone: '0617',
+      restaurantId: '101',
+      telegramChatId: 'chat-7',
+      expiresAt: Date.now() + 60_000,
+    });
+    const response = await POST({ request: createClaimRequest(JSON.stringify({ callbackData, chatId: 'chat-7' })) } as any);
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), {
+      success: false,
+      error: 'dispatch_invalidated',
+      reason: '已改派',
+    });
+  } finally {
+    restoreFetch();
+  }
+});
+
+test('POST rider-claim 在当前骑手 decline 时立即续派下一位骑手', async () => {
+  const remarksJson = JSON.stringify([
+    'dispatch_meta:{"lastRiderDecision":null,"declinedRiderIds":[],"currentRiderId":"7","currentAssignedAt":"2026-04-07T10:00:00.000Z","currentExpiresAt":"2099-04-07T10:05:00.000Z","invalidatedRiderIds":[],"lastInvalidationReason":null}',
+  ]);
+
+  const calls: string[] = [];
+  let dispatchPayload: Record<string, unknown> | null = null;
+  const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    calls.push(url);
+    if (url === 'http://localhost/api/rider/status?action=list_available') {
+      return jsonResponse({
+        success: true,
+        riders: [
+          { id: 7, name: '骑手A', phone: '0617', status: 'available', telegramChatId: 'chat-7' },
+          { id: 8, name: '骑手B', phone: '0618', status: 'available', telegramChatId: 'chat-8' },
+        ],
+      });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(202, remarksJson)]);
+    }
+    if (url === 'http://localhost/api/order/update_status/202') {
+      return jsonResponse({ success: true });
+    }
+    if (url === 'http://localhost/api/admin/rider-dispatch') {
+      dispatchPayload = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      return jsonResponse({ success: true });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
+  try {
+    const callbackData = buildTelegramShortClaimCallback({
+      orderId: 202,
+      riderId: 7,
+      riderName: '骑手A',
+      riderPhone: '0617',
+      restaurantId: '101',
+      telegramChatId: 'chat-7',
+      expiresAt: Date.now() + 60_000,
+      action: 'decline',
+    });
+    const response = await POST({ request: createClaimRequest(JSON.stringify({ callbackData, chatId: 'chat-7' })) } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true, action: 'decline', reassigned: true });
+    assert.ok(calls.includes('http://localhost/api/admin/rider-dispatch'));
+    assert.deepEqual(dispatchPayload, {
+      orderId: 202,
+      action: 'publish',
+      forceRiderId: '8',
+    });
+  } finally {
+    restoreFetch();
+  }
+});
+
+test('POST rider-claim 在 decline 落库失败时返回上游失败且不假成功', async () => {
+  const remarksJson = JSON.stringify([
+    'dispatch_meta:{"lastRiderDecision":null,"declinedRiderIds":[],"currentRiderId":"7","currentAssignedAt":"2026-04-07T10:00:00.000Z","currentExpiresAt":"2099-04-07T10:05:00.000Z","invalidatedRiderIds":[],"lastInvalidationReason":null}',
+  ]);
+
+  const calls: string[] = [];
+  const restoreFetch = withMockedFetch(async (input: string | URL | Request) => {
+    const url = String(input instanceof Request ? input.url : input);
+    calls.push(url);
+    if (url === 'http://localhost/api/rider/status?action=list_available') {
+      return jsonResponse({
+        success: true,
+        riders: [
+          { id: 7, name: '骑手A', phone: '0617', status: 'available', telegramChatId: 'chat-7' },
+          { id: 8, name: '骑手B', phone: '0618', status: 'available', telegramChatId: 'chat-8' },
+        ],
+      });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(204, remarksJson)]);
+    }
+    if (url === 'http://localhost/api/order/update_status/204') {
+      return jsonResponse({ success: false, error: 'write_failed' }, 503);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
+  try {
+    const callbackData = buildTelegramShortClaimCallback({
+      orderId: 204,
+      riderId: 7,
+      riderName: '骑手A',
+      riderPhone: '0617',
+      restaurantId: '101',
+      telegramChatId: 'chat-7',
+      expiresAt: Date.now() + 60_000,
+      action: 'decline',
+    });
+    const response = await POST({ request: createClaimRequest(JSON.stringify({ callbackData, chatId: 'chat-7' })) } as any);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { success: false, error: 'write_failed' });
+    assert.equal(calls.includes('http://localhost/api/admin/rider-dispatch'), false);
+  } finally {
+    restoreFetch();
+  }
+});
+
+test('POST rider-claim 在 decline 后续派请求抛异常时仍返回拒单成功', async () => {
+  const remarksJson = JSON.stringify([
+    'dispatch_meta:{"lastRiderDecision":null,"declinedRiderIds":[],"currentRiderId":"7","currentAssignedAt":"2026-04-07T10:00:00.000Z","currentExpiresAt":"2099-04-07T10:05:00.000Z","invalidatedRiderIds":[],"lastInvalidationReason":null}',
+  ]);
+
+  let riderStatusCalls = 0;
+  const restoreFetch = withMockedFetch(async (input: string | URL | Request) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url === 'http://localhost/api/rider/status?action=list_available') {
+      riderStatusCalls += 1;
+      if (riderStatusCalls === 1) {
+        return jsonResponse({
+          success: true,
+          riders: [{ id: 7, name: '骑手A', phone: '0617', status: 'available', telegramChatId: 'chat-7' }],
+        });
+      }
+      throw new Error('redispatch network error');
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([buildOrderRow(205, remarksJson)]);
+    }
+    if (url === 'http://localhost/api/order/update_status/205') {
+      return jsonResponse({ success: true });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
+  try {
+    const callbackData = buildTelegramShortClaimCallback({
+      orderId: 205,
+      riderId: 7,
+      riderName: '骑手A',
+      riderPhone: '0617',
+      restaurantId: '101',
+      telegramChatId: 'chat-7',
+      expiresAt: Date.now() + 60_000,
+      action: 'decline',
+    });
+    const response = await POST({ request: createClaimRequest(JSON.stringify({ callbackData, chatId: 'chat-7' })) } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true, action: 'decline', reassigned: false });
+  } finally {
+    restoreFetch();
+  }
+});
 
 test('POST rider-claim 在 accept callback 合法时先写回接单反馈再更新订单状态', async () => {
   const calls: string[] = [];

@@ -1,5 +1,6 @@
 ---
 import { inferLegacySimpleHallNumber } from '../../lib/admin-table-ref';
+import { readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
 const {
   tableCardsData,
   activeDeliveryOrders,
@@ -216,7 +217,9 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
         const displaySuffix = pickupNo;
         const oTime = new Date(o.createdAt).getTime();
         const deliveryItems = parseItems(o.itemsJson);
-        
+        const dispatchMeta = readDispatchMetaFromRemarks(String(o.remarksJson || ''));
+        const lastRiderDecision = dispatchMeta.lastRiderDecision;
+        const riderDeclinedAwaitingCourier = o.status === 'awaiting_courier' && lastRiderDecision?.action === 'declined';
 
         return (
           <div class="order-card delivery-card-active" style="border-left: 5px solid #ff9800;" data-order-time={oTime}>
@@ -256,6 +259,7 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
                 <span class={`status-tag status-${o.status}`}>
                   {o.status === 'pending' ? '待处理' :
                    o.status === 'confirmed' ? '已接单' :
+                   riderDeclinedAwaitingCourier ? '骑手已拒单' :
                    o.status === 'awaiting_courier' ? '待骑手确认' :
                    o.status === 'delivering' ? '骑手已接单' : o.status}
                 </span>
@@ -284,8 +288,13 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
               <div class="footer-right">
                 <span class="order-amount">{o.totalAmount} RSD</span>
               </div>
-              <span class="hidden-data" data-oid={o.id} data-order-id={o.id} data-order-no={o.orderNo} data-items={o.itemsJson} data-total={o.totalAmount} data-table={o.tableInfo} data-status={o.status} data-user-phone={o.userPhone} data-scheduled-for={o.scheduledFor} data-rider-broadcasted-at={o.riderBroadcastedAt} data-rider-remind-count={o.riderRemindCount}></span>
+              <span class="hidden-data" data-oid={o.id} data-order-id={o.id} data-order-no={o.orderNo} data-items={o.itemsJson} data-total={o.totalAmount} data-table={o.tableInfo} data-status={o.status} data-user-phone={o.userPhone} data-scheduled-for={o.scheduledFor} data-remarks={o.remarksJson} data-rider-broadcasted-at={o.riderBroadcastedAt} data-rider-remind-count={o.riderRemindCount}></span>
             </div>
+            {riderDeclinedAwaitingCourier && (
+              <div class="order-address-row" style="margin-top:6px; color:#6b7280; font-size:13px;">
+                骑手反馈：{lastRiderDecision?.riderName}已拒单 {formatBelgradeHHmm(lastRiderDecision?.at)}
+              </div>
+            )}
           </div>
         );
       })

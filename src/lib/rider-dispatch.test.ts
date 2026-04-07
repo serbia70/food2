@@ -2,21 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  buildContactableRiderRows,
-  buildDispatchPublishPayload,
-  buildReminderPayload,
-  filterAvailableRidersForOrder,
-  filterRiderActiveOrders,
-  filterRiderDashboardOrders,
   formatPickupEtaLabel,
-  getAdminDispatchStatusCopy,
-  getReminderBadgeCopy,
-  getRiderStatusHintCopy,
   isAwaitingCourierOrder,
   isRiderClaimableOrder,
   pickAvailableRiders,
-  readDispatchMetaFromRemarks,
+  getAdminDispatchStatusCopy,
+  getRiderActionFlags,
+  getReminderBadgeCopy,
   shouldEscalateUnclaimedOrder,
+  buildDispatchPublishPayload,
+  filterRiderActiveOrders,
+  buildContactableRiderRows,
+  readDispatchMetaFromRemarks,
+  getRiderDispatchState,
+  filterAvailableRidersForOrder,
+  filterRiderDashboardOrders,
+  getRiderStatusHintCopy,
+  buildReminderPayload,
 } from './rider-dispatch.ts';
 
 test('formatPickupEtaLabel 返回紧凑 ETA 文案', () => {
@@ -54,6 +56,36 @@ test('getAdminDispatchStatusCopy 映射 admin 调度状态文案', () => {
   assert.equal(getAdminDispatchStatusCopy('cancelled'), '已取消');
   assert.equal(getAdminDispatchStatusCopy('confirmed'), '已接单');
   assert.equal(getAdminDispatchStatusCopy('pending'), '待处理');
+});
+
+test('dispatch copy and action visibility stay unified across rider/admin surfaces', () => {
+  assert.equal(getAdminDispatchStatusCopy('awaiting_courier'), '待骑手接单');
+  assert.equal(getAdminDispatchStatusCopy('delivering'), '配送中');
+  assert.equal(getAdminDispatchStatusCopy('completed'), '已完成');
+
+  assert.deepEqual(getRiderActionFlags({ status: 'awaiting_courier', courierPhone: '' }, '0611'), {
+    canAccept: true,
+    canDecline: true,
+    canComplete: false,
+  });
+
+  assert.deepEqual(getRiderActionFlags({ status: 'delivering', courierPhone: '0611' }, '0611'), {
+    canAccept: false,
+    canDecline: false,
+    canComplete: true,
+  });
+
+  assert.deepEqual(getRiderActionFlags({ status: 'delivering', courier_phone: '0622' }, '0611'), {
+    canAccept: false,
+    canDecline: false,
+    canComplete: false,
+  });
+
+  assert.deepEqual(getRiderActionFlags({ status: 'delivering', courier_phone: '0611' }, '   '), {
+    canAccept: false,
+    canDecline: false,
+    canComplete: false,
+  });
 });
 
 test('getReminderBadgeCopy 正确格式化提醒次数', () => {
@@ -176,8 +208,100 @@ test('readDispatchMetaFromRemarks 读取最近一条派单反馈和拒单骑手�
         at: '2026-04-06T12:03:00.000Z',
       },
       declinedRiderIds: ['7', '8'],
+      currentRiderId: '',
+      currentAssignedAt: '',
+      currentExpiresAt: '',
+      invalidatedRiderIds: [],
+      lastInvalidationReason: null,
     },
   );
+});
+
+test('readDispatchMetaFromRemarks 对非法时间字段安全回落为空字符串', () => {
+  const remarksJson = JSON.stringify([
+    'dispatch_meta:{"currentRiderId":"7","currentAssignedAt":"not-a-date","currentExpiresAt":"2026-99-99T99:99:99.000Z","invalidatedRiderIds":"bad-value"}',
+  ]);
+
+  assert.deepEqual(readDispatchMetaFromRemarks(remarksJson), {
+    lastRiderDecision: null,
+    declinedRiderIds: [],
+    currentRiderId: '7',
+    currentAssignedAt: '',
+    currentExpiresAt: '',
+    invalidatedRiderIds: [],
+    lastInvalidationReason: null,
+  });
+});
+
+test('readDispatchMetaFromRemarks lastInvalidationReason 非法值回落为 null', () => {
+  const remarksJson = JSON.stringify([
+    'dispatch_meta:{"lastInvalidationReason":"broken"}',
+  ]);
+
+  const meta = readDispatchMetaFromRemarks(remarksJson);
+  assert.strictEqual(meta.lastInvalidationReason, null);
+});
+
+test('readDispatchMetaFromRemarks 跳过损坏的新 dispatch_meta 并回退到更早有效记录', () => {
+  const remarksJson = JSON.stringify([
+    'dispatch_meta:{"currentRiderId":"7","currentAssignedAt":"2026-04-07T10:00:00.000Z","currentExpiresAt":"2026-04-07T10:05:00.000Z","invalidatedRiderIds":["4"],"lastInvalidationReason":"timeout"}',
+    'dispatch_meta:{broken-json}',
+  ]);
+
+  assert.deepEqual(readDispatchMetaFromRemarks(remarksJson), {
+    lastRiderDecision: null,
+    declinedRiderIds: [],
+    currentRiderId: '7',
+    currentAssignedAt: '2026-04-07T10:00:00.000Z',
+    currentExpiresAt: '2026-04-07T10:05:00.000Z',
+    invalidatedRiderIds: ['4'],
+    lastInvalidationReason: 'timeout',
+  });
+});
+
+test('getRiderDispatchState 在 delivering 阶段仅当前配送骑手可完成', () => {
+  const meta = {
+    lastRiderDecision: null,
+    declinedRiderIds: [],
+    currentRiderId: 'rider-7',
+    currentAssignedAt: '2026-04-07T10:00:00.000Z',
+    currentExpiresAt: '2026-04-07T10:05:00.000Z',
+    invalidatedRiderIds: [],
+    lastInvalidationReason: null,
+  } as const;
+
+  assert.deepEqual(getRiderDispatchState({ status: 'delivering' }, meta, 'rider-7'), {
+    canAccept: false,
+    canDecline: false,
+    canComplete: true,
+    invalidReason: '',
+  });
+
+  assert.deepEqual(getRiderDispatchState({ status: 'delivering' }, meta, 'rider-8'), {
+    canAccept: false,
+    canDecline: false,
+    canComplete: false,
+    invalidReason: '',
+  });
+});
+
+test('getRiderDispatchState 在其他情况返回全 false 且 invalidReason 为空', () => {
+  const meta = {
+    lastRiderDecision: null,
+    declinedRiderIds: [],
+    currentRiderId: 'rider-7',
+    currentAssignedAt: '2026-04-07T10:00:00.000Z',
+    currentExpiresAt: '2026-04-07T10:05:00.000Z',
+    invalidatedRiderIds: [],
+    lastInvalidationReason: null,
+  } as const;
+
+  assert.deepEqual(getRiderDispatchState({ status: 'pending' }, meta, 'rider-7'), {
+    canAccept: false,
+    canDecline: false,
+    canComplete: false,
+    invalidReason: '',
+  });
 });
 
 test('filterAvailableRidersForOrder 排除当前订单已拒单骑手', () => {
@@ -188,6 +312,60 @@ test('filterAvailableRidersForOrder 排除当前订单已拒单骑手', () => {
   ];
   const remarksJson = JSON.stringify([
     'dispatch_meta:{"declinedRiderIds":["8"]}',
+  ]);
+
+  assert.deepEqual(
+    filterAvailableRidersForOrder(riders, remarksJson),
+    [{ id: 7, name: '骑手A', phone: '061', status: 'available' }],
+  );
+});
+
+test('dispatch meta tracks current rider validity and invalidation copy', () => {
+  const remarksJson = JSON.stringify([
+    'dispatch_meta:{"lastRiderDecision":null,"declinedRiderIds":["4"],"currentRiderId":"7","currentAssignedAt":"2026-04-07T10:00:00.000Z","currentExpiresAt":"2026-04-07T10:05:00.000Z","invalidatedRiderIds":["4","6"],"lastInvalidationReason":"timeout"}',
+  ]);
+
+  const meta = readDispatchMetaFromRemarks(remarksJson);
+  assert.deepEqual(meta, {
+    lastRiderDecision: null,
+    declinedRiderIds: ['4'],
+    currentRiderId: '7',
+    currentAssignedAt: '2026-04-07T10:00:00.000Z',
+    currentExpiresAt: '2026-04-07T10:05:00.000Z',
+    invalidatedRiderIds: ['4', '6'],
+    lastInvalidationReason: 'timeout',
+  });
+
+  assert.deepEqual(getRiderDispatchState({ status: 'awaiting_courier', courierPhone: '' }, meta, '7', '2026-04-07T10:03:00.000Z'), {
+    canAccept: true,
+    canDecline: true,
+    canComplete: false,
+    invalidReason: '',
+  });
+
+  assert.deepEqual(getRiderDispatchState({ status: 'awaiting_courier', courierPhone: '' }, meta, '6', '2026-04-07T10:03:00.000Z'), {
+    canAccept: false,
+    canDecline: false,
+    canComplete: false,
+    invalidReason: '已改派',
+  });
+
+  assert.deepEqual(getRiderDispatchState({ status: 'awaiting_courier', courierPhone: '' }, meta, '7', '2026-04-07T10:06:00.000Z'), {
+    canAccept: false,
+    canDecline: false,
+    canComplete: false,
+    invalidReason: '接单超时',
+  });
+});
+
+test('filterAvailableRidersForOrder excludes invalidated riders from current order', () => {
+  const riders = [
+    { id: 7, name: '骑手A', phone: '061', status: 'available' as const },
+    { id: 8, name: '骑手B', phone: '062', status: 'available' as const },
+    { id: 9, name: '骑手C', phone: '063', status: 'available' as const },
+  ];
+  const remarksJson = JSON.stringify([
+    'dispatch_meta:{"invalidatedRiderIds":["8"],"declinedRiderIds":["9"]}',
   ]);
 
   assert.deepEqual(

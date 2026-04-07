@@ -79,10 +79,13 @@ export const POST: APIRoute = async ({ request }) => {
     const upstreamText = await upstream.text();
     const upstreamJson = upstreamText ? JSON.parse(upstreamText) as Record<string, unknown> : null;
     if (!upstream.ok) {
-      return new Response(upstreamText, {
-        status: upstream.status,
-        headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
-      });
+      const errorText = String(upstreamJson?.error || '').trim();
+      const text = errorText === 'expired_callback' ? '操作已过期' : '操作失败';
+      return buildJsonResponse(
+        callbackId
+          ? { method: 'answerCallbackQuery', callback_query_id: callbackId, text }
+          : { success: false, error: errorText || 'rider_claim_failed' },
+      );
     }
 
     const action = String(upstreamJson?.action || '').trim();

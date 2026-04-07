@@ -204,6 +204,31 @@ test('POST telegram webhook 在 decline callback_query 时直接执行 rider-cla
   }
 });
 
+test('POST telegram webhook 在 callback_query 非法时仍返回 answerCallbackQuery 给 Telegram', async () => {
+  const request = new Request('http://localhost/api/telegram/webhook', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-telegram-bot-api-secret-token': 'test-telegram-callback-secret',
+    },
+    body: JSON.stringify({
+      callback_query: {
+        id: 'cbq-92',
+        data: 'not-valid-callback',
+        message: { chat: { id: 'chat-7' } },
+      },
+    }),
+  });
+
+  const response = await POST({ request } as any);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    method: 'answerCallbackQuery',
+    callback_query_id: 'cbq-92',
+    text: '操作失败',
+  });
+});
+
 test('POST telegram webhook 在 callback_query 成功后返回 answerCallbackQuery 结果给 Telegram', async () => {
   const originalFetch = globalThis.fetch;
   const previousApiUrl = process.env.PUBLIC_API_URL;

@@ -528,9 +528,11 @@ test('admin page source does not turn failed orders fetch into fake empty delive
   const source = await readFile(resolve(process.cwd(), 'src/pages/admin/[slug]/index.astro'), 'utf8');
   const tablesSource = await readFile(resolve(process.cwd(), 'src/components/admin/TabTables.astro'), 'utf8');
 
+  assert.match(source, /const ordersApiUrl = new URL\(`\/api\/admin\/orders\?_\=\$\{Date\.now\(\)\}`, Astro\.url\);/);
   assert.match(source, /const ordersLoadFailed = !ordersResp\.ok \|\| !Array\.isArray\(ordersResp\.data\);/);
   assert.match(source, /const rawOrders = Array\.isArray\(ordersResp\.data\) \? ordersResp\.data : \[\];/);
   assert.match(source, /const ordersLoadErrorDetail = String\(ordersResp\.errorDetail \|\| ordersResp\.error \|\| ordersResp\.code \|\| ordersResp\.status \|\| ''\)\.trim\(\);/);
+  assert.match(source, /fetchJSON\(ordersApiUrl, \{ headers: authHeaders \}\)/);
   assert.match(source, /<TabTables[\s\S]*adminOrdersUnavailable=\{ordersLoadFailed\}[\s\S]*adminOrdersErrorDetail=\{ordersLoadErrorDetail\}/);
   assert.match(tablesSource, /adminOrdersUnavailable = false,/);
   assert.match(tablesSource, /adminOrdersErrorDetail = '',/);

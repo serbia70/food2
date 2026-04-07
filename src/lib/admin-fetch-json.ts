@@ -21,7 +21,7 @@ function unwrapCanonicalData<T>(value: unknown): T | null {
   return (value as T | null) ?? null;
 }
 
-export async function fetchJSON<T = unknown>(url: string, init: RequestInit = {}): Promise<FetchJSONResult<T>> {
+export async function fetchJSON<T = unknown>(url: string | URL, init: RequestInit = {}): Promise<FetchJSONResult<T>> {
   const mergedInit: RequestInit = {
     ...init,
     cache: 'no-store',

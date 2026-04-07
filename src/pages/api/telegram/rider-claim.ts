@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { timingSafeEqual } from 'node:crypto';
 import { API_BASE_URL } from '../../../config.ts';
 import { buildDispatchMetaRemarks, getRiderDispatchState, readDispatchMetaFromRemarks } from '../../../lib/rider-dispatch.ts';
-import { buildRiderDeliveryCompleteTelegramMessage, buildTelegramShortClaimCallback, parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
+import { buildRiderDeliveryCompleteTelegramMessage, buildRiderPickedUpTelegramMessage, buildTelegramShortClaimCallback, parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
 import { pickNextAvailableRider, readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
 import { readTelegramRequestSecret } from '../../../lib/telegram-secrets.ts';
 
@@ -87,7 +87,14 @@ function isTrustedTelegramRequest(request: Request): boolean {
   return provided !== '' && safeEqualText(provided, expected);
 }
 
-async function sendDeliveryCompleteMessage(request: Request, callback: ReturnType<typeof parseTelegramClaimCallback>, riderName: string, riderPhone: string, chatId: string): Promise<void> {
+async function sendDeliveryProgressMessage(
+  request: Request,
+  callback: ReturnType<typeof parseTelegramClaimCallback>,
+  riderName: string,
+  riderPhone: string,
+  chatId: string,
+  stage: 'picked_up' | 'completed',
+): Promise<void> {
   const order = await readOrderDetail(request, String(callback.orderId || '').trim());
   if (!order) return;
 
@@ -98,16 +105,26 @@ async function sendDeliveryCompleteMessage(request: Request, callback: ReturnTyp
     riderPhone,
     restaurantId: String(callback.restaurantId || 'admin').trim() || 'admin',
     telegramChatId: chatId,
+    action: stage === 'picked_up' ? 'picked_up' : 'complete',
   });
 
-  const message = buildRiderDeliveryCompleteTelegramMessage({
-    orderNo: String(order.orderNo || order.order_no || callback.orderId || '').trim(),
-    address: String(order.tableInfo || order.table_info || '').trim() || '未提供地址',
-    phone: String(order.userPhone || order.user_phone || '').trim() || '-',
-    totalAmount: Number(order.totalAmount || order.total_amount || 0) || 0,
-    pickupEtaMinutes: Number(order.pickupEtaMinutes || order.pickup_eta_minutes || 0) || 0,
-    completeCallbackData,
-  });
+  const message = stage === 'picked_up'
+    ? buildRiderPickedUpTelegramMessage({
+        orderNo: String(order.orderNo || order.order_no || callback.orderId || '').trim(),
+        address: String(order.tableInfo || order.table_info || '').trim() || '未提供地址',
+        phone: String(order.userPhone || order.user_phone || '').trim() || '-',
+        totalAmount: Number(order.totalAmount || order.total_amount || 0) || 0,
+        pickupEtaMinutes: Number(order.pickupEtaMinutes || order.pickup_eta_minutes || 0) || 0,
+        completeCallbackData,
+      })
+    : buildRiderDeliveryCompleteTelegramMessage({
+        orderNo: String(order.orderNo || order.order_no || callback.orderId || '').trim(),
+        address: String(order.tableInfo || order.table_info || '').trim() || '未提供地址',
+        phone: String(order.userPhone || order.user_phone || '').trim() || '-',
+        totalAmount: Number(order.totalAmount || order.total_amount || 0) || 0,
+        pickupEtaMinutes: Number(order.pickupEtaMinutes || order.pickup_eta_minutes || 0) || 0,
+        completeCallbackData,
+      });
 
   await fetch(`${readInternalApiBaseUrl()}/api/telegram/send`, {
     method: 'POST',
@@ -283,7 +300,10 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   const orderSnapshot = await readOrderDispatchSnapshot(request, orderIdText);
   const existingMeta = readDispatchMetaFromRemarks(orderSnapshot.remarksJson);
   const dispatchState = getRiderDispatchState(
-    { status: orderSnapshot.status || 'awaiting_courier' },
+    {
+      status: orderSnapshot.status || 'awaiting_courier',
+      courierPhone: resolvedPhone,
+    },
     existingMeta,
     riderIdText,
     nowIso,
@@ -298,7 +318,13 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   }
 
   const isDeclineAction = callback.action === 'decline';
-  const actionAllowed = isDeclineAction ? dispatchState.canDecline : dispatchState.canAccept;
+  const isPickedUpAction = callback.action === 'picked_up';
+  const isCompleteAction = callback.action === 'complete';
+  const actionAllowed = isDeclineAction
+    ? dispatchState.canDecline
+    : isPickedUpAction || isCompleteAction
+      ? dispatchState.canComplete
+      : dispatchState.canAccept;
   if (enforceDispatchConstraints && !actionAllowed) {
     return new Response(JSON.stringify({ success: false, error: 'dispatch_invalidated', reason: '已改派' }), {
       status: 409,
@@ -396,27 +422,47 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
     });
   }
 
-  const feedbackWritten = await writeOrderDispatchMeta(request, orderIdText, {
-    lastRiderDecision: {
-      action: 'accepted',
-      riderId: riderIdText,
-      riderName: resolvedName,
-      riderPhone: resolvedPhone,
-      at: nowIso,
-    },
-    declinedRiderIds: [],
-  });
+  const updatePayload = isPickedUpAction
+    ? {
+        id: callback.orderId,
+        expected_current_status: 'delivering',
+        status: 'picked_up',
+        courier_name: resolvedName,
+        courier_phone: resolvedPhone,
+      }
+    : isCompleteAction
+      ? {
+          id: callback.orderId,
+          expected_current_status: 'picked_up',
+          status: 'completed',
+          courier_name: resolvedName,
+          courier_phone: resolvedPhone,
+        }
+      : {
+          id: callback.orderId,
+          expected_current_status: 'awaiting_courier',
+          status: 'delivering',
+          courier_name: resolvedName,
+          courier_phone: resolvedPhone,
+        };
+
+  const feedbackWritten = isPickedUpAction || isCompleteAction
+    ? true
+    : await writeOrderDispatchMeta(request, orderIdText, {
+        lastRiderDecision: {
+          action: 'accepted',
+          riderId: riderIdText,
+          riderName: resolvedName,
+          riderPhone: resolvedPhone,
+          at: nowIso,
+        },
+        declinedRiderIds: [],
+      });
 
   const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status/${encodeURIComponent(String(callback.orderId || '').trim())}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      id: callback.orderId,
-      expected_current_status: 'awaiting_courier',
-      status: 'delivering',
-      courier_name: resolvedName,
-      courier_phone: resolvedPhone,
-    }),
+    body: JSON.stringify(updatePayload),
   });
 
   const text = await upstream.text();
@@ -429,10 +475,27 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   }
   if (upstream.ok) {
     try {
-      await sendDeliveryCompleteMessage(request, callback, resolvedName, resolvedPhone, chatId);
+      if (isPickedUpAction) {
+        await sendDeliveryProgressMessage(request, callback, resolvedName, resolvedPhone, chatId, 'completed');
+      } else if (!isCompleteAction) {
+        await sendDeliveryProgressMessage(request, callback, resolvedName, resolvedPhone, chatId, 'picked_up');
+      }
     } catch {
       // 不阻断接单成功回包
     }
+  }
+
+  if (isPickedUpAction) {
+    return new Response(JSON.stringify({ success: upstream.ok, action: 'picked_up' }), {
+      status: upstream.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (isCompleteAction) {
+    return new Response(JSON.stringify({ success: upstream.ok, action: 'complete' }), {
+      status: upstream.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
   return new Response(text, {
     status: upstream.status,

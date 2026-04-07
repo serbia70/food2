@@ -1,6 +1,7 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 import { API_BASE_URL } from '../../../config';
+import { getCustomerDeliveryStatusCopy } from '../../../lib/rider-dispatch.ts';
 
 export const prerender = false;
 
@@ -67,8 +68,9 @@ const items = Array.isArray(itemsRaw)
 const statusMap: Record<string, string> = {
   pending: '待处理 / Pending',
   confirmed: '已接单 / Confirmed',
-  delivering: '配送中 / Delivering',
-  completed: '已完成 / Completed',
+  delivering: getCustomerDeliveryStatusCopy('delivering'),
+  picked_up: getCustomerDeliveryStatusCopy('picked_up'),
+  completed: getCustomerDeliveryStatusCopy('completed'),
   cancelled: '已取消 / Cancelled',
   review_needed: '待审核 / Review Needed',
 };

@@ -7,6 +7,8 @@ import {
   isRiderClaimableOrder,
   pickAvailableRiders,
   getAdminDispatchStatusCopy,
+  getCustomerDeliveryStatusCopy,
+  getDeliveryStatusTone,
   getRiderActionFlags,
   getReminderBadgeCopy,
   shouldEscalateUnclaimedOrder,
@@ -51,39 +53,56 @@ test('pickAvailableRiders 仅保留 available 且有手机号的骑手', () => {
 
 test('getAdminDispatchStatusCopy 映射 admin 调度状态文案', () => {
   assert.equal(getAdminDispatchStatusCopy('awaiting_courier'), '待骑手接单');
-  assert.equal(getAdminDispatchStatusCopy('delivering'), '配送中');
-  assert.equal(getAdminDispatchStatusCopy('completed'), '已完成');
+  assert.equal(getAdminDispatchStatusCopy('delivering'), '骑手已接单');
+  assert.equal(getAdminDispatchStatusCopy('picked_up'), '骑手已取餐');
+  assert.equal(getAdminDispatchStatusCopy('completed'), '已送达');
   assert.equal(getAdminDispatchStatusCopy('cancelled'), '已取消');
   assert.equal(getAdminDispatchStatusCopy('confirmed'), '已接单');
   assert.equal(getAdminDispatchStatusCopy('pending'), '待处理');
 });
 
-test('dispatch copy and action visibility stay unified across rider/admin surfaces', () => {
-  assert.equal(getAdminDispatchStatusCopy('awaiting_courier'), '待骑手接单');
-  assert.equal(getAdminDispatchStatusCopy('delivering'), '配送中');
-  assert.equal(getAdminDispatchStatusCopy('completed'), '已完成');
+test('delivery status helpers cover delivering, picked_up and completed consistently', () => {
+  assert.equal(getAdminDispatchStatusCopy('delivering'), '骑手已接单');
+  assert.equal(getAdminDispatchStatusCopy('picked_up'), '骑手已取餐');
+  assert.equal(getCustomerDeliveryStatusCopy('delivering'), '送餐中');
+  assert.equal(getCustomerDeliveryStatusCopy('picked_up'), '骑手已取餐，正在送达');
+  assert.equal(getCustomerDeliveryStatusCopy('completed'), '已送达');
+  assert.equal(getDeliveryStatusTone('declined'), 'danger');
+  assert.equal(getDeliveryStatusTone('delivering'), 'info');
+  assert.equal(getDeliveryStatusTone('picked_up'), 'success');
 
   assert.deepEqual(getRiderActionFlags({ status: 'awaiting_courier', courierPhone: '' }, '0611'), {
     canAccept: true,
     canDecline: true,
+    canPickUp: false,
     canComplete: false,
   });
 
   assert.deepEqual(getRiderActionFlags({ status: 'delivering', courierPhone: '0611' }, '0611'), {
     canAccept: false,
     canDecline: false,
+    canPickUp: true,
+    canComplete: false,
+  });
+
+  assert.deepEqual(getRiderActionFlags({ status: 'picked_up', courierPhone: '0611' }, '0611'), {
+    canAccept: false,
+    canDecline: false,
+    canPickUp: false,
     canComplete: true,
   });
 
   assert.deepEqual(getRiderActionFlags({ status: 'delivering', courier_phone: '0622' }, '0611'), {
     canAccept: false,
     canDecline: false,
+    canPickUp: false,
     canComplete: false,
   });
 
   assert.deepEqual(getRiderActionFlags({ status: 'delivering', courier_phone: '0611' }, '   '), {
     canAccept: false,
     canDecline: false,
+    canPickUp: false,
     canComplete: false,
   });
 });

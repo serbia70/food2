@@ -44,15 +44,44 @@ export function getAdminDispatchStatusCopy(status: string | null | undefined): s
     case 'awaiting_courier':
       return '待骑手接单';
     case 'delivering':
-      return '配送中';
+      return '骑手已接单';
+    case 'picked_up':
+      return '骑手已取餐';
     case 'completed':
-      return '已完成';
+      return '已送达';
     case 'cancelled':
       return '已取消';
     case 'confirmed':
       return '已接单';
     default:
       return '待处理';
+  }
+}
+
+export function getCustomerDeliveryStatusCopy(status: string | null | undefined): string {
+  switch (String(status || '')) {
+    case 'delivering':
+      return '送餐中';
+    case 'picked_up':
+      return '骑手已取餐，正在送达';
+    case 'completed':
+      return '已送达';
+    default:
+      return '';
+  }
+}
+
+export function getDeliveryStatusTone(status: string | null | undefined): 'default' | 'info' | 'success' | 'danger' {
+  switch (String(status || '')) {
+    case 'declined':
+      return 'danger';
+    case 'delivering':
+      return 'info';
+    case 'picked_up':
+    case 'completed':
+      return 'success';
+    default:
+      return 'default';
   }
 }
 
@@ -75,11 +104,13 @@ export function getRiderActionFlags(
   const status = String(order?.status || '').trim();
   const phone = String(riderPhone || '').trim();
   const orderPhone = String(order?.courierPhone || order?.courier_phone || '').trim();
+  const isCurrentRider = !!phone && phone === orderPhone;
 
   return {
     canAccept: status === 'awaiting_courier',
     canDecline: status === 'awaiting_courier',
-    canComplete: status === 'delivering' && !!phone && phone === orderPhone,
+    canPickUp: status === 'delivering' && isCurrentRider,
+    canComplete: status === 'picked_up' && isCurrentRider,
   };
 }
 
@@ -181,7 +212,7 @@ export function getRiderDispatchState(
   const currentRiderId = String(meta.currentRiderId || '').trim();
   const currentId = String(riderId || '').trim();
 
-  if (status === 'delivering') {
+  if (status === 'delivering' || status === 'picked_up') {
     return {
       canAccept: false,
       canDecline: false,
@@ -320,7 +351,8 @@ export function filterRiderActiveOrders<T extends {
   const phone = String(riderPhone || '').trim();
   return orders.filter((order) => {
     if (isActiveAwaitingCourierOrder(order, nowIso)) return true;
-    if (String(order?.status || '') !== 'delivering') return false;
+    const status = String(order?.status || '').trim();
+    if (status !== 'delivering' && status !== 'picked_up') return false;
     if (!phone) return false;
     return String(order?.courierPhone || order?.courier_phone || '').trim() === phone;
   });

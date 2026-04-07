@@ -1,6 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
+import { getCustomerDeliveryStatusCopy } from '../../lib/rider-dispatch.ts';
 ---
 
 <Layout title="订单中心">
@@ -77,7 +78,11 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
 
   <PlatformBottomNav active="orders" />
 
-  <script is:inline>
+  <script define:vars={{
+    deliveringStatusCopy: getCustomerDeliveryStatusCopy('delivering'),
+    pickedUpStatusCopy: getCustomerDeliveryStatusCopy('picked_up'),
+    completedStatusCopy: getCustomerDeliveryStatusCopy('completed'),
+  }} is:inline>
     function filterUserVisibleOrders(orders) {
       return (orders || []).filter((order) => {
         const orderType = order && order.orderType ? order.orderType : '';
@@ -209,14 +214,15 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
     function getStatusLabel(status) {
       if (status === 'pending') return '等待接单';
       if (status === 'confirmed') return '商家已接单';
-      if (status === 'delivering') return '配送中';
-      if (status === 'completed') return '已完成';
+      if (status === 'delivering') return deliveringStatusCopy;
+      if (status === 'picked_up') return pickedUpStatusCopy;
+      if (status === 'completed') return completedStatusCopy;
       return '订单已关闭';
     }
 
     function getStatusClass(status) {
       if (status === 'pending') return 'status-pending';
-      if (status === 'confirmed' || status === 'delivering') return 'status-active';
+      if (status === 'confirmed' || status === 'delivering' || status === 'picked_up') return 'status-active';
       if (status === 'completed') return 'status-done';
       return 'status-closed';
     }
@@ -226,7 +232,7 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
       const completed = [];
       const others = [];
       for (const order of orders) {
-        if (order.status === 'pending' || order.status === 'confirmed' || order.status === 'delivering') {
+        if (order.status === 'pending' || order.status === 'confirmed' || order.status === 'delivering' || order.status === 'picked_up') {
           active.push(order);
         } else if (order.status === 'completed') {
           completed.push(order);
@@ -369,7 +375,7 @@ import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
 
       const latestOrder = [...orders].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0];
       const leadShop = summaries[0] || {};
-      const activeCount = orders.filter((order) => ['pending', 'confirmed', 'delivering'].includes(order.status)).length;
+      const activeCount = orders.filter((order) => ['pending', 'confirmed', 'delivering', 'picked_up'].includes(order.status)).length;
 
       const card = document.createElement('div');
       card.className = 'overview-card';

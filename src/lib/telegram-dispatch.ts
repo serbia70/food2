@@ -20,9 +20,18 @@ interface AdminAssignedOrderTelegramInput {
   declineCallbackData?: string;
 }
 
-type TelegramClaimAction = 'accept' | 'decline';
+type TelegramClaimAction = 'accept' | 'decline' | 'picked_up' | 'complete';
 
 interface RiderDeliveryCompleteTelegramInput {
+  orderNo: string;
+  address: string;
+  phone: string;
+  totalAmount: number;
+  pickupEtaMinutes: number;
+  completeCallbackData?: string;
+}
+
+interface RiderPickedUpTelegramInput {
   orderNo: string;
   address: string;
   phone: string;
@@ -96,7 +105,11 @@ export function buildTelegramDeepLink(input: TelegramDeepLinkInput): string {
 const TELEGRAM_CALLBACK_TTL_MS = 10 * 60 * 1000;
 
 function normalizeTelegramClaimPayload(input: TelegramClaimCallbackInput): TelegramClaimPayload {
-  const action = input.action === 'decline' ? 'decline' : 'accept';
+  const action = input.action === 'decline'
+    || input.action === 'picked_up'
+    || input.action === 'complete'
+    ? input.action
+    : 'accept';
   return {
     orderId: Number(input.orderId),
     riderId: Number(input.riderId),
@@ -116,7 +129,7 @@ function validateTelegramClaimPayload(payload: TelegramClaimPayload): void {
   if (!payload.restaurantId) throw new Error('invalid_restaurant_id');
   if (!payload.riderPhone) throw new Error('invalid_rider_phone');
   if (!payload.telegramChatId) throw new Error('invalid_telegram_chat_id');
-  if (payload.action !== 'accept' && payload.action !== 'decline') throw new Error('invalid_callback_action');
+  if (payload.action !== 'accept' && payload.action !== 'decline' && payload.action !== 'picked_up' && payload.action !== 'complete') throw new Error('invalid_callback_action');
   if (!Number.isFinite(payload.expiresAt) || payload.expiresAt <= Date.now()) throw new Error('expired_callback');
 }
 
@@ -217,7 +230,13 @@ function buildShortTelegramClaimCallback(input: TelegramClaimCallbackInput): str
   const callback = signAndValidateTelegramClaim(input);
   const now = Date.now();
   const expiresAt = Math.min(Number(callback.expiresAt), now + TELEGRAM_SHORT_CALLBACK_TTL_MS);
-  const actionPart = callback.action === 'decline' ? 'd' : 'a';
+  const actionPart = callback.action === 'decline'
+    ? 'd'
+    : callback.action === 'picked_up'
+      ? 'p'
+      : callback.action === 'complete'
+        ? 'c'
+        : 'a';
   const orderPart = callback.orderId.toString(36);
   const riderPart = callback.riderId.toString(36);
   const expiresPart = Math.floor(expiresAt / 1000).toString(36);
@@ -239,7 +258,7 @@ function parseShortTelegramClaimCallback(payload: string): TelegramClaimCallback
 
   const [actionPart, orderPart, riderPart, expiresPart, chatPart, phonePart, namePart, sigPart] = parts;
   if (!actionPart || !orderPart || !riderPart || !expiresPart || !chatPart || !phonePart || !namePart || !sigPart) throw new Error('invalid_callback_data');
-  if (!/^[ad]$/.test(actionPart) || !/^[A-Za-z0-9_-]+$/.test(chatPart) || !/^[A-Za-z0-9_-]+$/.test(phonePart) || !/^[\p{L}\p{N}_-]+$/u.test(namePart) || !/^[A-Za-z0-9_-]+$/.test(sigPart)) {
+  if (!/^[adpc]$/.test(actionPart) || !/^[A-Za-z0-9_-]+$/.test(chatPart) || !/^[A-Za-z0-9_-]+$/.test(phonePart) || !/^[\p{L}\p{N}_-]+$/u.test(namePart) || !/^[A-Za-z0-9_-]+$/.test(sigPart)) {
     throw new Error('invalid_callback_data');
   }
 
@@ -249,6 +268,14 @@ function parseShortTelegramClaimCallback(payload: string): TelegramClaimCallback
   const expiresAt = readBase36PositiveInt(expiresPart) * 1000;
   if (expiresAt <= Date.now()) throw new Error('expired_callback');
 
+  const action = actionPart === 'd'
+    ? 'decline'
+    : actionPart === 'p'
+      ? 'picked_up'
+      : actionPart === 'c'
+        ? 'complete'
+        : 'accept';
+
   return {
     orderId: readBase36PositiveInt(orderPart),
     riderId: readBase36PositiveInt(riderPart),
@@ -257,7 +284,7 @@ function parseShortTelegramClaimCallback(payload: string): TelegramClaimCallback
     riderPhone: sanitizeCompactPhone(phonePart),
     telegramChatId: chatPart,
     expiresAt,
-    action: actionPart === 'd' ? 'decline' : 'accept',
+    action,
     sig: sigPart,
   };
 }
@@ -388,10 +415,28 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
   };
 }
 
+export function buildRiderPickedUpTelegramMessage(input: RiderPickedUpTelegramInput): TelegramDispatchMessage {
+  return {
+    text: [
+      '骑手已接单',
+      `订单号：${input.orderNo}`,
+      `地址：${input.address}`,
+      `电话：${input.phone}`,
+      `金额：${input.totalAmount} RSD`,
+      `预计 ${input.pickupEtaMinutes} 分钟后可取`,
+    ].join('\n'),
+    replyMarkup: {
+      inline_keyboard: String(input.completeCallbackData || '').trim()
+        ? [[{ text: '已取餐', callback_data: String(input.completeCallbackData).trim() }]]
+        : [],
+    },
+  };
+}
+
 export function buildRiderDeliveryCompleteTelegramMessage(input: RiderDeliveryCompleteTelegramInput): TelegramDispatchMessage {
   return {
     text: [
-      '配送中',
+      '骑手已取餐',
       `订单号：${input.orderNo}`,
       `地址：${input.address}`,
       `电话：${input.phone}`,
@@ -400,7 +445,7 @@ export function buildRiderDeliveryCompleteTelegramMessage(input: RiderDeliveryCo
     ].join('\n'),
     replyMarkup: {
       inline_keyboard: String(input.completeCallbackData || '').trim()
-        ? [[{ text: '送餐完成', callback_data: String(input.completeCallbackData).trim() }]]
+        ? [[{ text: '已送达', callback_data: String(input.completeCallbackData).trim() }]]
         : [],
     },
   };

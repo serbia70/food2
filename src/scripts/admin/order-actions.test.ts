@@ -42,3 +42,16 @@ test('assign-rider prompts rider selection before ETA while auto-assign keeps ET
   const autoEtaPromptIdx = autoBlock.indexOf('请选择预计取餐时间');
   assert.ok(autoEtaPromptIdx >= 0, 'auto-assign should keep eta prompt');
 });
+
+test('order-actions source exposes picked_up and delivered admin actions', async () => {
+  const source = await readFile(filePath, 'utf8');
+
+  assert.match(source, /registerAdminGlobal\('mark-picked-up'/);
+  assert.match(source, /registerAdminGlobal\('mark-delivered'/);
+  assert.match(source, /expected_current_status: 'delivering'/);
+  assert.match(source, /status: 'picked_up'/);
+  assert.match(source, /expected_current_status: 'picked_up'/);
+  assert.match(source, /status: 'completed'/);
+  assert.match(source, /showAdminToast\('已更新为取餐中'\)/);
+  assert.match(source, /showAdminToast\('已更新为已送达'\)/);
+});

@@ -164,6 +164,8 @@ export function bindAdminClickDelegation(options: {
       await invokeAdminAction(getAdminHandlers(), action, el, e);
     } else if (action === 'assign-rider' || action === 'auto-assign-rider') {
       await invokeAdminAction(getAdminHandlers(), action, el, e);
+    } else if (action === 'mark-picked-up' || action === 'mark-delivered') {
+      await invokeAdminAction(getAdminHandlers(), action, el, e);
     } else if (action === 'save-order-edit') (window as any).saveOrderEdit?.();
     else if (action === 'close-order-edit-modal') (window as any).closeOrderEditModal?.();
     else if (action === 'open-add-customer') (window as any).openAddCustomerModal?.();

@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   buildAdminAssignedOrderTelegramMessage,
   buildRiderDeliveryCompleteTelegramMessage,
+  buildRiderPickedUpTelegramMessage,
   buildTelegramClaimCallback,
   buildTelegramDispatchMessage,
   buildTelegramDeepLink,
@@ -234,7 +235,23 @@ test('buildAdminAssignedOrderTelegramMessage renders accept and decline buttons 
   ]]);
 });
 
-test('buildRiderDeliveryCompleteTelegramMessage renders complete button for delivering stage', () => {
+test('buildRiderPickedUpTelegramMessage renders delivered button for picked_up stage', () => {
+  const message = buildRiderPickedUpTelegramMessage({
+    orderNo: 'NO601',
+    address: 'Beograd 6',
+    phone: '0606',
+    totalAmount: 1600,
+    pickupEtaMinutes: 10,
+    completeCallbackData: 'done-601',
+  });
+
+  assert.match(message.text, /已接单/);
+  assert.deepEqual(message.replyMarkup.inline_keyboard, [[
+    { text: '已取餐', callback_data: 'done-601' },
+  ]]);
+});
+
+test('buildRiderDeliveryCompleteTelegramMessage renders complete button for picked_up stage', () => {
   const message = buildRiderDeliveryCompleteTelegramMessage({
     orderNo: 'NO501',
     address: 'Beograd 1',
@@ -245,24 +262,7 @@ test('buildRiderDeliveryCompleteTelegramMessage renders complete button for deli
   });
 
   assert.deepEqual(message.replyMarkup.inline_keyboard, [[
-    { text: '送餐完成', callback_data: 'complete-1' },
+    { text: '已送达', callback_data: 'complete-1' },
   ]]);
-  assert.match(message.text, /配送中/);
-});
-
-test('buildAdminAssignedOrderTelegramMessage delivering stage carries complete button when provided', () => {
-  const message = buildAdminAssignedOrderTelegramMessage({
-    orderNo: 'NO777',
-    address: 'Beograd 7',
-    totalAmount: 1880,
-    phone: '0607',
-    pickupEtaMinutes: 8,
-    itemSummary: ['披萨 x1'],
-    completeCallbackData: 'complete-777',
-  } as any);
-
-  assert.deepEqual(message.replyMarkup.inline_keyboard, [[
-    { text: '送餐完成', callback_data: 'complete-777' },
-  ]]);
-  assert.match(message.text, /订单号：NO777/);
+  assert.match(message.text, /已取餐/);
 });

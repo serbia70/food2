@@ -267,7 +267,8 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
                    o.status === 'confirmed' ? '已接单' :
                    riderDeclinedAwaitingCourier ? '骑手已拒单' :
                    o.status === 'awaiting_courier' ? '待骑手确认' :
-                   o.status === 'delivering' ? '骑手已接单' : o.status}
+                   o.status === 'delivering' ? '骑手已接单' :
+                   o.status === 'picked_up' ? '骑手已取餐' : o.status}
                 </span>
 
                 {(o.status === 'pending' || o.status === 'confirmed' || o.status === 'awaiting_courier') && (
@@ -279,7 +280,16 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
                   </>
                 )}
                 {o.status === 'delivering' && (
-                  <span style="font-size:12px; color:#7c2d12; font-weight:700;">已指派骑手：{o.courierName || o.courierPhone || '未命名骑手'}</span>
+                  <>
+                    <button class="btn-xs" type="button" data-admin-action="mark-picked-up" data-order-id={o.id} style="background:#2563eb; color:white;">✅ 已取餐</button>
+                    <span style="font-size:12px; color:#7c2d12; font-weight:700;">已指派骑手：{o.courierName || o.courierPhone || '未命名骑手'}</span>
+                  </>
+                )}
+                {o.status === 'picked_up' && (
+                  <>
+                    <button class="btn-xs" type="button" data-admin-action="mark-delivered" data-order-id={o.id} style="background:#16a34a; color:white;">✅ 已送达</button>
+                    <span style="font-size:12px; color:#7c2d12; font-weight:700;">已指派骑手：{o.courierName || o.courierPhone || '未命名骑手'}</span>
+                  </>
                 )}
 
                 {o.userPhone && (
@@ -294,7 +304,7 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
               <div class="footer-right">
                 <span class="order-amount">{o.totalAmount} RSD</span>
               </div>
-              <span class="hidden-data" data-oid={o.id} data-order-id={o.id} data-order-no={o.orderNo} data-items={o.itemsJson} data-total={o.totalAmount} data-table={o.tableInfo} data-status={o.status} data-user-phone={o.userPhone} data-scheduled-for={o.scheduledFor} data-remarks={o.remarksJson} data-rider-broadcasted-at={o.riderBroadcastedAt} data-rider-remind-count={o.riderRemindCount}></span>
+              <span class="hidden-data" data-oid={o.id} data-order-id={o.id} data-order-no={o.orderNo} data-items={o.itemsJson} data-total={o.totalAmount} data-table={o.tableInfo} data-status={o.status} data-user-phone={o.userPhone} data-scheduled-for={o.scheduledFor} data-remarks={o.remarksJson} data-rider-broadcasted-at={o.riderBroadcastedAt} data-rider-remind-count={o.riderRemindCount} data-courier-name={o.courierName} data-courier-phone={o.courierPhone}></span>
             </div>
             {riderDeclinedAwaitingCourier && (
               <div class="order-address-row" style="margin-top:6px; color:#6b7280; font-size:13px;">

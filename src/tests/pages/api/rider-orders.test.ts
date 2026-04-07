@@ -42,8 +42,9 @@ test('GET rider orders 过滤当前骑手 active 订单', async () => {
     orders: [
       { id: 1, status: 'awaiting_courier', courierPhone: '', userPhone: '1' },
       { id: 2, status: 'delivering', courierPhone: '0613083899', userPhone: '2' },
-      { id: 3, status: 'delivering', courierPhone: '000', userPhone: '3' },
-      { id: 4, status: 'completed', courierPhone: '0613083899', userPhone: '4' },
+      { id: 3, status: 'picked_up', courierPhone: '0613083899', userPhone: '2-1' },
+      { id: 4, status: 'delivering', courierPhone: '000', userPhone: '3' },
+      { id: 5, status: 'completed', courierPhone: '0613083899', userPhone: '4' },
     ],
   }), {
     status: 200,
@@ -62,6 +63,7 @@ test('GET rider orders 过滤当前骑手 active 订单', async () => {
     orders: [
       { id: 1, status: 'awaiting_courier', courierPhone: '', userPhone: '1' },
       { id: 2, status: 'delivering', courierPhone: '0613083899', userPhone: '2' },
+      { id: 3, status: 'picked_up', courierPhone: '0613083899', userPhone: '2-1' },
     ],
   });
 });

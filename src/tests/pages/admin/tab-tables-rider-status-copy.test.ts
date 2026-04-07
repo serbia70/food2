@@ -22,18 +22,21 @@ test('admin 外卖状态文案覆盖骑手相关语义映射', async () => {
 
   const deliveringWindow = sliceAround(source, '骑手已接单');
   assert.match(deliveringWindow, /['"]delivering['"]/);
+
+  const pickedUpWindow = sliceAround(source, '骑手已取餐');
+  assert.match(pickedUpWindow, /['"]picked_up['"]/);
 });
 
 test('admin 外卖卡片在 delivering 场景展示骑手兜底链路', async () => {
   const source = await readTabTablesSource();
 
-  const assignedRiderWindow = sliceAround(source, '已指派骑手：', 220, 220).replace(/\s+/g, ' ');
-  assert.match(assignedRiderWindow, /['"]delivering['"]/);
-  assert.match(assignedRiderWindow, /未命名骑手/);
+  const deliveringAssignedRiderWindow = sliceAround(source, "o.status === 'delivering' &&", 80, 420).replace(/\s+/g, ' ');
+  assert.match(deliveringAssignedRiderWindow, /已指派骑手：/);
+  assert.match(deliveringAssignedRiderWindow, /未命名骑手/);
 
-  const courierNameIndex = assignedRiderWindow.indexOf('courierName');
-  const courierPhoneIndex = assignedRiderWindow.indexOf('courierPhone');
-  const fallbackNameIndex = assignedRiderWindow.indexOf('未命名骑手');
+  const courierNameIndex = deliveringAssignedRiderWindow.indexOf('courierName');
+  const courierPhoneIndex = deliveringAssignedRiderWindow.indexOf('courierPhone');
+  const fallbackNameIndex = deliveringAssignedRiderWindow.indexOf('未命名骑手');
 
   assert.ok(courierNameIndex >= 0, '应优先使用骑手姓名');
   assert.ok(courierPhoneIndex > courierNameIndex, '姓名缺失时应回退到骑手电话');
@@ -57,4 +60,24 @@ test('admin 外卖卡片在 awaiting_courier 且骑手拒单时展示拒单反�
 
   const hiddenDataWindow = sliceAround(source, 'data-remarks=', 120, 180).replace(/\s+/g, ' ');
   assert.match(hiddenDataWindow, /data-remarks=\{o\.remarksJson\}/);
+});
+
+test('admin 外卖卡片在 delivering 和 picked_up 场景提供推进按钮', async () => {
+  const source = await readTabTablesSource();
+
+  const markPickedUpWindow = sliceAround(source, 'data-admin-action="mark-picked-up"', 240, 220).replace(/\s+/g, ' ');
+  assert.match(markPickedUpWindow, /o\.status === ['"]delivering['"]/);
+  assert.match(markPickedUpWindow, /✅ 已取餐/);
+
+  const markDeliveredWindow = sliceAround(source, 'data-admin-action="mark-delivered"', 240, 220).replace(/\s+/g, ' ');
+  assert.match(markDeliveredWindow, /o\.status === ['"]picked_up['"]/);
+  assert.match(markDeliveredWindow, /✅ 已送达/);
+});
+
+test('admin 外卖卡片的编辑按钮不覆盖 picked_up', async () => {
+  const source = await readTabTablesSource();
+
+  const editWindow = sliceAround(source, 'data-admin-action="edit-order"', 220, 120).replace(/\s+/g, ' ');
+  assert.match(editWindow, /o\.status === ['"]pending['"] \|\| o\.status === ['"]confirmed['"] \|\| o\.status === ['"]delivering['"]/);
+  assert.doesNotMatch(editWindow, /picked_up/);
 });

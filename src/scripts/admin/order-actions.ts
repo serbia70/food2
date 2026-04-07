@@ -116,6 +116,70 @@ registerAdminGlobal('auto-assign-rider', async (el: HTMLElement) => {
   }
 }, false);
 
+registerAdminGlobal('mark-picked-up', async (el: HTMLElement) => {
+  const orderId = String(el?.dataset?.orderId || '').trim();
+  if (!orderId) return;
+  if (!confirm('确认已取餐，开始配送？')) return;
+
+  const hidden = document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null
+    || document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null;
+
+  try {
+    const res = await fetch('/api/order/update_status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: orderId,
+        expected_current_status: 'delivering',
+        status: 'picked_up',
+        courierName: String(hidden?.dataset?.courierName || '').trim(),
+        courierPhone: String(hidden?.dataset?.courierPhone || '').trim(),
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showAdminToast('已更新为取餐中');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showAdminToast('操作失败: ' + data.error);
+    }
+  } catch {
+    showAdminToast('网络错误');
+  }
+}, false);
+
+registerAdminGlobal('mark-delivered', async (el: HTMLElement) => {
+  const orderId = String(el?.dataset?.orderId || '').trim();
+  if (!orderId) return;
+  if (!confirm('确认已送达并收款？')) return;
+
+  const hidden = document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null
+    || document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null;
+
+  try {
+    const res = await fetch('/api/order/update_status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: orderId,
+        expected_current_status: 'picked_up',
+        status: 'completed',
+        courierName: String(hidden?.dataset?.courierName || '').trim(),
+        courierPhone: String(hidden?.dataset?.courierPhone || '').trim(),
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showAdminToast('已更新为已送达');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showAdminToast('操作失败: ' + data.error);
+    }
+  } catch {
+    showAdminToast('网络错误');
+  }
+}, false);
+
 export async function updateOrderStatus(orderId: string | number, status: string, driverInfo: any = null) {
   try {
     const payload: any = { status };

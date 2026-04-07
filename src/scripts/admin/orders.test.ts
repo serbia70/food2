@@ -530,7 +530,7 @@ test('admin page source does not turn failed orders fetch into fake empty delive
 
   assert.match(source, /const ordersLoadFailed = !ordersResp\.ok \|\| !Array\.isArray\(ordersResp\.data\);/);
   assert.match(source, /const rawOrders = Array\.isArray\(ordersResp\.data\) \? ordersResp\.data : \[\];/);
-  assert.match(source, /const ordersLoadErrorDetail = String\(ordersResp\.error \|\| ordersResp\.code \|\| ordersResp\.status \|\| ''\)\.trim\(\);/);
+  assert.match(source, /const ordersLoadErrorDetail = String\(ordersResp\.errorDetail \|\| ordersResp\.error \|\| ordersResp\.code \|\| ordersResp\.status \|\| ''\)\.trim\(\);/);
   assert.match(source, /<TabTables[\s\S]*adminOrdersUnavailable=\{ordersLoadFailed\}[\s\S]*adminOrdersErrorDetail=\{ordersLoadErrorDetail\}/);
   assert.match(tablesSource, /adminOrdersUnavailable = false,/);
   assert.match(tablesSource, /adminOrdersErrorDetail = '',/);

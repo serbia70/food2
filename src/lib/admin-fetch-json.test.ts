@@ -72,5 +72,26 @@ test('fetchJSON does not retry non-GET 502 responses', async () => {
   assert.equal(calls, 1);
   assert.equal(result.ok, false);
   assert.equal(result.status, 502);
+  assert.equal(result.error, 'bad_gateway');
+  assert.equal(result.errorDetail, '{"error":"bad_gateway"}');
   assert.deepEqual(result.data, { error: 'bad_gateway' });
+});
+
+test('fetchJSON preserves 503 response body for SSR diagnostics', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    error: 'Database busy, please retry',
+    code: 'backend_unavailable',
+  }), {
+    status: 503,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  const result = await fetchJSON('https://api.test.local/api/admin/orders');
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 503);
+  assert.equal(result.error, 'Database busy, please retry');
+  assert.equal(result.code, 'backend_unavailable');
+  assert.equal(result.errorDetail, '{"error":"Database busy, please retry","code":"backend_unavailable"}');
+  assert.deepEqual(result.data, { error: 'Database busy, please retry', code: 'backend_unavailable' });
 });

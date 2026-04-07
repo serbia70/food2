@@ -2,6 +2,9 @@ export type FetchJSONResult<T = unknown> = {
   ok: boolean;
   status: number;
   data: T | null;
+  error?: string;
+  code?: string;
+  errorDetail?: string;
 };
 
 function unwrapCanonicalData<T>(value: unknown): T | null {
@@ -43,16 +46,23 @@ export async function fetchJSON<T = unknown>(url: string, init: RequestInit = {}
         parsed = null;
       }
       const data = parsedOk ? unwrapCanonicalData<T>(parsed) : null;
+      const error = parsed && typeof parsed === 'object' && typeof (parsed as { error?: unknown }).error === 'string'
+        ? String((parsed as { error?: unknown }).error || '').trim()
+        : undefined;
+      const code = parsed && typeof parsed === 'object' && typeof (parsed as { code?: unknown }).code === 'string'
+        ? String((parsed as { code?: unknown }).code || '').trim()
+        : undefined;
+      const errorDetail = text.trim() || undefined;
       const shouldRetryGet = method === 'GET' && attempt === 0 && (
         res.status === 502 || res.status === 503 || res.status === 504 || (!parsedOk && text.trim() !== '')
       );
       if (shouldRetryGet) continue;
-      return { ok: res.ok, status: res.status, data };
+      return { ok: res.ok, status: res.status, data, error, code, errorDetail };
     } catch {
       if (method === 'GET' && attempt === 0) continue;
-      return { ok: false, status: 503, data: null };
+      return { ok: false, status: 503, data: null, error: 'fetch_failed', errorDetail: 'fetch_failed' };
     }
   }
 
-  return { ok: false, status: 503, data: null };
+  return { ok: false, status: 503, data: null, error: 'fetch_failed', errorDetail: 'fetch_failed' };
 }

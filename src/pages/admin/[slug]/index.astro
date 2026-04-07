@@ -224,7 +224,7 @@ const products = rawMenu.flatMap((c: any) => {
 });
 
 const ordersLoadFailed = !ordersResp.ok || !Array.isArray(ordersResp.data);
-const ordersLoadErrorDetail = String(ordersResp.error || ordersResp.code || ordersResp.status || '').trim();
+const ordersLoadErrorDetail = String(ordersResp.errorDetail || ordersResp.error || ordersResp.code || ordersResp.status || '').trim();
 const rawOrders = Array.isArray(ordersResp.data) ? ordersResp.data : [];
 const orders = rawOrders.map((o: any) => ({
   ...o,

@@ -17,3 +17,11 @@ test('shop page source uses single-retry fetch helper for info menu and home req
   assert.doesNotMatch(source, /fetch\(`\$\{API_BASE_URL\}\/\$\{encodeURIComponent\(slug\)\}\/info`\)/);
   assert.doesNotMatch(source, /fetch\(`\$\{API_BASE_URL\}\/\$\{encodeURIComponent\(slug\)\}\/menu`\)/);
 });
+
+test('shop page source only loads all table occupancy during tables mode', async () => {
+  const source = await readFile(pagePath, 'utf8');
+
+  assert.match(source, /if \(mode === 'tables' && allTables\.length > 0\) \{/);
+  assert.match(source, /await Promise\.all\(/);
+  assert.match(source, /\$\{API_BASE_URL\}\/api\/order\/by_table\?slug=\$\{encodeURIComponent\(slug\)\}&table=\$\{encodeURIComponent\(key\)\}/);
+});

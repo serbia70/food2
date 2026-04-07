@@ -261,7 +261,7 @@ const endedOrderStatus = new Set(endedOrderStatusList);
 const tableStatusMap: Record<string, { occupied: boolean; total: number; orderTime: string; activeCount: number }> = {};
 
 const allTables = tableZones.flatMap((z) => z.tables.map((t) => t.value));
-if (allTables.length > 0) {
+if (mode === 'tables' && allTables.length > 0) {
   await Promise.all(
     allTables.map(async (tableValue) => {
       const keys = buildTableLookupKeys(tableValue);

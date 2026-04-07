@@ -92,7 +92,6 @@ registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
       pickupEtaMinutes,
       riderTelegramChatId: String((target as { telegramChatId?: string }).telegramChatId || '').trim(),
       telegramBotToken,
-      debugTelegram: true,
     });
   } catch (error) {
     showAdminToast(getErrorMessage(error, '指派骑手失败'));

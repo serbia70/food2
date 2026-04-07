@@ -425,6 +425,20 @@ test('admin orders api source uses canonical itemsJson repair fields', async () 
   assert.doesNotMatch(source, /items_json/);
 });
 
+test('admin orders api source uses proxy admin request instead of raw upstream fetch', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/pages/api/admin/orders.ts'), 'utf8');
+
+  assert.match(source, /import \{ proxyAdminRequest \} from '\.\.\/\.\.\/\.\.\/lib\/admin-api-route';/);
+  assert.match(source, /const res = await proxyAdminRequest\(\{/);
+  assert.match(source, /request,/);
+  assert.match(source, /cookies,/);
+  assert.match(source, /url: `\$\{API_BASE_URL\}\/api\/admin\/orders\$\{q\}`,/);
+  assert.doesNotMatch(source, /buildAdminAuthHeader/);
+  assert.doesNotMatch(source, /await fetch\(`\$\{API_BASE_URL\}\/api\/admin\/orders\$\{q\}`/);
+});
+
 test('billing ui source uses canonical order record fields', async () => {
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
@@ -506,6 +520,21 @@ test('admin page source loads protected master settings instead of public home s
   assert.doesNotMatch(source, /fetch\(new URL\('\/api\/master\/init', Astro\.url\), \{/);
   assert.doesNotMatch(source, /method: 'GET'[\s\S]*\/api\/admin\/settings\/master/);
   assert.doesNotMatch(source, /const masterSettings = asObject\(homeData\?\.settings \|\| \{\}\);/);
+});
+
+test('admin page source does not turn failed orders fetch into fake empty delivery list', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/pages/admin/[slug]/index.astro'), 'utf8');
+  const tablesSource = await readFile(resolve(process.cwd(), 'src/components/admin/TabTables.astro'), 'utf8');
+
+  assert.match(source, /const ordersLoadFailed = !ordersResp\.ok \|\| !Array\.isArray\(ordersResp\.data\);/);
+  assert.match(source, /const rawOrders = Array\.isArray\(ordersResp\.data\) \? ordersResp\.data : \[\];/);
+  assert.match(source, /<TabTables[\s\S]*adminOrdersUnavailable=\{ordersLoadFailed\}/);
+  assert.match(tablesSource, /adminOrdersUnavailable = false,/);
+  assert.match(tablesSource, /\{adminOrdersUnavailable \? \(/);
+  assert.match(tablesSource, /外卖订单加载失败，请刷新重试/);
+  assert.doesNotMatch(tablesSource, /\{activeDeliveryOrders\.length === 0 \? \(/);
 });
 
 test('table management source uses canonical order fields', async () => {

@@ -193,7 +193,11 @@ if (typeof window !== "undefined") {
   };
 
   window.refreshOrderList = function () {
-    setTimeout(() => location.reload(), 1500);
+    if (window.__adminAssignInFlight) {
+      window.__adminPendingOrderRefresh = true;
+      return;
+    }
+    location.reload();
   };
 
   window.markPaid = async function (orderId: string | number) {

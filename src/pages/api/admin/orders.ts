@@ -1,19 +1,19 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config';
-import { buildAdminAuthHeader } from '../../../lib/admin-api-route';
+import { proxyAdminRequest } from '../../../lib/admin-api-route';
 // TODO: 移除代理层业务修补，待后端稳定输出订单 itemsJson 后删除。
 
 export const prerender = false;
 
 export const GET: APIRoute = async ({ request, url, cookies }) => {
-  const authHeaders = buildAdminAuthHeader(request, cookies);
   const q = url.search || '';
 
-  const res = await fetch(`${API_BASE_URL}/api/admin/orders${q}`, {
+  const res = await proxyAdminRequest({
+    request,
+    cookies,
+    url: `${API_BASE_URL}/api/admin/orders${q}`,
     method: 'GET',
-    cache: 'no-store',
     headers: {
-      ...authHeaders,
       'Cache-Control': 'no-cache',
       Pragma: 'no-cache',
     },

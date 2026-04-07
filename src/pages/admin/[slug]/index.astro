@@ -223,6 +223,7 @@ const products = rawMenu.flatMap((c: any) => {
   }));
 });
 
+const ordersLoadFailed = !ordersResp.ok || !Array.isArray(ordersResp.data);
 const rawOrders = Array.isArray(ordersResp.data) ? ordersResp.data : [];
 const orders = rawOrders.map((o: any) => ({
   ...o,
@@ -368,6 +369,7 @@ const cities = {
       <TabTables
         tableCardsData={tableCardsData}
         activeDeliveryOrders={activeDeliveryOrders}
+        adminOrdersUnavailable={ordersLoadFailed}
         unmatchedDineInOrders={unmatchedDineInOrders}
         useSimpleHallLabel={useSimpleHallLabel}
         billingPlanType={billingPlanType}

@@ -530,10 +530,14 @@ test('admin page source does not turn failed orders fetch into fake empty delive
 
   assert.match(source, /const ordersLoadFailed = !ordersResp\.ok \|\| !Array\.isArray\(ordersResp\.data\);/);
   assert.match(source, /const rawOrders = Array\.isArray\(ordersResp\.data\) \? ordersResp\.data : \[\];/);
-  assert.match(source, /<TabTables[\s\S]*adminOrdersUnavailable=\{ordersLoadFailed\}/);
+  assert.match(source, /const ordersLoadErrorDetail = String\(ordersResp\.error \|\| ordersResp\.code \|\| ordersResp\.status \|\| ''\)\.trim\(\);/);
+  assert.match(source, /<TabTables[\s\S]*adminOrdersUnavailable=\{ordersLoadFailed\}[\s\S]*adminOrdersErrorDetail=\{ordersLoadErrorDetail\}/);
   assert.match(tablesSource, /adminOrdersUnavailable = false,/);
+  assert.match(tablesSource, /adminOrdersErrorDetail = '',/);
   assert.match(tablesSource, /\{adminOrdersUnavailable \? \(/);
   assert.match(tablesSource, /外卖订单加载失败，请刷新重试/);
+  assert.match(tablesSource, /\{adminOrdersErrorDetail && \(/);
+  assert.match(tablesSource, /订单接口诊断：\{adminOrdersErrorDetail\}/);
   assert.doesNotMatch(tablesSource, /\{activeDeliveryOrders\.length === 0 \? \(/);
 });
 

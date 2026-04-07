@@ -66,3 +66,10 @@ test('admin 页面与登录页在开发环境主动注销旧 service worker，�
   assert.match(adminLoginCode, /registration\.unregister\(\)/);
   assert.match(adminLoginCode, /if \(!ios12 && swScope && 'serviceWorker' in navigator\) \{/);
 });
+
+test('admin 首屏 orders 走本地稳定代理而不是 SSR 直连后端 orders', async () => {
+  const adminPageCode = await readText(adminPagePath);
+
+  assert.match(adminPageCode, /fetchJSON\(`\/api\/admin\/orders\?_=\$\{Date\.now\(\)\}`/);
+  assert.doesNotMatch(adminPageCode, /fetchJSON\(`\$\{API_BASE_URL\}\/api\/admin\/orders\?_=\$\{Date\.now\(\)\}`/);
+});

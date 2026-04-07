@@ -114,7 +114,7 @@ test('manual_assign returns telegram_notification failure when callback buttons 
       if (url === 'https://api.test.local/api/telegram/send') {
         const telegramBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
         const replyMarkup = telegramBody?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string }>> } | undefined;
-        assert.equal(replyMarkup?.inline_keyboard?.flat().some((button) => button?.text === '立即接单'), false);
+        assert.equal(replyMarkup?.inline_keyboard?.flat().some((button) => button?.text === '接单'), false);
         return new Response(JSON.stringify({ success: true, ok: true }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -785,7 +785,7 @@ test('manual_assign sends short callback token and rider-claim can consume it', 
   assert.match(String(telegramBody?.text || ''), /2890 RSD/);
 
   const replyMarkup = telegramBody?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> } | undefined;
-  const claimButton = replyMarkup?.inline_keyboard?.flat().find((button) => button?.text === '立即接单');
+  const claimButton = replyMarkup?.inline_keyboard?.flat().find((button) => button?.text === '接单');
   assert.ok(claimButton?.callback_data);
   assert.match(String(claimButton?.callback_data || ''), /^rc2\./);
   assert.ok(Buffer.byteLength(String(claimButton?.callback_data || ''), 'utf8') <= 64);
@@ -952,7 +952,7 @@ test('manual_assign short callback keeps original rider full name when rider/sta
 
   assert.equal(response.status, 200);
   const replyMarkup = telegramBody?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> } | undefined;
-  const claimButton = replyMarkup?.inline_keyboard?.flat().find((button) => button?.text === '立即接单');
+  const claimButton = replyMarkup?.inline_keyboard?.flat().find((button) => button?.text === '接单');
   const { POST: riderClaimPost } = await import('../../../pages/api/telegram/rider-claim.ts');
   const claimResponse = await riderClaimPost({
     request: new Request('http://localhost:3000/api/telegram/rider-claim', {
@@ -1312,7 +1312,7 @@ test('manual_assign 在仅有 TELEGRAM_WEBHOOK_SECRET 时仍可发送带接单�
 
     assert.equal(response.status, 200);
     const replyMarkup = telegramBody?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> } | undefined;
-    const claimButton = replyMarkup?.inline_keyboard?.flat().find((button) => button?.text === '立即接单');
+    const claimButton = replyMarkup?.inline_keyboard?.flat().find((button) => button?.text === '接单');
     assert.ok(claimButton?.callback_data);
     assert.deepEqual(await response.json(), {
       success: true,

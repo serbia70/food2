@@ -83,7 +83,7 @@ const [statusResp, shopResp, menuResp, ordersResp, billingResp, homeResp, master
   fetchJSON(`${API_BASE_URL}/api/admin/status`, { headers: authHeaders }),
   fetchJSON(`${API_BASE_URL}/${encodeURIComponent(slug)}/info`),
   fetchJSON(`${API_BASE_URL}/${encodeURIComponent(slug)}/menu`),
-  fetchJSON(`${API_BASE_URL}/api/admin/orders?_=${Date.now()}`, { headers: authHeaders }),
+  fetchJSON(`/api/admin/orders?_=${Date.now()}`, { headers: authHeaders }),
   fetchJSON(`${API_BASE_URL}/api/admin/billing`, { headers: authHeaders }),
   fetchJSON(`${API_BASE_URL}/api/home`),
   loadProtectedMasterSettings(),
@@ -224,6 +224,7 @@ const products = rawMenu.flatMap((c: any) => {
 });
 
 const ordersLoadFailed = !ordersResp.ok || !Array.isArray(ordersResp.data);
+const ordersLoadErrorDetail = String(ordersResp.error || ordersResp.code || ordersResp.status || '').trim();
 const rawOrders = Array.isArray(ordersResp.data) ? ordersResp.data : [];
 const orders = rawOrders.map((o: any) => ({
   ...o,
@@ -370,6 +371,7 @@ const cities = {
         tableCardsData={tableCardsData}
         activeDeliveryOrders={activeDeliveryOrders}
         adminOrdersUnavailable={ordersLoadFailed}
+        adminOrdersErrorDetail={ordersLoadErrorDetail}
         unmatchedDineInOrders={unmatchedDineInOrders}
         useSimpleHallLabel={useSimpleHallLabel}
         billingPlanType={billingPlanType}

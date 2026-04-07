@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { timingSafeEqual } from 'node:crypto';
 import { API_BASE_URL } from '../../../config.ts';
 import { buildDispatchMetaRemarks, getRiderDispatchState, readDispatchMetaFromRemarks } from '../../../lib/rider-dispatch.ts';
-import { parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
+import { buildRiderDeliveryCompleteTelegramMessage, buildTelegramShortClaimCallback, parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
 import { pickNextAvailableRider, readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
 import { readTelegramRequestSecret } from '../../../lib/telegram-secrets.ts';
 
@@ -87,6 +87,43 @@ function isTrustedTelegramRequest(request: Request): boolean {
   return provided !== '' && safeEqualText(provided, expected);
 }
 
+async function sendDeliveryCompleteMessage(request: Request, callback: ReturnType<typeof parseTelegramClaimCallback>, riderName: string, riderPhone: string, chatId: string): Promise<void> {
+  const order = await readOrderDetail(request, String(callback.orderId || '').trim());
+  if (!order) return;
+
+  const completeCallbackData = buildTelegramShortClaimCallback({
+    orderId: Number(callback.orderId),
+    riderId: Number(callback.riderId),
+    riderName,
+    riderPhone,
+    restaurantId: String(callback.restaurantId || 'admin').trim() || 'admin',
+    telegramChatId: chatId,
+  });
+
+  const message = buildRiderDeliveryCompleteTelegramMessage({
+    orderNo: String(order.orderNo || order.order_no || callback.orderId || '').trim(),
+    address: String(order.tableInfo || order.table_info || '').trim() || '未提供地址',
+    phone: String(order.userPhone || order.user_phone || '').trim() || '-',
+    totalAmount: Number(order.totalAmount || order.total_amount || 0) || 0,
+    pickupEtaMinutes: Number(order.pickupEtaMinutes || order.pickup_eta_minutes || 0) || 0,
+    completeCallbackData,
+  });
+
+  await fetch(`${readInternalApiBaseUrl()}/api/telegram/send`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildForwardHeaders(request),
+    },
+    body: JSON.stringify({
+      chat_id: chatId,
+      chatId,
+      text: message.text,
+      reply_markup: message.replyMarkup,
+    }),
+  });
+}
+
 async function readOrderDispatchSnapshot(
   request: Request,
   orderId: string,
@@ -115,6 +152,25 @@ async function readOrderDispatchSnapshot(
 
 async function readOrderDispatchMeta(request: Request, orderId: string): Promise<string> {
   return (await readOrderDispatchSnapshot(request, orderId)).remarksJson;
+}
+
+async function readOrderDetail(request: Request, orderId: string): Promise<Record<string, unknown> | null> {
+  const upstream = await fetch(`${readInternalApiBaseUrl()}/api/admin/orders`, {
+    headers: buildForwardHeaders(request),
+  });
+  const text = await upstream.text();
+  if (!upstream.ok || !text) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+
+  const rows = Array.isArray(parsed) ? parsed : [];
+  const matched = rows.find((row) => String((row as Record<string, unknown>)?.id || '').trim() === orderId);
+  return matched && typeof matched === 'object' ? matched as Record<string, unknown> : null;
 }
 
 async function writeOrderDispatchMeta(
@@ -370,6 +426,13 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
       riderId: callback.riderId,
       chatId,
     }));
+  }
+  if (upstream.ok) {
+    try {
+      await sendDeliveryCompleteMessage(request, callback, resolvedName, resolvedPhone, chatId);
+    } catch {
+      // 不阻断接单成功回包
+    }
   }
   return new Response(text, {
     status: upstream.status,

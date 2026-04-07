@@ -249,3 +249,20 @@ test('buildRiderDeliveryCompleteTelegramMessage renders complete button for deli
   ]]);
   assert.match(message.text, /配送中/);
 });
+
+test('buildAdminAssignedOrderTelegramMessage delivering stage carries complete button when provided', () => {
+  const message = buildAdminAssignedOrderTelegramMessage({
+    orderNo: 'NO777',
+    address: 'Beograd 7',
+    totalAmount: 1880,
+    phone: '0607',
+    pickupEtaMinutes: 8,
+    itemSummary: ['披萨 x1'],
+    completeCallbackData: 'complete-777',
+  } as any);
+
+  assert.deepEqual(message.replyMarkup.inline_keyboard, [[
+    { text: '送餐完成', callback_data: 'complete-777' },
+  ]]);
+  assert.match(message.text, /订单号：NO777/);
+});

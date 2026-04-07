@@ -63,7 +63,7 @@ import Layout from '../../layouts/Layout.astro';
     .tabs { display: flex; border-bottom: 1px solid #eee; }
     .tab { flex: 1; padding: 15px; border: none; background: #fff; font-size: 15px; font-weight: 600; color: #666; cursor: pointer; border-bottom: 3px solid transparent; }
     .tab.active { color: #2196f3; border-bottom-color: #2196f3; }
-    .order-list { padding: 15px; padding-bottom: 80px; min-height: calc(100vh - 160px); }
+    .order-list { padding: 15px; padding-bottom: 80px; min-height: calc(100vh - 160px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
     .order-card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 5px solid #ccc; }
     .order-card.status-awaiting_courier { border-left-color: #7c3aed; }
     .order-card.status-delivering { border-left-color: #ff9800; }
@@ -97,7 +97,7 @@ import Layout from '../../layouts/Layout.astro';
 
   <script>
     import { getRiderTelegramBindingCopy, isValidRiderSession, normalizeRiderSession } from '../../lib/rider-session';
-    import { getAdminDispatchStatusCopy, getRiderDispatchState, getRiderStatusHintCopy, readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
+    import { buildDispatchMetaRemarks, getAdminDispatchStatusCopy, getRiderDispatchState, getRiderStatusHintCopy, readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
 
     let rider = null;
     let currentTab = 'active';
@@ -544,6 +544,14 @@ import Layout from '../../layouts/Layout.astro';
             button.textContent = actionState.invalidReason;
           }
           actionWrap.appendChild(button);
+
+          const decline = document.createElement('button');
+          decline.type = 'button';
+          decline.className = 'btn-action';
+          decline.textContent = '暂不接单';
+          decline.addEventListener('click', () => window.declineOrder(o.id));
+          actionWrap.appendChild(decline);
+
           card.appendChild(actionWrap);
         }
 
@@ -646,6 +654,59 @@ import Layout from '../../layouts/Layout.astro';
 
         alert(shouldHintTaken ? '该订单已被其他骑手接走，将刷新列表' : `接单失败: ${rawError || 'unknown'}`);
         loadOrders();
+      } catch {
+        alert('网络错误');
+      }
+    };
+
+    window.declineOrder = async function(id) {
+      if (!confirm('确认暂不接这单？')) return;
+      const target = allOrders.find((item) => String(item?.id || '').trim() === String(id || '').trim());
+      if (!target || !rider) {
+        alert('订单不存在');
+        return;
+      }
+      try {
+        const dispatchMeta = readDispatchMetaFromRemarks(target.remarksJson || target.remarks_json);
+        const declinedRiderIds = Array.from(new Set([
+          ...dispatchMeta.declinedRiderIds,
+          String(rider.id || '').trim(),
+        ].filter(Boolean)));
+        const invalidatedRiderIds = Array.from(new Set([
+          ...dispatchMeta.invalidatedRiderIds,
+          String(rider.id || '').trim(),
+        ].filter(Boolean)));
+        const nextRemarks = buildDispatchMetaRemarks(target.remarksJson || target.remarks_json, {
+          lastRiderDecision: {
+            action: 'declined',
+            riderId: String(rider.id || '').trim(),
+            riderName: String(rider.name || '').trim(),
+            riderPhone: String(rider.phone || '').trim(),
+            at: new Date().toISOString(),
+          },
+          declinedRiderIds,
+          currentRiderId: '',
+          currentAssignedAt: '',
+          currentExpiresAt: '',
+          invalidatedRiderIds,
+          lastInvalidationReason: 'declined',
+        });
+        const res = await fetch('/api/order/update_status', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            id,
+            expected_current_status: 'awaiting_courier',
+            status: 'awaiting_courier',
+            remarks_json: JSON.stringify(nextRemarks),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.success) {
+          loadOrders();
+        } else {
+          alert('暂不接单失败: ' + String(data.error || 'unknown'));
+        }
       } catch {
         alert('网络错误');
       }

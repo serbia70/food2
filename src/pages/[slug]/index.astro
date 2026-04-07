@@ -19,6 +19,7 @@ import {
   isSimpleHallMode,
 } from '../../lib/table-config';
 import { buildDineInBillingState } from '../../lib/dine-in-billing.ts';
+import { fetchJsonWithSingleRetry } from '../../lib/public-page-fetch.ts';
 import { buildTableLookupKeys } from '../../scripts/shop/table-utils';
 
 export const prerender = false;
@@ -41,16 +42,12 @@ const parseJSON = <T = any>(raw: any, fallback: T): T => {
   }
 };
 
-let shopRes: Response;
-let menuRes: Response;
-try {
-  [shopRes, menuRes] = await Promise.all([
-    fetch(`${API_BASE_URL}/${encodeURIComponent(slug)}/info`),
-    fetch(`${API_BASE_URL}/${encodeURIComponent(slug)}/menu`),
-  ]);
-} catch {
-  return new Response('Upstream unavailable', { status: 503 });
-}
+const [shopFetch, menuFetch] = await Promise.all([
+  fetchJsonWithSingleRetry(`${API_BASE_URL}/${encodeURIComponent(slug)}/info`),
+  fetchJsonWithSingleRetry(`${API_BASE_URL}/${encodeURIComponent(slug)}/menu`),
+]);
+const shopRes = shopFetch.response;
+const menuRes = menuFetch.response;
 
 if (!shopRes.ok) {
   const status = classifyShopResponseStatus(shopRes.status);
@@ -58,10 +55,8 @@ if (!shopRes.ok) {
   return new Response(message, { status });
 }
 
-let shop: any;
-try {
-  shop = await shopRes.json();
-} catch {
+let shop: any = shopFetch.data;
+if (shop == null) {
   return new Response('Invalid upstream response', { status: 502 });
 }
 const isOkShopEnvelope = shop && typeof shop === 'object' && 'ok' in shop && shop.ok === true;
@@ -74,13 +69,9 @@ const isMenuTextMode = settings?.menuTextMode === true || menuLayout.startsWith(
 
 let rawMenu: any[] = [];
 if (menuRes.ok) {
-  try {
-    const parsed = await menuRes.json();
-    const parsedMenuData = parsed && typeof parsed === 'object' && 'ok' in parsed && parsed.ok === true && 'data' in parsed ? parsed.data : parsed;
-    rawMenu = Array.isArray(parsedMenuData) ? parsedMenuData : [];
-  } catch {
-    rawMenu = [];
-  }
+  const parsed = menuFetch.data;
+  const parsedMenuData = parsed && typeof parsed === 'object' && 'ok' in parsed && parsed.ok === true && 'data' in parsed ? parsed.data : parsed;
+  rawMenu = Array.isArray(parsedMenuData) ? parsedMenuData : [];
 }
 
 const promotionsData = Array.isArray(shop?.promotions) ? shop.promotions : [];
@@ -116,13 +107,13 @@ let masterSettings: any = {};
 // Public master settings (no auth) for footer/contact display.
 // Ensures the shop page footer matches `/master?tab=settings` without requiring a master token.
 let publicMasterSettings: any = {};
-try {
-  const homeRes = await fetch(`${API_BASE_URL}/api/home`);
-  if (homeRes.ok) {
-    const d = await homeRes.json();
-    publicMasterSettings = d?.settings || {};
+const homeFetch = await fetchJsonWithSingleRetry(`${API_BASE_URL}/api/home`);
+if (homeFetch.response.ok) {
+  const d = homeFetch.data;
+  if (d && typeof d === 'object') {
+    publicMasterSettings = (d as { settings?: unknown }).settings || {};
   }
-} catch {}
+}
 
 const footerPhone = publicMasterSettings.footer_phone || publicMasterSettings.footerPhone || masterSettings.footerPhone || '000000000';
 const footerCopyright = publicMasterSettings.footer_copyright || publicMasterSettings.footerCopyright || masterSettings.footerCopyright || '© Fast Food';

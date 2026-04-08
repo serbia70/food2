@@ -405,6 +405,74 @@ test('loadOrders fetches admin orders and updates hidden-data without full reloa
   assert.equal(hiddenNodes[0]?.dataset?.status, 'delivering');
 });
 
+test('loadOrders normalizes snake_case admin orders payload before rendering', async () => {
+  const hiddenNodes: Array<{ dataset: Record<string, string> }> = [
+    { dataset: { orderId: '1', oid: '1', status: 'awaiting_courier', remarks: '[]' } },
+  ];
+  const deliveryContainer = { innerHTML: '' };
+  const orderList = { innerHTML: '' };
+  const tableConfigNode = { textContent: JSON.stringify([{ name: '大厅', prefix: '', count: 2 }]) };
+
+  globalThis.location = { reload() {} } as any;
+  globalThis.document = {
+    getElementById(id: string) {
+      if (id === 'delivery-list-container') return deliveryContainer;
+      if (id === 'tab-orders') return { querySelector: (selector: string) => selector === '.order-list' ? orderList : null };
+      if (id === 'table-config-data') return tableConfigNode;
+      return null;
+    },
+    querySelectorAll(selector: string) {
+      if (selector === '.hidden-data') return hiddenNodes as any;
+      return [] as any;
+    },
+  } as any;
+  globalThis.window = {
+    __adminHandlers: {},
+    __adminRuntime: {
+      shopId: 103,
+      shopSlug: 'demo-shop',
+      currentSettings: {},
+    },
+    showToast() {},
+  } as any;
+
+  globalThis.fetch = async () => new Response(JSON.stringify([
+    {
+      id: 615,
+      order_no: '615',
+      order_type: 'delivery',
+      status: 'awaiting_courier',
+      total_amount: 123,
+      items_json: '[{"name":"炒饭","quantity":2}]',
+      remarks_json: '[]',
+      table_info: 'Test Address 15',
+      user_phone: '381611111111',
+      scheduled_for: '18:30',
+      rider_broadcasted_at: '2026-04-09 18:00:00',
+      rider_remind_count: 1,
+      courier_name: 'Rider Snake',
+      courier_phone: '381620000000',
+      created_at: '2026-04-09 17:50:00',
+      is_deleted: 0,
+    },
+  ]), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  await orders.loadOrders();
+
+  assert.equal(hiddenNodes[0]?.dataset?.orderId, '615');
+  assert.equal(hiddenNodes[0]?.dataset?.orderNo, '615');
+  assert.equal(hiddenNodes[0]?.dataset?.table, 'Test Address 15');
+  assert.equal(hiddenNodes[0]?.dataset?.userPhone, '381611111111');
+  assert.equal(hiddenNodes[0]?.dataset?.total, '123');
+  assert.match(deliveryContainer.innerHTML, /Test Address 15/);
+  assert.match(deliveryContainer.innerHTML, /381611111111/);
+  assert.match(deliveryContainer.innerHTML, /123 RSD/);
+  assert.match(deliveryContainer.innerHTML, /炒饭/);
+});
+
 test('assignRider does not flush deferred order refresh before debug alerts are emitted', async () => {
   const alertMessages: string[] = [];
   let refreshCount = 0;

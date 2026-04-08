@@ -4,6 +4,7 @@ import {
   isAwaitingCourierOrder,
   readDispatchMetaFromRemarks,
 } from '../../lib/rider-dispatch.ts';
+import { normalizeJSONString, normalizeRemarkJSONString } from '../../lib/admin-dashboard-utils.ts';
 import { getAdminHandler } from './globals.ts';
 
 type TelegramNotificationDiagnostics = {
@@ -17,6 +18,7 @@ type TelegramNotificationDiagnostics = {
 type AdminOrderRow = {
   id?: string | number;
   orderNo?: string | number;
+  orderType?: string;
   itemsJson?: string;
   remarksJson?: string;
   totalAmount?: string | number;
@@ -24,10 +26,16 @@ type AdminOrderRow = {
   status?: string;
   userPhone?: string;
   scheduledFor?: string;
+  pickupEtaMinutes?: string | number;
+  pickupReadyAt?: string;
   riderBroadcastedAt?: string;
   riderRemindCount?: string | number;
+  riderLastRemindedAt?: string;
+  riderContactAttemptedAt?: string;
   courierName?: string;
   courierPhone?: string;
+  createdAt?: string;
+  isDeleted?: string | number;
 };
 
 const ASSIGN_RIDER_REQUEST_TIMEOUT_MS = 15000;
@@ -60,7 +68,30 @@ function toDatasetValue(value: unknown): string {
 }
 
 function normalizeAdminOrdersPayload(data: unknown): AdminOrderRow[] {
-  return Array.isArray(data) ? data as AdminOrderRow[] : [];
+  if (!Array.isArray(data)) return [];
+  return data.map((row: any) => ({
+    ...row,
+    id: row?.id,
+    orderNo: row?.orderNo ?? row?.order_no ?? row?.id,
+    orderType: row?.orderType ?? row?.order_type ?? (String(row?.tableInfo || row?.table_info || '').trim() ? 'dine_in' : ''),
+    status: row?.status ?? (String(row?.tableInfo || row?.table_info || '').trim() ? 'pending' : ''),
+    totalAmount: row?.totalAmount ?? row?.total_amount ?? 0,
+    itemsJson: normalizeJSONString(row?.itemsJson ?? row?.items_json, '[]'),
+    remarksJson: normalizeRemarkJSONString(row?.remarksJson ?? row?.remarks_json),
+    tableInfo: row?.tableInfo ?? row?.table_info ?? '',
+    userPhone: row?.userPhone ?? row?.user_phone ?? '',
+    scheduledFor: row?.scheduledFor ?? row?.scheduled_for ?? '',
+    pickupEtaMinutes: row?.pickupEtaMinutes ?? row?.pickup_eta_minutes ?? 0,
+    pickupReadyAt: row?.pickupReadyAt ?? row?.pickup_ready_at ?? '',
+    riderBroadcastedAt: row?.riderBroadcastedAt ?? row?.rider_broadcasted_at ?? '',
+    riderRemindCount: row?.riderRemindCount ?? row?.rider_remind_count ?? 0,
+    riderLastRemindedAt: row?.riderLastRemindedAt ?? row?.rider_last_reminded_at ?? '',
+    riderContactAttemptedAt: row?.riderContactAttemptedAt ?? row?.rider_contact_attempted_at ?? '',
+    courierName: row?.courierName ?? row?.courier_name ?? '',
+    courierPhone: row?.courierPhone ?? row?.courier_phone ?? '',
+    createdAt: row?.createdAt ?? row?.created_at ?? '',
+    isDeleted: row?.isDeleted ?? row?.is_deleted ?? 0,
+  } satisfies AdminOrderRow));
 }
 
 function replaceHiddenOrderData(rows: AdminOrderRow[]) {

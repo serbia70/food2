@@ -54,8 +54,10 @@ test('admin 外卖卡片在 awaiting_courier 且骑手拒单时展示拒单反�
   const source = await readTabTablesSource();
 
   assert.match(source, /readDispatchMetaFromRemarks/);
+  assert.match(source, /isAwaitingCourierOrder/);
 
-  assert.match(source, /const riderDeclinedAwaitingCourier = o\.status === ['"]awaiting_courier['"] && lastRiderDecision\?\.action === ['"]declined['"];/);
+  assert.match(source, /const riderDeclinedAwaitingCourier = isAwaitingCourierOrder\(o\) && lastRiderDecision\?\.action === ['"]declined['"];/);
+  assert.doesNotMatch(source, /const riderDeclinedAwaitingCourier = o\.status === ['"]awaiting_courier['"] && lastRiderDecision\?\.action === ['"]declined['"];/);
 
   const declinedStatusWindow = sliceAround(source, '骑手已拒单', 320, 260).replace(/\s+/g, ' ');
   assert.match(declinedStatusWindow, /riderDeclinedAwaitingCourier \? ['"]骑手已拒单['"]/);

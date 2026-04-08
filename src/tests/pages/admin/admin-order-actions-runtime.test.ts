@@ -7,6 +7,7 @@ const orderActionsPath = resolve(process.cwd(), 'src/scripts/admin/order-actions
 const ordersPath = resolve(process.cwd(), 'src/scripts/admin/orders.ts');
 const mqttAudioPath = resolve(process.cwd(), 'src/scripts/admin/mqtt-audio.ts');
 const adminEntryPath = resolve(process.cwd(), 'src/scripts/admin/admin-entry.ts');
+const globalBindingsPath = resolve(process.cwd(), 'src/scripts/admin/global-bindings.ts');
 
 test('assign rider source does not force telegram debug alerts during normal admin dispatch', async () => {
   const source = await readFile(orderActionsPath, 'utf8');
@@ -29,12 +30,12 @@ test('admin orders source does not use delayed full page reload for refreshOrder
   assert.doesNotMatch(source, /setTimeout\(\(\) => location\.reload\(\), 1500\)/);
 });
 
-test('admin mqtt audio source suppresses awaiting_courier status update toast and reload churn', async () => {
+test('admin mqtt audio source does not drop awaiting_courier status updates before refresh chain', async () => {
   const source = await readFile(mqttAudioPath, 'utf8');
 
-  assert.match(source, /if \(payload\.event === 'status_update' && String\(payload\.status \|\| ''\) === 'awaiting_courier'\) \{/);
-  assert.match(source, /return;/);
-  assert.doesNotMatch(source, /toast\(`订单 #\$\{payload\.order_id \|\| ''\} 状态更新: \$\{payload\.status\}`\);/);
+  assert.doesNotMatch(source, /if \(payload\.event === 'status_update' && String\(payload\.status \|\| ''\) === 'awaiting_courier'\) \{/);
+  assert.match(source, /if \(payload\.event === 'status_update'\) \{/);
+  assert.match(source, /const refreshOrderList = getAdminHandler<\(\) => void>\('refreshOrderList'\);/);
 });
 
 test('admin entry source refreshes orders tab when page returns to foreground', async () => {
@@ -46,4 +47,18 @@ test('admin entry source refreshes orders tab when page returns to foreground', 
   assert.match(source, /if \(lastTab !== 'orders'\) return;/);
   assert.match(source, /if \(window\.__adminAssignInFlight\) return;/);
   assert.match(source, /location\.reload\(\);/);
+});
+
+
+test('admin orders refresh source prefers lightweight loadOrders handler before full page reload', async () => {
+  const ordersSource = await readFile(ordersPath, 'utf8');
+  const bindingsSource = await readFile(globalBindingsPath, 'utf8');
+
+  assert.match(ordersSource, /const loadOrders = getAdminHandler<\(\) => void>\('loadOrders'\);/);
+  assert.match(ordersSource, /if \(typeof loadOrders === 'function'\) \{\s*loadOrders\(\);\s*return;\s*\}/s);
+  assert.match(ordersSource, /location\.reload\(\);/);
+
+  assert.match(bindingsSource, /const loadOrders = getAdminHandler<\(\) => void>\('loadOrders'\);/);
+  assert.match(bindingsSource, /if \(typeof loadOrders === 'function'\) \{\s*loadOrders\(\);\s*return;\s*\}/s);
+  assert.match(bindingsSource, /location\.reload\(\);/);
 });

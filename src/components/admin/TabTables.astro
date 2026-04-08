@@ -1,6 +1,6 @@
 ---
 import { inferLegacySimpleHallNumber } from '../../lib/admin-table-ref';
-import { getAdminDeliveryActionFlags, getAdminDispatchStatusCopy, readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
+import { getAdminDeliveryActionFlags, getAdminDispatchStatusCopy, isAwaitingCourierOrder, readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
 const {
   tableCardsData,
   activeDeliveryOrders,
@@ -225,7 +225,7 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
         const deliveryItems = parseItems(o.itemsJson);
         const dispatchMeta = readDispatchMetaFromRemarks(String(o.remarksJson || ''));
         const lastRiderDecision = dispatchMeta.lastRiderDecision;
-        const riderDeclinedAwaitingCourier = o.status === 'awaiting_courier' && lastRiderDecision?.action === 'declined';
+        const riderDeclinedAwaitingCourier = isAwaitingCourierOrder(o) && lastRiderDecision?.action === 'declined';
         const deliveryActionFlags = getAdminDeliveryActionFlags(o.status);
 
         return (

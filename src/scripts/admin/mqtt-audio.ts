@@ -200,10 +200,6 @@ function handleRealtimePayload(payload: any) {
   
   const orderType = String(payload?.orderType || payload?.order_type || '').trim();
 
-  if (payload.event === 'status_update' && String(payload.status || '') === 'awaiting_courier') {
-    return;
-  }
-
   if (isCreation || isReview) {
     toast(payload.status === 'review_needed' ? '有加菜请求，等待审核' : '新订单来了');
     playAudio(payload.status, orderType);

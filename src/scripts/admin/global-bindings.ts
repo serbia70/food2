@@ -1,6 +1,6 @@
 import { enableAudio, playAudio } from './mqtt-audio';
 import { showTab, logout, compressImage } from './core';
-import { registerAdminGlobal, showAdminToast } from './globals';
+import { getAdminHandler, registerAdminGlobal, showAdminToast } from './globals';
 import { bindBillingGlobals } from './billing-ui';
 import { loadReservations, loadReservationStats } from './reservations';
 import { loadStats } from './stats';
@@ -72,6 +72,11 @@ export function bindAdminGlobals() {
   registerAdminGlobal('refreshOrderList', () => {
     if (window.__adminAssignInFlight) {
       window.__adminPendingOrderRefresh = true;
+      return;
+    }
+    const loadOrders = getAdminHandler<() => void>('loadOrders');
+    if (typeof loadOrders === 'function') {
+      loadOrders();
       return;
     }
     location.reload();

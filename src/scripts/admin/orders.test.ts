@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { assignRider, autoAssignRider } from './orders.ts';
+import * as orders from './orders.ts';
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
@@ -28,7 +28,7 @@ test('assignRider posts manual_assign payload with eta selected rider telegram c
     });
   };
 
-  await assignRider('470', '7', {
+  await orders.assignRider('470', '7', {
     shopSlug: 'demo-shop',
     pickupEtaMinutes: 15,
     riderTelegramChatId: 'tg-7',
@@ -58,7 +58,7 @@ test('autoAssignRider posts auto_assign payload without frontend cursor and with
     });
   };
 
-  await autoAssignRider('471', { shopSlug: 'demo-shop', pickupEtaMinutes: 20 });
+  await orders.autoAssignRider('471', { shopSlug: 'demo-shop', pickupEtaMinutes: 20 });
 
   assert.deepEqual(capturedBody, {
     action: 'auto_assign',
@@ -83,7 +83,7 @@ test('assignRider throws telegram notification failure details when assignment s
   });
 
   await assert.rejects(
-    () => assignRider('470', '7', { shopSlug: 'demo-shop', pickupEtaMinutes: 15 }),
+    () => orders.assignRider('470', '7', { shopSlug: 'demo-shop', pickupEtaMinutes: 15 }),
     /telegram_bot_token_not_configured/,
   );
 });
@@ -103,7 +103,7 @@ test('autoAssignRider throws telegram notification failure details when assignme
   });
 
   await assert.rejects(
-    () => autoAssignRider('471', { shopSlug: 'demo-shop', pickupEtaMinutes: 20 }),
+    () => orders.autoAssignRider('471', { shopSlug: 'demo-shop', pickupEtaMinutes: 20 }),
     /telegram_chat_id_missing/,
   );
 });
@@ -125,7 +125,7 @@ test('assignRider emits preflight debug alert before request when debugTelegram 
     });
   };
 
-  await assignRider('470', '7', {
+  await orders.assignRider('470', '7', {
     shopSlug: 'demo-shop',
     pickupEtaMinutes: 15,
     riderTelegramChatId: 'tg-7',
@@ -164,7 +164,7 @@ test('assignRider shows response-stage debug alerts when debugTelegram is enable
     headers: { 'Content-Type': 'application/json' },
   });
 
-  await assignRider('470', '7', {
+  await orders.assignRider('470', '7', {
     shopSlug: 'demo-shop',
     pickupEtaMinutes: 15,
     riderTelegramChatId: 'tg-7',
@@ -207,7 +207,7 @@ test('assignRider aborts hanging rider-assign request and shows timeout debug al
   };
 
   await assert.rejects(
-    () => assignRider('470', '7', {
+    () => orders.assignRider('470', '7', {
       shopSlug: 'demo-shop',
       pickupEtaMinutes: 15,
       riderTelegramChatId: 'tg-7',
@@ -251,7 +251,7 @@ test('assignRider treats aborted fetch with browser Failed to fetch message as r
   };
 
   await assert.rejects(
-    () => assignRider('470', '7', {
+    () => orders.assignRider('470', '7', {
       shopSlug: 'demo-shop',
       pickupEtaMinutes: 15,
       riderTelegramChatId: 'tg-7',
@@ -281,7 +281,7 @@ test('assignRider keeps plain Failed to fetch when request was not aborted', asy
   };
 
   await assert.rejects(
-    () => assignRider('470', '7', {
+    () => orders.assignRider('470', '7', {
       shopSlug: 'demo-shop',
       pickupEtaMinutes: 15,
       riderTelegramChatId: 'tg-7',
@@ -316,7 +316,7 @@ test('assignRider flushes deferred order refresh after request finishes', async 
     });
   };
 
-  await assignRider('470', '7', {
+  await orders.assignRider('470', '7', {
     shopSlug: 'demo-shop',
     pickupEtaMinutes: 15,
     riderTelegramChatId: 'tg-7',
@@ -325,6 +325,84 @@ test('assignRider flushes deferred order refresh after request finishes', async 
   assert.equal(globalThis.window.__adminAssignInFlight, false);
   assert.equal(globalThis.window.__adminPendingOrderRefresh, false);
   assert.equal(refreshCount, 1);
+});
+
+test('loadOrders fetches admin orders and updates hidden-data without full reload', async () => {
+  let reloadCount = 0;
+  const hiddenNodes: Array<{ dataset: Record<string, string> }> = [
+    { dataset: { orderId: '1', oid: '1', status: 'awaiting_courier', remarks: '[]' } },
+  ];
+  const deliveryContainer = { innerHTML: '<div>old delivery</div>' };
+  const orderList = { innerHTML: '<div>old order list</div>' };
+  const tableConfigNode = { textContent: JSON.stringify([{ name: '大厅', prefix: '', count: 2 }]) };
+
+  globalThis.location = {
+    reload() {
+      reloadCount++;
+    },
+  } as any;
+
+  globalThis.document = {
+    getElementById(id: string) {
+      if (id === 'delivery-list-container') return deliveryContainer;
+      if (id === 'tab-orders') return { querySelector: (selector: string) => selector === '.order-list' ? orderList : null };
+      if (id === 'table-config-data') return tableConfigNode;
+      return null;
+    },
+    querySelectorAll(selector: string) {
+      if (selector === '.hidden-data') return hiddenNodes as any;
+      return [] as any;
+    },
+  } as any;
+
+  globalThis.window = {
+    __adminHandlers: {},
+    __adminRuntime: {
+      shopId: 103,
+      shopSlug: 'demo-shop',
+      currentSettings: {},
+    },
+    showToast() {},
+  } as any;
+
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    assert.equal(String(input), '/api/admin/orders');
+    return new Response(JSON.stringify([
+      {
+        id: 2,
+        orderNo: 'A1002',
+        orderType: 'delivery',
+        status: 'delivering',
+        totalAmount: 88,
+        itemsJson: '[{"name":"米饭","quantity":1}]',
+        remarksJson: '[]',
+        tableInfo: 'Kralja Petra 1',
+        userPhone: '381611111111',
+        scheduledFor: '',
+        pickupEtaMinutes: 15,
+        pickupReadyAt: '',
+        riderBroadcastedAt: '',
+        riderRemindCount: 0,
+        riderLastRemindedAt: '',
+        riderContactAttemptedAt: '',
+        courierName: 'Rider A',
+        courierPhone: '381620000000',
+        createdAt: '2026-04-09 10:00:00',
+        isDeleted: 0,
+      },
+    ]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  assert.equal(typeof orders.loadOrders, 'function');
+  await orders.loadOrders();
+
+  assert.equal(reloadCount, 0);
+  assert.equal(hiddenNodes.length, 1);
+  assert.equal(hiddenNodes[0]?.dataset?.orderId, '2');
+  assert.equal(hiddenNodes[0]?.dataset?.status, 'delivering');
 });
 
 test('assignRider does not flush deferred order refresh before debug alerts are emitted', async () => {
@@ -358,7 +436,7 @@ test('assignRider does not flush deferred order refresh before debug alerts are 
     });
   };
 
-  await assignRider('470', '7', {
+  await orders.assignRider('470', '7', {
     shopSlug: 'demo-shop',
     pickupEtaMinutes: 15,
     riderTelegramChatId: 'tg-7',

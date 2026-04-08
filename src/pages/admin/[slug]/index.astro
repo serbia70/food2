@@ -265,7 +265,7 @@ const unmatchedDineInOrders = orders
 const activeDeliveryOrders = orders.filter(
   (o: any) =>
     o.orderType === 'delivery' &&
-    (o.status === 'pending' || o.status === 'confirmed' || o.status === 'awaiting_courier' || o.status === 'delivering' || o.status === 'picked_up') &&
+    (o.status === 'pending' || o.status === 'confirmed' || o.status === 'awaiting_courier' || o.status === 'delivering' || o.status === 'picked_up' || o.status === 'completed') &&
     o.isDeleted !== 1,
 );
 

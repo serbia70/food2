@@ -391,7 +391,7 @@ test('orders source keeps assign APIs and removes broadcast helper', async () =>
   assert.doesNotMatch(source, /remindRiders\s*\(/);
 });
 
-test('admin orders page keeps awaiting_courier and picked_up in active delivery filter', async () => {
+test('admin orders page keeps delivery completion visible in active delivery filter', async () => {
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
   const source = await readFile(resolve(process.cwd(), 'src/pages/admin/[slug]/index.astro'), 'utf8');
@@ -402,6 +402,7 @@ test('admin orders page keeps awaiting_courier and picked_up in active delivery 
   assert.match(source, /o\.status === 'awaiting_courier'/);
   assert.match(source, /o\.status === 'delivering'/);
   assert.match(source, /o\.status === 'picked_up'/);
+  assert.match(source, /o\.status === 'completed'/);
   assert.match(source, /o\.isDeleted !== 1/);
 });
 

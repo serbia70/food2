@@ -1,6 +1,6 @@
 ---
 import { inferLegacySimpleHallNumber } from '../../lib/admin-table-ref';
-import { readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
+import { getAdminDispatchStatusCopy, readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
 const {
   tableCardsData,
   activeDeliveryOrders,
@@ -263,12 +263,7 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
             <div class="order-footer" style="margin-top:10px; padding-top:10px; border-top:1px dashed #eee;">
               <div class="footer-left">
                 <span class={`status-tag status-${o.status}`}>
-                  {o.status === 'pending' ? '待处理' :
-                   o.status === 'confirmed' ? '已接单' :
-                   riderDeclinedAwaitingCourier ? '骑手已拒单' :
-                   o.status === 'awaiting_courier' ? '待骑手确认' :
-                   o.status === 'delivering' ? '骑手已接单' :
-                   o.status === 'picked_up' ? '骑手已取餐' : o.status}
+                  {riderDeclinedAwaitingCourier ? '骑手已拒单' : getAdminDispatchStatusCopy(o.status)}
                 </span>
 
                 {(o.status === 'pending' || o.status === 'confirmed' || o.status === 'awaiting_courier') && (

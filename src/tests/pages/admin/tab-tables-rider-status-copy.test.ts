@@ -14,17 +14,24 @@ function sliceAround(source: string, anchor: string, before = 260, after = 140) 
   return source.slice(Math.max(0, index - before), Math.min(source.length, index + anchor.length + after));
 }
 
-test('admin 外卖状态文案覆盖骑手相关语义映射', async () => {
+test('admin 外卖状态文案改为复用共享 helper', async () => {
   const source = await readTabTablesSource();
 
-  const awaitingWindow = sliceAround(source, '待骑手确认');
-  assert.match(awaitingWindow, /['"]awaiting_courier['"]/);
+  const statusWindow = sliceAround(source, 'status-tag status-', 40, 320).replace(/\s+/g, ' ');
+  assert.match(statusWindow, /riderDeclinedAwaitingCourier \? ['"]骑手已拒单['"] : getAdminDispatchStatusCopy\(o\.status\)/);
+  assert.doesNotMatch(statusWindow, /o\.status === ['"]awaiting_courier['"] \? ['"]待骑手/);
+  assert.doesNotMatch(statusWindow, /o\.status === ['"]delivering['"] \? ['"]骑手已接单['"]/);
+  assert.doesNotMatch(statusWindow, /o\.status === ['"]picked_up['"] \? ['"]骑手已取餐['"]/);
+});
 
-  const deliveringWindow = sliceAround(source, '骑手已接单');
-  assert.match(deliveringWindow, /['"]delivering['"]/);
 
-  const pickedUpWindow = sliceAround(source, '骑手已取餐');
-  assert.match(pickedUpWindow, /['"]picked_up['"]/);
+test('admin 外卖状态文案复用共享 helper 并覆盖 completed', async () => {
+  const source = await readTabTablesSource();
+
+  assert.match(source, /getAdminDispatchStatusCopy/);
+
+  const statusWindow = sliceAround(source, 'status-tag status-', 40, 320).replace(/\s+/g, ' ');
+  assert.match(statusWindow, /getAdminDispatchStatusCopy\(o\.status\)/);
 });
 
 test('admin 外卖卡片在 delivering 场景展示骑手兜底链路', async () => {

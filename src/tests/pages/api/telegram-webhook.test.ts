@@ -229,7 +229,7 @@ test('POST telegram webhook 在 callback_query 非法时仍返回 answerCallback
   });
 });
 
-test('POST telegram webhook 在 callback_query 成功后返回 answerCallbackQuery 结果给 Telegram', async () => {
+test('POST telegram webhook 在 accept callback_query 成功后返回已接单', async () => {
   const originalFetch = globalThis.fetch;
   const previousApiUrl = process.env.PUBLIC_API_URL;
 
@@ -303,6 +303,158 @@ test('POST telegram webhook 在 callback_query 成功后返回 answerCallbackQue
       method: 'answerCallbackQuery',
       callback_query_id: 'cbq-90',
       text: '已接单',
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousApiUrl === undefined) delete process.env.PUBLIC_API_URL;
+    else process.env.PUBLIC_API_URL = previousApiUrl;
+  }
+});
+
+test('POST telegram webhook 在 picked_up callback_query 成功后返回已取餐', async () => {
+  const originalFetch = globalThis.fetch;
+  const previousApiUrl = process.env.PUBLIC_API_URL;
+
+  try {
+    process.env.PUBLIC_API_URL = 'https://api.test.local';
+    const callbackData = buildTelegramClaimCallback({
+      orderId: 190,
+      riderId: 15,
+      riderName: '取餐骑手',
+      riderPhone: '0615',
+      restaurantId: '101',
+      telegramChatId: 'chat-15',
+      expiresAt: Date.now() + 60_000,
+      action: 'picked_up',
+    });
+
+    globalThis.fetch = async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      assert.notEqual(url, 'https://food2.serbia70.com/api/telegram/rider-claim');
+
+      if (url === 'https://api.test.local/api/rider/status?action=list_available') {
+        return new Response(JSON.stringify({
+          success: true,
+          riders: [
+            { id: 15, name: '取餐骑手', phone: '0615', telegramChatId: 'chat-15', status: 'available' },
+          ],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (url === 'https://api.test.local/api/admin/orders') {
+        return new Response(JSON.stringify([{ id: 190, status: 'delivering', remarksJson: '' }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url === 'https://api.test.local/api/order/update_status/190') {
+        return new Response(JSON.stringify({ success: true, action: 'picked_up' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    };
+
+    const request = new Request('http://localhost/api/telegram/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-telegram-bot-api-secret-token': 'test-telegram-callback-secret',
+      },
+      body: JSON.stringify({
+        callback_query: {
+          id: 'cbq-190',
+          data: callbackData,
+          message: { chat: { id: 'chat-15' } },
+        },
+      }),
+    });
+
+    const response = await POST({ request } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      method: 'answerCallbackQuery',
+      callback_query_id: 'cbq-190',
+      text: '已取餐',
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousApiUrl === undefined) delete process.env.PUBLIC_API_URL;
+    else process.env.PUBLIC_API_URL = previousApiUrl;
+  }
+});
+
+test('POST telegram webhook 在 complete callback_query 成功后返回已送达', async () => {
+  const originalFetch = globalThis.fetch;
+  const previousApiUrl = process.env.PUBLIC_API_URL;
+
+  try {
+    process.env.PUBLIC_API_URL = 'https://api.test.local';
+    const callbackData = buildTelegramClaimCallback({
+      orderId: 290,
+      riderId: 25,
+      riderName: '送达骑手',
+      riderPhone: '0625',
+      restaurantId: '101',
+      telegramChatId: 'chat-25',
+      expiresAt: Date.now() + 60_000,
+      action: 'complete',
+    });
+
+    globalThis.fetch = async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      assert.notEqual(url, 'https://food2.serbia70.com/api/telegram/rider-claim');
+
+      if (url === 'https://api.test.local/api/rider/status?action=list_available') {
+        return new Response(JSON.stringify({
+          success: true,
+          riders: [
+            { id: 25, name: '送达骑手', phone: '0625', telegramChatId: 'chat-25', status: 'available' },
+          ],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (url === 'https://api.test.local/api/admin/orders') {
+        return new Response(JSON.stringify([{ id: 290, status: 'picked_up', remarksJson: '' }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url === 'https://api.test.local/api/order/update_status/290') {
+        return new Response(JSON.stringify({ success: true, action: 'complete' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    };
+
+    const request = new Request('http://localhost/api/telegram/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-telegram-bot-api-secret-token': 'test-telegram-callback-secret',
+      },
+      body: JSON.stringify({
+        callback_query: {
+          id: 'cbq-290',
+          data: callbackData,
+          message: { chat: { id: 'chat-25' } },
+        },
+      }),
+    });
+
+    const response = await POST({ request } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      method: 'answerCallbackQuery',
+      callback_query_id: 'cbq-290',
+      text: '已送达',
     });
   } finally {
     globalThis.fetch = originalFetch;

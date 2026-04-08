@@ -1,6 +1,16 @@
 import { initMqtt } from './mqtt-audio';
 import { showTab } from './core';
 import { getAdminRuntimeState, registerAdminGlobal, showAdminToast } from './globals';
+
+function bindForegroundOrderRefresh() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    const lastTab = localStorage.getItem('adminLastTab') || 'orders';
+    if (lastTab !== 'orders') return;
+    if (window.__adminAssignInFlight) return;
+    location.reload();
+  });
+}
 import { loadReservations, loadReservationStats } from './reservations';
 import { initDefaultStatsDates } from './stats';
 import { initSettingsUI } from './settings-ui';
@@ -49,6 +59,7 @@ const handleEditOrder = (el: any) => {
 
 export const initAdminPage = () => {
   try {
+    bindForegroundOrderRefresh();
     bindAdminGlobals();
     initDefaultStatsDates();
     const lastTab = localStorage.getItem('adminLastTab') || 'orders';

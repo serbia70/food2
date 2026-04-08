@@ -89,7 +89,13 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const action = String(upstreamJson?.action || '').trim();
-    const text = action === 'decline' ? '已拒单' : '已接单';
+    const text = action === 'decline'
+      ? '已拒单'
+      : action === 'picked_up'
+        ? '已取餐'
+        : action === 'complete'
+          ? '已送达'
+          : '已接单';
     return buildJsonResponse(
       callbackId
         ? { method: 'answerCallbackQuery', callback_query_id: callbackId, text }

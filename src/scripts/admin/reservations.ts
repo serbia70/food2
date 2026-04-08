@@ -1,6 +1,7 @@
 
 import { showTab } from './core';
 import { getAdminHandler, getAdminRuntimeState, registerAdminGlobal, showAdminToast } from './globals';
+import { CUSTOMER_COMPLETED_STATUSES, isCustomerCompletedStatus } from '../../lib/rider-dispatch.ts';
 
 async function fetchJSONWithRetry(url: string, init?: RequestInit) {
   let lastError: unknown;
@@ -56,6 +57,8 @@ function extractReservations(data: any) {
         : [];
 }
 
+const completedReservationStatus = CUSTOMER_COMPLETED_STATUSES[0];
+
 export async function loadReservationStats() {
   try {
     const today = getLocalTodayISODate();
@@ -71,7 +74,7 @@ export async function loadReservationStats() {
       acc.today_total += 1;
       if (status === 'pending') acc.today_pending += 1;
       if (status === 'confirmed') acc.today_confirmed += 1;
-      if (status === 'completed') acc.today_completed += 1;
+      if (isCustomerCompletedStatus(status)) acc.today_completed += 1;
       if (status === 'cancelled') acc.today_cancelled += 1;
       return acc;
     }, {
@@ -181,7 +184,7 @@ function renderReservations(items: any[]) {
 
     const isPending = item.status === 'pending';
     const isConfirmed = item.status === 'confirmed';
-    const isCompleted = item.status === 'completed';
+    const isCompleted = isCustomerCompletedStatus(item.status);
     const isCancelled = item.status === 'cancelled';
 
     const card = document.createElement('div');
@@ -283,7 +286,7 @@ registerAdminGlobal('openCheckinModal', function(id: number, hasItems: boolean) 
     if (!hasItems) {
         const updateReservationStatus = getAdminHandler<(id: number, status: string) => void>('updateReservationStatus');
         if (confirm('确认客人已到店？\nPotvrdi dolazak gosta?')) {
-            if (typeof updateReservationStatus === 'function') updateReservationStatus(id, 'completed');
+            if (typeof updateReservationStatus === 'function') updateReservationStatus(id, completedReservationStatus);
         }
         return;
     }
@@ -388,17 +391,17 @@ registerAdminGlobal('closeCheckinModal', function() {
 function getStatusStyle(s: string) {
   if (s === 'pending') return 'background:#fef3c7;color:#92400e;';
   if (s === 'confirmed') return 'background:#dbeafe;color:#1e40af;';
-  if (s === 'completed') return 'background:#dcfce7;color:#166534;';
+  if (isCustomerCompletedStatus(s)) return 'background:#dcfce7;color:#166534;';
   if (s === 'cancelled') return 'background:#fee2e2;color:#991b1b;';
   return 'background:#f1f5f9;color:#475569;';
 }
 
 function getStatusText(s: string) {
-  const map: any = { 
-      pending: '待处理 / Na čekanju', 
-      confirmed: '已确认 / Potvrđeno', 
-      completed: '已到店 / Stigao', 
-      cancelled: '已取消 / Otkazano' 
+  const map: any = {
+      pending: '待处理 / Na čekanju',
+      confirmed: '已确认 / Potvrđeno',
+      [completedReservationStatus]: '已到店 / Stigao',
+      cancelled: '已取消 / Otkazano'
   };
   return map[s] || s;
 }

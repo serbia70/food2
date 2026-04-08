@@ -97,7 +97,7 @@ import Layout from '../../layouts/Layout.astro';
 
   <script>
     import { getRiderTelegramBindingCopy, isValidRiderSession, normalizeRiderSession } from '../../lib/rider-session';
-    import { buildDispatchMetaRemarks, getAdminDispatchStatusCopy, getRiderDispatchState, getRiderStatusHintCopy, readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
+    import { buildDispatchMetaRemarks, filterRiderDashboardOrders, getAdminDispatchStatusCopy, getRiderActionFlags, getRiderDispatchState, getRiderStatusHintCopy, isRiderDeliveringOrder, readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
 
     let rider = null;
     let currentTab = 'active';
@@ -454,8 +454,9 @@ import Layout from '../../layouts/Layout.astro';
         const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
         const dispatchMeta = readDispatchMetaFromRemarks(o.remarksJson || o.remarks_json);
         const actionState = getRiderDispatchState(o, dispatchMeta, rider?.id);
+        const actionFlags = getRiderActionFlags(o, rider?.phone);
         const invalidReason = String(actionState.invalidReason || '').trim();
-        const canTake = rider.status === 'available' && actionState.canAccept;
+        const canTake = rider.status === 'available' && actionState.canAccept && actionFlags.canAccept;
 
         const card = document.createElement('div');
         card.className = `order-card status-${o.status}`;
@@ -555,7 +556,7 @@ import Layout from '../../layouts/Layout.astro';
           card.appendChild(actionWrap);
         }
 
-        if (o.status === 'delivering' && String(o.courierPhone || '').trim() === String(rider?.phone || '').trim()) {
+        if (actionFlags.canPickUp) {
           const actionWrap = document.createElement('div');
           actionWrap.className = 'action-btns';
           const call = document.createElement('a');
@@ -576,7 +577,7 @@ import Layout from '../../layouts/Layout.astro';
           card.appendChild(actionWrap);
         }
 
-        if (o.status === 'picked_up' && String(o.courierPhone || '').trim() === String(rider?.phone || '').trim()) {
+        if (actionFlags.canComplete) {
           const actionWrap = document.createElement('div');
           actionWrap.className = 'action-btns';
           const call = document.createElement('a');
@@ -601,8 +602,9 @@ import Layout from '../../layouts/Layout.astro';
       };
 
       if (currentTab === 'active') {
-        const awaitingOrders = myOrders.filter((o) => o.status === 'awaiting_courier');
-        const deliveringOrders = myOrders.filter((o) => (o.status === 'delivering' || o.status === 'picked_up') && String(o.courierPhone || '').trim() === String(rider?.phone || '').trim());
+        const activeOrders = filterRiderDashboardOrders(myOrders, rider?.phone, 'active');
+        const awaitingOrders = activeOrders.filter((o) => o.status === 'awaiting_courier');
+        const deliveringOrders = activeOrders.filter((o) => isRiderDeliveringOrder(o.status));
 
         const sections = [];
 

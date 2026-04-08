@@ -4,10 +4,28 @@ process.env.TELEGRAM_BIND_SECRET = 'test-telegram-bind-secret';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 
 import { buildRiderTelegramBindToken } from '../../../lib/telegram-rider-bind.ts';
 import { buildTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
 import { POST } from '../../../pages/api/telegram/webhook.ts';
+
+function buildExpiredTelegramClaimCallback(): string {
+  const payload = {
+    orderId: 93,
+    riderId: 8,
+    riderName: '过期骑手',
+    riderPhone: '0608',
+    restaurantId: '101',
+    telegramChatId: 'chat-8',
+    expiresAt: Date.now() - 60_000,
+    action: 'accept',
+  };
+  const sig = createHmac('sha256', 'test-telegram-callback-secret')
+    .update(JSON.stringify(payload))
+    .digest('base64url');
+  return Buffer.from(JSON.stringify({ ...payload, sig }), 'utf8').toString('base64url');
+}
 
 test('POST telegram webhook 在 /start bind token 时转发到 rider-bind', async () => {
   const originalFetch = globalThis.fetch;
@@ -227,6 +245,109 @@ test('POST telegram webhook 在 callback_query 非法时仍返回 answerCallback
     callback_query_id: 'cbq-92',
     text: '操作失败',
   });
+});
+
+test('POST telegram webhook 在 callback_query 已过期时返回操作已过期', async () => {
+  const callbackData = buildExpiredTelegramClaimCallback();
+
+  const request = new Request('http://localhost/api/telegram/webhook', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-telegram-bot-api-secret-token': 'test-telegram-callback-secret',
+    },
+    body: JSON.stringify({
+      callback_query: {
+        id: 'cbq-93',
+        data: callbackData,
+        message: { chat: { id: 'chat-8' } },
+      },
+    }),
+  });
+
+  const response = await POST({ request } as any);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    method: 'answerCallbackQuery',
+    callback_query_id: 'cbq-93',
+    text: '操作已过期',
+  });
+});
+
+test('POST telegram webhook 在 rider-claim 返回非 JSON 失败时仍返回操作失败', async () => {
+  const originalFetch = globalThis.fetch;
+  const previousApiUrl = process.env.PUBLIC_API_URL;
+
+  try {
+    process.env.PUBLIC_API_URL = 'https://api.test.local';
+    const callbackData = buildTelegramClaimCallback({
+      orderId: 94,
+      riderId: 9,
+      riderName: '非JSON骑手',
+      riderPhone: '0609',
+      restaurantId: '101',
+      telegramChatId: 'chat-9',
+      expiresAt: Date.now() + 60_000,
+    });
+
+    globalThis.fetch = async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url === 'https://api.test.local/api/rider/status?action=list_available') {
+        return new Response(JSON.stringify({
+          success: true,
+          riders: [
+            { id: 9, name: '非JSON骑手', phone: '0609', telegramChatId: 'chat-9', status: 'available' },
+          ],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url === 'https://api.test.local/api/admin/orders') {
+        return new Response(JSON.stringify([{ id: 94, remarksJson: '' }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === 'https://api.test.local/api/admin/orders/remarks') {
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === 'https://api.test.local/api/order/update_status/94') {
+        return new Response('upstream exploded', {
+          status: 502,
+          headers: { 'Content-Type': 'text/plain' },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    };
+
+    const request = new Request('http://localhost/api/telegram/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-telegram-bot-api-secret-token': 'test-telegram-callback-secret',
+      },
+      body: JSON.stringify({
+        callback_query: {
+          id: 'cbq-94',
+          data: callbackData,
+          message: { chat: { id: 'chat-9' } },
+        },
+      }),
+    });
+
+    const response = await POST({ request } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      method: 'answerCallbackQuery',
+      callback_query_id: 'cbq-94',
+      text: '操作失败',
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousApiUrl === undefined) delete process.env.PUBLIC_API_URL;
+    else process.env.PUBLIC_API_URL = previousApiUrl;
+  }
 });
 
 test('POST telegram webhook 在 accept callback_query 成功后返回已接单', async () => {

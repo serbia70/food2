@@ -1,6 +1,6 @@
 ---
 import { inferLegacySimpleHallNumber } from '../../lib/admin-table-ref';
-import { getAdminDispatchStatusCopy, readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
+import { getAdminDeliveryActionFlags, getAdminDispatchStatusCopy, readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
 const {
   tableCardsData,
   activeDeliveryOrders,
@@ -226,6 +226,7 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
         const dispatchMeta = readDispatchMetaFromRemarks(String(o.remarksJson || ''));
         const lastRiderDecision = dispatchMeta.lastRiderDecision;
         const riderDeclinedAwaitingCourier = o.status === 'awaiting_courier' && lastRiderDecision?.action === 'declined';
+        const deliveryActionFlags = getAdminDeliveryActionFlags(o.status);
 
         return (
           <div class="order-card delivery-card-active" style="border-left: 5px solid #ff9800;" data-order-time={oTime}>
@@ -266,7 +267,7 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
                   {riderDeclinedAwaitingCourier ? '骑手已拒单' : getAdminDispatchStatusCopy(o.status)}
                 </span>
 
-                {(o.status === 'pending' || o.status === 'confirmed' || o.status === 'awaiting_courier') && (
+                {deliveryActionFlags.canAssign && (
                   <>
                     <button class="btn-xs" type="button" data-admin-action="assign-rider" data-order-id={o.id} style="background:#7c3aed; color:white;">👤 指派骑手</button>
                     <button class="btn-xs" type="button" data-admin-action="auto-assign-rider" data-order-id={o.id} style="background:#0f766e; color:white;">🔁 自动派单</button>
@@ -274,24 +275,21 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
                     <button class="btn-xs" data-admin-action="open-reject" data-order-id={o.id} style="background:#f44336; color:white;">❌ 拒绝</button>
                   </>
                 )}
-                {o.status === 'delivering' && (
-                  <>
-                    <button class="btn-xs" type="button" data-admin-action="mark-picked-up" data-order-id={o.id} style="background:#2563eb; color:white;">✅ 已取餐</button>
-                    <span style="font-size:12px; color:#7c2d12; font-weight:700;">已指派骑手：{o.courierName || o.courierPhone || '未命名骑手'}</span>
-                  </>
+                {deliveryActionFlags.canMarkPickedUp && (
+                  <button class="btn-xs" type="button" data-admin-action="mark-picked-up" data-order-id={o.id} style="background:#2563eb; color:white;">✅ 已取餐</button>
                 )}
-                {o.status === 'picked_up' && (
-                  <>
-                    <button class="btn-xs" type="button" data-admin-action="mark-delivered" data-order-id={o.id} style="background:#16a34a; color:white;">✅ 已送达</button>
-                    <span style="font-size:12px; color:#7c2d12; font-weight:700;">已指派骑手：{o.courierName || o.courierPhone || '未命名骑手'}</span>
-                  </>
+                {deliveryActionFlags.canMarkDelivered && (
+                  <button class="btn-xs" type="button" data-admin-action="mark-delivered" data-order-id={o.id} style="background:#16a34a; color:white;">✅ 已送达</button>
+                )}
+                {deliveryActionFlags.showAssignedRider && (
+                  <span style="font-size:12px; color:#7c2d12; font-weight:700;">已指派骑手：{o.courierName || o.courierPhone || '未命名骑手'}</span>
                 )}
 
                 {o.userPhone && (
                   <button data-admin-action="open-chat" data-phone={o.userPhone} title="发消息" style="height:24px; width:24px; font-size:12px; background:#0891b2; color:#fff; border:none; border-radius:4px; cursor:pointer;">💬</button>
                 )}
 
-                {(o.status === 'pending' || o.status === 'confirmed' || o.status === 'delivering') && (
+                {deliveryActionFlags.canEdit && (
                   <button class="btn-action" data-admin-action="edit-order" data-order-id={o.id} title="编辑" style="height:24px; width:24px; font-size:12px;">✏️</button>
                 )}
                 <button class="btn-action" data-admin-action="print-order" data-order-id={o.id} title="打印" style="height:24px; width:24px; font-size:12px;">🖨️</button>

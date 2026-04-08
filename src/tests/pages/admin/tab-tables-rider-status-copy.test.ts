@@ -34,10 +34,10 @@ test('admin 外卖状态文案复用共享 helper 并覆盖 completed', async ()
   assert.match(statusWindow, /getAdminDispatchStatusCopy\(o\.status\)/);
 });
 
-test('admin 外卖卡片在 delivering 场景展示骑手兜底链路', async () => {
+test('admin 外卖卡片在已指派骑手分支展示骑手兜底链路', async () => {
   const source = await readTabTablesSource();
 
-  const deliveringAssignedRiderWindow = sliceAround(source, "o.status === 'delivering' &&", 80, 420).replace(/\s+/g, ' ');
+  const deliveringAssignedRiderWindow = sliceAround(source, 'deliveryActionFlags.showAssignedRider && (', 80, 420).replace(/\s+/g, ' ');
   assert.match(deliveringAssignedRiderWindow, /已指派骑手：/);
   assert.match(deliveringAssignedRiderWindow, /未命名骑手/);
 
@@ -69,22 +69,30 @@ test('admin 外卖卡片在 awaiting_courier 且骑手拒单时展示拒单反�
   assert.match(hiddenDataWindow, /data-remarks=\{o\.remarksJson\}/);
 });
 
-test('admin 外卖卡片在 delivering 和 picked_up 场景提供推进按钮', async () => {
+test('admin 外卖卡片动作分支复用共享 helper', async () => {
   const source = await readTabTablesSource();
 
+  assert.match(source, /getAdminDeliveryActionFlags/);
+  assert.match(source, /const deliveryActionFlags = getAdminDeliveryActionFlags\(o\.status\);/);
+
+  const assignWindow = sliceAround(source, 'data-admin-action="assign-rider"', 260, 220).replace(/\s+/g, ' ');
+  assert.match(assignWindow, /deliveryActionFlags\.canAssign/);
+  assert.doesNotMatch(assignWindow, /o\.status === ['"]pending['"] \|\| o\.status === ['"]confirmed['"] \|\| o\.status === ['"]awaiting_courier['"]/);
+
   const markPickedUpWindow = sliceAround(source, 'data-admin-action="mark-picked-up"', 240, 220).replace(/\s+/g, ' ');
-  assert.match(markPickedUpWindow, /o\.status === ['"]delivering['"]/);
+  assert.match(markPickedUpWindow, /deliveryActionFlags\.canMarkPickedUp/);
+  assert.doesNotMatch(markPickedUpWindow, /o\.status === ['"]delivering['"]/);
   assert.match(markPickedUpWindow, /✅ 已取餐/);
 
   const markDeliveredWindow = sliceAround(source, 'data-admin-action="mark-delivered"', 240, 220).replace(/\s+/g, ' ');
-  assert.match(markDeliveredWindow, /o\.status === ['"]picked_up['"]/);
+  assert.match(markDeliveredWindow, /deliveryActionFlags\.canMarkDelivered/);
+  assert.doesNotMatch(markDeliveredWindow, /o\.status === ['"]picked_up['"]/);
   assert.match(markDeliveredWindow, /✅ 已送达/);
-});
 
-test('admin 外卖卡片的编辑按钮不覆盖 picked_up', async () => {
-  const source = await readTabTablesSource();
+  const riderWindow = sliceAround(source, '已指派骑手：', 220, 120).replace(/\s+/g, ' ');
+  assert.match(riderWindow, /deliveryActionFlags\.showAssignedRider/);
 
   const editWindow = sliceAround(source, 'data-admin-action="edit-order"', 220, 120).replace(/\s+/g, ' ');
-  assert.match(editWindow, /o\.status === ['"]pending['"] \|\| o\.status === ['"]confirmed['"] \|\| o\.status === ['"]delivering['"]/);
-  assert.doesNotMatch(editWindow, /picked_up/);
+  assert.match(editWindow, /deliveryActionFlags\.canEdit/);
+  assert.doesNotMatch(editWindow, /o\.status === ['"]pending['"] \|\| o\.status === ['"]confirmed['"] \|\| o\.status === ['"]delivering['"]/);
 });

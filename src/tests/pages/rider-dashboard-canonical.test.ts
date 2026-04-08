@@ -62,14 +62,18 @@ test('rider dashboard source uses canonical rider and order fields', async () =>
   assert.match(source, /const items = parseItems\(o\.itemsJson\);/);
   assert.match(source, /const address = o\.tableInfo \|\| '';/);
   assert.match(source, /const phone = o\.userPhone \|\| '';/);
-  assert.match(source, /const awaitingOrders = myOrders\.filter\(\(o\) => o\.status === 'awaiting_courier'\);/);
-  assert.match(source, /const deliveringOrders = myOrders\.filter\(\(o\) => \(o\.status === 'delivering' \|\| o\.status === 'picked_up'\) && String\(o\.courierPhone \|\| ''\)\.trim\(\) === String\(rider\?\.phone \|\| ''\)\.trim\(\)\);/);
+  assert.match(source, /const activeOrders = filterRiderDashboardOrders\(myOrders, rider\?\.phone, 'active'\);/);
+  assert.match(source, /const awaitingOrders = activeOrders\.filter\(\(o\) => o\.status === 'awaiting_courier'\);/);
+  assert.match(source, /isRiderDeliveringOrder/);
+  assert.match(source, /const deliveringOrders = activeOrders\.filter\(\(o\) => isRiderDeliveringOrder\(o\.status\)\);/);
+  assert.doesNotMatch(source, /const deliveringOrders = activeOrders\.filter\(\(o\) => o\.status === 'delivering' \|\| o\.status === 'picked_up'\);/);
   assert.match(source, /poolTitle\.textContent = '待接单池';/);
   assert.match(source, /mineTitle\.textContent = '我的配送';/);
-  assert.match(source, /if \(o\.status === 'delivering' && String\(o\.courierPhone \|\| ''\)\.trim\(\) === String\(rider\?\.phone \|\| ''\)\.trim\(\)\) \{/);
+  assert.match(source, /const actionFlags = getRiderActionFlags\(o, rider\?\.phone\);/);
+  assert.match(source, /if \(actionFlags\.canPickUp\) \{/);
   assert.match(source, /complete\.textContent = '✅ 已取餐';/);
   assert.match(source, /complete\.addEventListener\('click', \(\) => window\.pickUpOrder\(o\.id\)\);/);
-  assert.match(source, /if \(o\.status === 'picked_up' && String\(o\.courierPhone \|\| ''\)\.trim\(\) === String\(rider\?\.phone \|\| ''\)\.trim\(\)\) \{/);
+  assert.match(source, /if \(actionFlags\.canComplete\) \{/);
   assert.match(source, /complete\.textContent = '✅ 已送达';/);
   assert.match(source, /complete\.addEventListener\('click', \(\) => window\.completeOrder\(o\.id\)\);/);
   assert.match(source, /window\.pickUpOrder = async function\(id\) \{/);
@@ -94,8 +98,8 @@ test('rider dashboard source uses canonical rider and order fields', async () =>
   assert.match(source, /shop\.textContent = o\.shopName \|\| 'Shop';/);
   assert.match(source, /total\.textContent = `\$\{o\.totalAmount \|\| 0\} RSD`;/);
   assert.match(source, /status\.textContent = getAdminDispatchStatusCopy\(o\.status\);/);
-  assert.match(source, /import \{[^}]*getAdminDispatchStatusCopy[^}]*getRiderDispatchState[^}]*readDispatchMetaFromRemarks[^}]*\} from '\.\.\/\.\.\/lib\/rider-dispatch\.ts';/);
-  assert.match(source, /String\(o\.courierPhone \|\| ''\)\.trim\(\) === String\(rider\?\.phone \|\| ''\)\.trim\(\)/);
+  assert.match(source, /import \{[^}]*filterRiderDashboardOrders[^}]*getAdminDispatchStatusCopy[^}]*getRiderActionFlags[^}]*getRiderDispatchState[^}]*isRiderDeliveringOrder[^}]*readDispatchMetaFromRemarks[^}]*\} from '\.\.\/\.\.\/lib\/rider-dispatch\.ts';/);
+  assert.match(source, /const canTake = rider\.status === 'available' && actionState\.canAccept && actionFlags\.canAccept;/);
 
   assert.doesNotMatch(source, /status\.textContent = o\.status;/);
   assert.match(source, /courierPhone: rider\.phone,/);

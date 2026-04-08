@@ -11,6 +11,7 @@ import { getContactShopLabel } from '../lib/shop-chat-copy';
 import { normalizeUserChatMessages } from '../lib/user-chat-panel-state';
 import { ensureUserChatRealtime } from '../lib/user-chat-realtime';
 import { buildCustomerConversationList } from '../lib/customer-chat-conversations';
+import { getCustomerOrderStatusCopy, getCustomerDeliveryStatusCopy, isCustomerActiveStatus, isCustomerCompletedStatus, isCustomerDeliveryStatus } from '../lib/rider-dispatch';
 
 type ConflictGuide = null | {
   title: string;
@@ -70,29 +71,31 @@ const overlayCardStyle = {
 } as const;
 
 function renderStatus(order: any): ComponentChildren {
-  if (order.status === 'delivering') {
+  const status = String(order?.status || '').trim();
+  if (isCustomerDeliveryStatus(status)) {
+    const courierName = String(order?.courier_name || order?.courierName || '').trim();
+    const courierPhone = String(order?.courier_phone || order?.courierPhone || '').trim();
+    const isCompleted = isCustomerCompletedStatus(status);
+    const label = getCustomerDeliveryStatusCopy(status);
+    const bg = isCompleted ? '#ecfdf5' : '#e3f2fd';
+    const color = isCompleted ? '#047857' : '#1565c0';
+    const borderColor = isCompleted ? '#047857' : '#1565c0';
     return (
-      <div style={{ background: '#e3f2fd', color: '#1565c0', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span>🛵</span>
+      <div style={{ background: bg, color, padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span>{isCompleted ? '✅' : '🛵'}</span>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 'bold', fontSize: '13px' }}>派送中 / Delivering</div>
-          {order.courier_name && <div style={{ fontSize: '12px', opacity: 0.8 }}>骑手: {order.courier_name} ({order.courier_phone})</div>}
+          <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{label}</div>
+          {!isCompleted && courierName && <div style={{ fontSize: '12px', opacity: 0.8 }}>骑手: {courierName} ({courierPhone})</div>}
         </div>
-        {order.courier_phone && <a href={`tel:${order.courier_phone}`} style={{ background: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', textDecoration: 'none', color: '#1565c0', border: '1px solid #1565c0' }}>拨打</a>}
+        {!isCompleted && courierPhone && <a href={`tel:${courierPhone}`} style={{ background: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', textDecoration: 'none', color, border: `1px solid ${borderColor}` }}>拨打</a>}
       </div>
     );
   }
 
-  const label = order.status === 'pending'
-    ? '等待接单 / Pending'
-    : order.status === 'confirmed'
-      ? '商家已接单 / Confirmed'
-      : order.status === 'completed'
-        ? '已送达 / Completed'
-        : '订单已关闭';
+  const label = getCustomerOrderStatusCopy(status);
 
-  const bg = order.status === 'pending' ? '#fff7ed' : order.status === 'confirmed' ? '#eff6ff' : order.status === 'completed' ? '#ecfdf5' : '#f1f5f9';
-  const color = order.status === 'pending' ? '#c2410c' : order.status === 'confirmed' ? '#1d4ed8' : order.status === 'completed' ? '#047857' : '#475569';
+  const bg = status === 'pending' ? '#fff7ed' : isCustomerActiveStatus(status) ? '#eff6ff' : '#f1f5f9';
+  const color = status === 'pending' ? '#c2410c' : isCustomerActiveStatus(status) ? '#1d4ed8' : '#475569';
   return <span style={{ padding: '5px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: '900', background: bg, color }}>{label}</span>;
 }
 
@@ -117,13 +120,7 @@ function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onC
     itemNodes = '商品解析失败';
   }
 
-  const statusClass = order.status === 'pending'
-    ? 'status-pending'
-    : order.status === 'confirmed' || order.status === 'delivering'
-      ? 'status-active'
-      : order.status === 'completed'
-        ? 'status-done'
-        : 'status-closed';
+  const statusClass = getStatusClass(order?.status);
 
   return (
     <div key={`${order.orderNo || idx}`} className={`history-order-card ${statusClass}`}>
@@ -205,8 +202,8 @@ function buildOrderItemLines(order: any): string[] {
 function getStatusClass(orderStatus: any): 'status-pending' | 'status-active' | 'status-done' | 'status-closed' {
   const s = String(orderStatus || '').toLowerCase();
   if (s === 'pending') return 'status-pending';
-  if (s === 'confirmed' || s === 'delivering') return 'status-active';
-  if (s === 'completed') return 'status-done';
+  if (isCustomerActiveStatus(s)) return 'status-active';
+  if (isCustomerCompletedStatus(s)) return 'status-done';
   return 'status-closed';
 }
 

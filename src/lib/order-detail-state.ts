@@ -1,3 +1,5 @@
+import { getCustomerOrderStatusCopy, getCustomerDeliveryStatusCopy, isCustomerDeliveryCompleteStatus } from './rider-dispatch';
+
 export function buildOrderDetailState(order: Record<string, any>) {
 	const orderNo = String(order?.orderNo || order?.id || '-');
 	const amount = Number(order?.totalAmount || 0).toLocaleString();
@@ -5,15 +7,9 @@ export function buildOrderDetailState(order: Record<string, any>) {
 		? new Date(order.createdAt).toLocaleString('sr-RS', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 		: '-';
 	const status = String(order?.status || '').trim();
-	const statusLabel = status === 'pending'
-		? '等待接单'
-		: status === 'confirmed'
-			? '商家已接单'
-			: status === 'delivering'
-				? '配送中'
-				: status === 'completed'
-					? '已完成'
-					: '订单已关闭';
+	const statusLabel = isCustomerDeliveryCompleteStatus(status)
+		? getCustomerDeliveryStatusCopy(status)
+		: getCustomerOrderStatusCopy(status);
 
 	let items: string[] = [];
 	try {

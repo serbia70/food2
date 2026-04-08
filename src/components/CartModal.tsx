@@ -37,6 +37,7 @@ import { useRemarkState } from "./cart-modal/useRemarkState";
 import { useAuthState } from "./cart-modal/useAuthState";
 import { useCartProfileSync } from "./cart-modal/useCartProfileSync";
 import type { ShopDisplaySettings } from "../lib/shop-display-settings";
+import { isCustomerActiveStatus } from "../lib/rider-dispatch";
 
 interface ShopSettings {
   delivery?: {
@@ -341,11 +342,7 @@ export default function CartModal({
             );
             localStorage.removeItem("last_order_id");
             window.location.reload();
-          } else if (
-            data.status === "completed" ||
-            data.status === "archived" ||
-            data.status === "paid"
-          ) {
+          } else if (!isCustomerActiveStatus(data.status)) {
             localStorage.removeItem("last_order_id");
           }
         }

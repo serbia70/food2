@@ -1,5 +1,6 @@
 
 import { matchesTableRef, parseTableRef } from '../../lib/admin-table-ref';
+import { isActiveDineInOrder } from '../../lib/admin-dashboard-utils.ts';
 
 export function getOrdersForTable(tableNum: string) {
   const targetRef = parseTableRef(String(tableNum || ""));
@@ -18,7 +19,7 @@ export function getOrdersForTable(tableNum: string) {
       seen.add(oidRaw);
     }
     const status = el.dataset.status || "pending";
-    if (status === "completed" || status === "cancelled" || status === "archived") return;
+    if (!isActiveDineInOrder({ orderType: 'dine_in', status })) return;
     const tableInfo = el.dataset.table || "";
     if (matchesTableRef(targetRef, tableInfo, maxConfiguredTable)) {
       let items: any[] = [];

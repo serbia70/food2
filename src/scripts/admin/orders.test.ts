@@ -391,19 +391,14 @@ test('orders source keeps assign APIs and removes broadcast helper', async () =>
   assert.doesNotMatch(source, /remindRiders\s*\(/);
 });
 
-test('admin orders page keeps delivery completion visible in active delivery filter', async () => {
+test('admin orders page reuses shared helper for active delivery filter', async () => {
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
   const source = await readFile(resolve(process.cwd(), 'src/pages/admin/[slug]/index.astro'), 'utf8');
 
-  assert.match(source, /const activeDeliveryOrders = orders\.filter\(/);
-  assert.match(source, /o\.status === 'pending'/);
-  assert.match(source, /o\.status === 'confirmed'/);
-  assert.match(source, /o\.status === 'awaiting_courier'/);
-  assert.match(source, /o\.status === 'delivering'/);
-  assert.match(source, /o\.status === 'picked_up'/);
-  assert.match(source, /o\.status === 'completed'/);
-  assert.match(source, /o\.isDeleted !== 1/);
+  assert.match(source, /import\s+\{[^}]*isAdminActiveDeliveryStatus[^}]*\}\s+from\s+['"]\.\.\/\.\.\/\.\.\/lib\/rider-dispatch\.ts['"]/);
+  assert.match(source, /const activeDeliveryOrders = orders\.filter\([\s\S]*isAdminActiveDeliveryStatus\(o\.status\)[\s\S]*o\.isDeleted !== 1/);
+  assert.doesNotMatch(source, /o\.status === 'pending' \|\| o\.status === 'confirmed' \|\| o\.status === 'awaiting_courier' \|\| o\.status === 'delivering' \|\| o\.status === 'picked_up' \|\| o\.status === 'completed'/);
 });
 
 test('order-actions source uses canonical dispatch and courier fields', async () => {
@@ -558,18 +553,23 @@ test('admin page source does not turn failed orders fetch into fake empty delive
   assert.doesNotMatch(tablesSource, /\{activeDeliveryOrders\.length === 0 \? \(/);
 });
 
-test('table management source uses canonical order fields', async () => {
+test('table management source uses canonical order fields and shared active dine-in status helper', async () => {
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
   const source = await readFile(resolve(process.cwd(), 'src/scripts/admin/table-management.ts'), 'utf8');
 
+  assert.match(source, /import\s+\{\s*isActiveDineInOrder\s*\}\s+from\s+['"].*admin-dashboard-utils/);
   assert.match(source, /orderNo: el\.dataset\.orderNo,/);
   assert.match(source, /createTextElement\('span', ` \(#\$\{order\.orderNo\}\)`,/);
   assert.match(source, /createTextElement\('span', `订单 #\$\{order\.orderNo\}`,/);
   assert.match(source, /\.map\(\(i: any\) => `\$\{i\.name\} /);
   assert.match(source, /i\.subName \? '\('/);
   assert.match(source, /x\$\{i\.quantity\}`\)/);
+  assert.match(source, /if \(!isActiveDineInOrder\(\{ orderType: 'dine_in', status \}\)\) return;/);
 
+  assert.doesNotMatch(source, /status === "completed" \|\|/);
+  assert.doesNotMatch(source, /status === "cancelled" \|\|/);
+  assert.doesNotMatch(source, /status === "archived"/);
   assert.doesNotMatch(source, /order_no/);
   assert.doesNotMatch(source, /sub_name/);
 });
@@ -659,14 +659,32 @@ test('reservations source uses canonical reservation order fields', async () => 
   assert.doesNotMatch(source, /table_info/);
 });
 
-test('table utils source uses canonical order fields', async () => {
+test('table utils source uses canonical order fields and shared active dine-in status helper', async () => {
   const { readFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
   const source = await readFile(resolve(process.cwd(), 'src/scripts/admin/table-utils.ts'), 'utf8');
 
+  assert.match(source, /import\s+\{\s*isActiveDineInOrder\s*\}\s+from\s+['"].*admin-dashboard-utils/);
   assert.match(source, /id: el\.dataset\.oid, orderNo: el\.dataset\.orderNo, amount: el\.dataset\.total,/);
+  assert.match(source, /if \(!isActiveDineInOrder\(\{ orderType: 'dine_in', status \}\)\) return;/);
 
+  assert.doesNotMatch(source, /status === "completed" \|\| status === "cancelled" \|\| status === "archived"/);
   assert.doesNotMatch(source, /order_no/);
+});
+
+test('cart modal source reuses shared buyer active status helper for ended order cleanup', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const source = await readFile(resolve(process.cwd(), 'src/components/CartModal.tsx'), 'utf8');
+
+  assert.match(source, /import\s+\{\s*isCustomerActiveStatus\s*\}\s+from\s+['"].*rider-dispatch/);
+  assert.match(source, /if \(data\.status === "cancelled"\) \{/);
+  assert.match(source, /else if \(!isCustomerActiveStatus\(data\.status\)\) \{/);
+  assert.match(source, /localStorage\.removeItem\("last_order_id"\);/);
+
+  assert.doesNotMatch(source, /data\.status === "completed" \|\|/);
+  assert.doesNotMatch(source, /data\.status === "archived" \|\|/);
+  assert.doesNotMatch(source, /data\.status === "paid"/);
 });
 
 test('tab orders source uses canonical item fields', async () => {

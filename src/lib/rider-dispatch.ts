@@ -58,6 +58,22 @@ export function getAdminDispatchStatusCopy(status: string | null | undefined): s
   }
 }
 
+export function getCustomerOrderStatusCopy(status: string | null | undefined): string {
+  switch (String(status || '')) {
+    case 'pending':
+      return '等待接单';
+    case 'confirmed':
+      return '商家已接单';
+    case 'awaiting_courier':
+      return '待骑手接单';
+    case 'cancelled':
+    case 'closed':
+      return '订单已关闭';
+    default:
+      return '';
+  }
+}
+
 export function getCustomerDeliveryStatusCopy(status: string | null | undefined): string {
   switch (String(status || '')) {
     case 'delivering':
@@ -69,6 +85,47 @@ export function getCustomerDeliveryStatusCopy(status: string | null | undefined)
     default:
       return '';
   }
+}
+
+export const CUSTOMER_ACTIVE_STATUSES = ['pending', 'confirmed', 'awaiting_courier', 'delivering', 'picked_up'] as const;
+export const CUSTOMER_DELIVERY_STATUSES = ['delivering', 'picked_up', 'completed'] as const;
+export const CUSTOMER_COMPLETED_STATUSES = ['completed'] as const;
+export const ADMIN_ACTIVE_DELIVERY_STATUSES = ['pending', 'confirmed', 'awaiting_courier', 'delivering', 'picked_up', 'completed'] as const;
+
+export function isCustomerActiveStatus(status: string | null | undefined): boolean {
+  return CUSTOMER_ACTIVE_STATUSES.includes(String(status || '').trim() as (typeof CUSTOMER_ACTIVE_STATUSES)[number]);
+}
+
+export function isCustomerDeliveryStatus(status: string | null | undefined): boolean {
+  return CUSTOMER_DELIVERY_STATUSES.includes(String(status || '').trim() as (typeof CUSTOMER_DELIVERY_STATUSES)[number]);
+}
+
+export function isCustomerCompletedStatus(status: string | null | undefined): boolean {
+  return CUSTOMER_COMPLETED_STATUSES.includes(String(status || '').trim() as (typeof CUSTOMER_COMPLETED_STATUSES)[number]);
+}
+
+export function isCustomerDeliveryCompleteStatus(status: string | null | undefined): boolean {
+  return isCustomerDeliveryStatus(status);
+}
+
+export function isAdminActiveDeliveryStatus(status: string | null | undefined): boolean {
+  return ADMIN_ACTIVE_DELIVERY_STATUSES.includes(String(status || '').trim() as (typeof ADMIN_ACTIVE_DELIVERY_STATUSES)[number]);
+}
+
+export function getAdminDeliveryActionFlags(status: string | null | undefined) {
+  const value = String(status || '').trim();
+  return {
+    canAssign: value === 'pending' || value === 'confirmed' || value === 'awaiting_courier',
+    canMarkPickedUp: value === 'delivering',
+    canMarkDelivered: value === 'picked_up',
+    canEdit: value === 'pending' || value === 'confirmed' || value === 'delivering',
+    showAssignedRider: value === 'delivering' || value === 'picked_up',
+  };
+}
+
+export function isRiderDeliveringOrder(status: string | null | undefined): boolean {
+  const value = String(status || '').trim();
+  return value === 'delivering' || value === 'picked_up';
 }
 
 export function getDeliveryStatusTone(status: string | null | undefined): 'default' | 'info' | 'success' | 'danger' {
@@ -212,7 +269,7 @@ export function getRiderDispatchState(
   const currentRiderId = String(meta.currentRiderId || '').trim();
   const currentId = String(riderId || '').trim();
 
-  if (status === 'delivering' || status === 'picked_up') {
+  if (isRiderDeliveringOrder(status)) {
     return {
       canAccept: false,
       canDecline: false,

@@ -1,4 +1,5 @@
 import { matchesTableRef, parseTableRef, inferLegacySimpleHallNumber } from '../../lib/admin-table-ref';
+import { isActiveDineInOrder } from '../../lib/admin-dashboard-utils.ts';
 import { getRemarkCategoryTheme } from '../../lib/remark-ui-theme';
 import { getAdminHandler, getAdminRuntimeState, registerAdminGlobal, showAdminToast } from './globals';
 
@@ -162,13 +163,7 @@ function getOrdersForTable(tableNum: string) {
       seen.add(oidRaw);
     }
     const status = el.dataset.status || "pending";
-    // 忽略已完成或已取消的订单
-    if (
-      status === "completed" ||
-      status === "cancelled" ||
-      status === "archived"
-    )
-      return;
+    if (!isActiveDineInOrder({ orderType: 'dine_in', status })) return;
 
     const tableInfo = el.dataset.table || "";
     if (matchesTableRef(targetRef, tableInfo, maxConfiguredTable)) {

@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
 import {
   formatPickupEtaLabel,
@@ -7,7 +10,15 @@ import {
   isRiderClaimableOrder,
   pickAvailableRiders,
   getAdminDispatchStatusCopy,
+  getAdminDeliveryActionFlags,
   getCustomerDeliveryStatusCopy,
+  getCustomerOrderStatusCopy,
+  isAdminActiveDeliveryStatus,
+  isCustomerActiveStatus,
+  isCustomerCompletedStatus,
+  isCustomerDeliveryStatus,
+  CUSTOMER_COMPLETED_STATUSES,
+  isCustomerDeliveryCompleteStatus,
   getDeliveryStatusTone,
   getRiderActionFlags,
   getReminderBadgeCopy,
@@ -19,6 +30,7 @@ import {
   getRiderDispatchState,
   filterAvailableRidersForOrder,
   filterRiderDashboardOrders,
+  isRiderDeliveringOrder,
   getRiderStatusHintCopy,
   buildReminderPayload,
 } from './rider-dispatch.ts';
@@ -61,12 +73,97 @@ test('getAdminDispatchStatusCopy 映射 admin 调度状态文案', () => {
   assert.equal(getAdminDispatchStatusCopy('pending'), '待处理');
 });
 
+test('getAdminDeliveryActionFlags 映射 admin 外卖动作可见性', () => {
+  assert.deepEqual(getAdminDeliveryActionFlags('pending'), {
+    canAssign: true,
+    canMarkPickedUp: false,
+    canMarkDelivered: false,
+    canEdit: true,
+    showAssignedRider: false,
+  });
+  assert.deepEqual(getAdminDeliveryActionFlags('awaiting_courier'), {
+    canAssign: true,
+    canMarkPickedUp: false,
+    canMarkDelivered: false,
+    canEdit: false,
+    showAssignedRider: false,
+  });
+  assert.deepEqual(getAdminDeliveryActionFlags('delivering'), {
+    canAssign: false,
+    canMarkPickedUp: true,
+    canMarkDelivered: false,
+    canEdit: true,
+    showAssignedRider: true,
+  });
+  assert.deepEqual(getAdminDeliveryActionFlags('picked_up'), {
+    canAssign: false,
+    canMarkPickedUp: false,
+    canMarkDelivered: true,
+    canEdit: false,
+    showAssignedRider: true,
+  });
+  assert.deepEqual(getAdminDeliveryActionFlags('completed'), {
+    canAssign: false,
+    canMarkPickedUp: false,
+    canMarkDelivered: false,
+    canEdit: false,
+    showAssignedRider: false,
+  });
+});
+
+test('isRiderDeliveringOrder 统一 delivering 与 picked_up 判定', () => {
+  assert.equal(isRiderDeliveringOrder('delivering'), true);
+  assert.equal(isRiderDeliveringOrder('picked_up'), true);
+  assert.equal(isRiderDeliveringOrder('completed'), false);
+  assert.equal(isRiderDeliveringOrder('awaiting_courier'), false);
+});
+
+test('CUSTOMER_COMPLETED_STATUSES 导出 completed 完成态集合', () => {
+  assert.deepEqual(CUSTOMER_COMPLETED_STATUSES, ['completed']);
+});
+
+test('isCustomerCompletedStatus 统一买家完成态判定', () => {
+  assert.equal(isCustomerCompletedStatus('completed'), true);
+  assert.equal(isCustomerCompletedStatus(' pending '), false);
+  assert.equal(isCustomerCompletedStatus('cancelled'), false);
+  assert.equal(isCustomerCompletedStatus(undefined), false);
+});
+
+test('isCustomerDeliveryCompleteStatus 统一买家配送完成态判定', () => {
+  assert.equal(isCustomerDeliveryCompleteStatus('delivering'), true);
+  assert.equal(isCustomerDeliveryCompleteStatus('picked_up'), true);
+  assert.equal(isCustomerDeliveryCompleteStatus('completed'), true);
+  assert.equal(isCustomerDeliveryCompleteStatus('awaiting_courier'), false);
+  assert.equal(isCustomerDeliveryCompleteStatus('pending'), false);
+});
+
 test('delivery status helpers cover delivering, picked_up and completed consistently', () => {
   assert.equal(getAdminDispatchStatusCopy('delivering'), '骑手已接单');
   assert.equal(getAdminDispatchStatusCopy('picked_up'), '骑手已取餐');
+  assert.equal(getCustomerOrderStatusCopy('pending'), '等待接单');
+  assert.equal(getCustomerOrderStatusCopy('confirmed'), '商家已接单');
+  assert.equal(getCustomerOrderStatusCopy('cancelled'), '订单已关闭');
+  assert.equal(getCustomerOrderStatusCopy('closed'), '订单已关闭');
   assert.equal(getCustomerDeliveryStatusCopy('delivering'), '送餐中');
   assert.equal(getCustomerDeliveryStatusCopy('picked_up'), '骑手已取餐，正在送达');
   assert.equal(getCustomerDeliveryStatusCopy('completed'), '已送达');
+  assert.equal(isCustomerActiveStatus('confirmed'), true);
+  assert.equal(isCustomerActiveStatus('awaiting_courier'), true);
+  assert.equal(isCustomerActiveStatus('delivering'), true);
+  assert.equal(isCustomerActiveStatus('picked_up'), true);
+  assert.equal(isCustomerActiveStatus('pending'), true);
+  assert.equal(isCustomerActiveStatus('completed'), false);
+  assert.equal(isCustomerDeliveryStatus('delivering'), true);
+  assert.equal(isCustomerDeliveryStatus('picked_up'), true);
+  assert.equal(isCustomerDeliveryStatus('completed'), true);
+  assert.equal(isCustomerDeliveryStatus('awaiting_courier'), false);
+  assert.equal(isAdminActiveDeliveryStatus('pending'), true);
+  assert.equal(isAdminActiveDeliveryStatus('confirmed'), true);
+  assert.equal(isAdminActiveDeliveryStatus('awaiting_courier'), true);
+  assert.equal(isAdminActiveDeliveryStatus('delivering'), true);
+  assert.equal(isAdminActiveDeliveryStatus('picked_up'), true);
+  assert.equal(isAdminActiveDeliveryStatus('completed'), true);
+  assert.equal(isAdminActiveDeliveryStatus('cancelled'), false);
   assert.equal(getDeliveryStatusTone('declined'), 'danger');
   assert.equal(getDeliveryStatusTone('delivering'), 'info');
   assert.equal(getDeliveryStatusTone('picked_up'), 'success');
@@ -278,7 +375,7 @@ test('readDispatchMetaFromRemarks 跳过损坏的新 dispatch_meta 并回退到�
   });
 });
 
-test('getRiderDispatchState 在 delivering 阶段仅当前配送骑手可完成', () => {
+test('getRiderDispatchState 在配送中阶段仅当前配送骑手可完成', () => {
   const meta = {
     lastRiderDecision: null,
     declinedRiderIds: [],
@@ -297,6 +394,20 @@ test('getRiderDispatchState 在 delivering 阶段仅当前配送骑手可完成'
   });
 
   assert.deepEqual(getRiderDispatchState({ status: 'delivering' }, meta, 'rider-8'), {
+    canAccept: false,
+    canDecline: false,
+    canComplete: false,
+    invalidReason: '',
+  });
+
+  assert.deepEqual(getRiderDispatchState({ status: 'picked_up' }, meta, 'rider-7'), {
+    canAccept: false,
+    canDecline: false,
+    canComplete: true,
+    invalidReason: '',
+  });
+
+  assert.deepEqual(getRiderDispatchState({ status: 'picked_up' }, meta, 'rider-8'), {
     canAccept: false,
     canDecline: false,
     canComplete: false,
@@ -337,6 +448,12 @@ test('filterAvailableRidersForOrder 排除当前订单已拒单骑手', () => {
     filterAvailableRidersForOrder(riders, remarksJson),
     [{ id: 7, name: '骑手A', phone: '061', status: 'available' }],
   );
+});
+
+test('getRiderDispatchState 复用 isRiderDeliveringOrder 判断配送中状态', async () => {
+  const source = await fs.readFile(new URL('./rider-dispatch.ts', import.meta.url), 'utf8');
+  assert.match(source, /if \(isRiderDeliveringOrder\(status\)\) \{/);
+  assert.doesNotMatch(source, /if \(status === 'delivering' \|\| status === 'picked_up'\) \{/);
 });
 
 test('dispatch meta tracks current rider validity and invalidation copy', () => {
@@ -391,6 +508,25 @@ test('filterAvailableRidersForOrder excludes invalidated riders from current ord
     filterAvailableRidersForOrder(riders, remarksJson),
     [{ id: 7, name: '骑手A', phone: '061', status: 'available' }],
   );
+});
+
+test('admin-service 活跃外卖查询复用共享 admin 活跃配送状态集合', async () => {
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const source = await fs.readFile(resolve(dir, 'admin-service.ts'), 'utf8');
+  assert.match(source, /import\s+\{\s*ADMIN_ACTIVE_DELIVERY_STATUSES\s*\}\s+from\s+['"].*rider-dispatch/);
+  assert.match(source, /const ACTIVE_DELIVERY_STATUS_SQL = ADMIN_ACTIVE_DELIVERY_STATUSES\.map\(\(\) => ['"]\?['"]\)\.join\(['"], ['"]\);/);
+  assert.match(source, /status IN \(\$\{ACTIVE_DELIVERY_STATUS_SQL\}\)/);
+  assert.match(source, /\.all\(shopId, \.\.\.ADMIN_ACTIVE_DELIVERY_STATUSES\)/);
+  assert.doesNotMatch(source, /status IN \('pending', 'confirmed', 'awaiting_courier', 'delivering'\)/);
+});
+
+test('UserCenterPanel 完成态复用共享 isCustomerCompletedStatus', async () => {
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const source = await fs.readFile(resolve(dir, '../components/UserCenterPanel.tsx'), 'utf8');
+  assert.match(source, /isCustomerCompletedStatus/);
+  assert.match(source, /const isCompleted = isCustomerCompletedStatus\(status\);/);
+  assert.doesNotMatch(source, /const isCompleted = status === 'completed';/);
+  assert.doesNotMatch(source, /CUSTOMER_COMPLETED_STATUSES/);
 });
 
 test('filterRiderDashboardOrders returns active orders for active view', () => {

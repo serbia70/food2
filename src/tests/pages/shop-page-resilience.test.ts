@@ -25,3 +25,15 @@ test('shop page source only loads all table occupancy during tables mode', async
   assert.match(source, /await Promise\.all\(/);
   assert.match(source, /\$\{API_BASE_URL\}\/api\/order\/by_table\?slug=\$\{encodeURIComponent\(slug\)\}&table=\$\{encodeURIComponent\(key\)\}/);
 });
+
+test('shop page source reuses shared active dine-in helper for table lock and occupancy', async () => {
+  const source = await readFile(pagePath, 'utf8');
+
+  assert.match(source, /import \{ isActiveDineInOrder \} from '\.\.\/\.\.\/lib\/admin-dashboard-utils\.ts';/);
+  assert.match(source, /const hasActive = orders\.some\(\(o: any\) => isActiveDineInOrder\(\{ orderType: 'dine_in', status: o\?\.status, isDeleted: o\?\.isDeleted \}\)\);/);
+  assert.match(source, /const active = Array\.from\(merged\.values\(\)\)\.filter\([\s\S]*isActiveDineInOrder\(\{ orderType: 'dine_in', status: o\?\.status, isDeleted: o\?\.isDeleted \}\)[\s\S]*\);/);
+
+  assert.doesNotMatch(source, /!\['completed', 'cancelled', 'archived', 'review_needed'\]\.includes\(o\?\.status\)/);
+  assert.doesNotMatch(source, /const endedOrderStatusList = \['completed', 'cancelled', 'archived', 'paid'\];/);
+  assert.doesNotMatch(source, /endedOrderStatus\.has\(String\(o\?\.status \|\| ''\)\.toLowerCase\(\)\)/);
+});

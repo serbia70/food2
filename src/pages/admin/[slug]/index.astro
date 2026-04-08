@@ -9,6 +9,7 @@ import { buildAdminOrderChannelBillingView } from '../../../lib/admin-order-chan
 import { buildDineInBillingState } from '../../../lib/dine-in-billing.ts';
 import { buildAdminTabVisibility, resolveShopTier, type ShopTierView } from '../../../lib/shop-tier.ts';
 import { resolveShopDisplaySettings } from '../../../lib/shop-display-settings';
+import { isAdminActiveDeliveryStatus } from '../../../lib/rider-dispatch.ts';
 import AdminHeader from '../../../components/admin/AdminHeader.astro';
 import AdminTabs from '../../../components/admin/AdminTabs.astro';
 import TabOrders from '../../../components/admin/TabOrders.astro';
@@ -265,7 +266,7 @@ const unmatchedDineInOrders = orders
 const activeDeliveryOrders = orders.filter(
   (o: any) =>
     o.orderType === 'delivery' &&
-    (o.status === 'pending' || o.status === 'confirmed' || o.status === 'awaiting_courier' || o.status === 'delivering' || o.status === 'picked_up' || o.status === 'completed') &&
+    isAdminActiveDeliveryStatus(o.status) &&
     o.isDeleted !== 1,
 );
 

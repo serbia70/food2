@@ -1,4 +1,5 @@
 ﻿import db from "./db.js";
+import { ADMIN_ACTIVE_DELIVERY_STATUSES } from "./rider-dispatch.ts";
 import type { Shop, Order, TableCardData, Zone } from "../types/index.js";
 
 // Define DB result interfaces for better type safety
@@ -205,6 +206,8 @@ export function getTableStatus(shop: Shop, settings: any) {
   return { tableConfig, tableCardsData };
 }
 
+const ACTIVE_DELIVERY_STATUS_SQL = ADMIN_ACTIVE_DELIVERY_STATUSES.map(() => '?').join(', ');
+
 /**
  * Get active delivery orders
  */
@@ -215,10 +218,10 @@ export function getActiveDeliveryOrders(shopId: number) {
       SELECT * FROM orders
       WHERE shop_id = ?
       AND order_type = 'delivery'
-      AND status IN ('pending', 'confirmed', 'awaiting_courier', 'delivering')
+      AND status IN (${ACTIVE_DELIVERY_STATUS_SQL})
       `,
     )
-    .all(shopId) as Order[];
+    .all(shopId, ...ADMIN_ACTIVE_DELIVERY_STATUSES) as Order[];
 }
 
 /**

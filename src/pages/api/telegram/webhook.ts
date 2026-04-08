@@ -77,7 +77,15 @@ export const POST: APIRoute = async ({ request }) => {
     const upstream = await handleTelegramRiderClaim(claimRequest);
 
     const upstreamText = await upstream.text();
-    const upstreamJson = upstreamText ? JSON.parse(upstreamText) as Record<string, unknown> : null;
+    let upstreamJson: Record<string, unknown> | null = null;
+    if (upstreamText) {
+      try {
+        const parsed = JSON.parse(upstreamText) as unknown;
+        upstreamJson = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+      } catch {
+        upstreamJson = null;
+      }
+    }
     if (!upstream.ok) {
       const errorText = String(upstreamJson?.error || '').trim();
       const text = errorText === 'expired_callback' ? '操作已过期' : '操作失败';

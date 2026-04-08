@@ -1,7 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
-import { getCustomerDeliveryStatusCopy } from '../../lib/rider-dispatch.ts';
+import { CUSTOMER_COMPLETED_STATUSES, getCustomerOrderStatusCopy, getCustomerDeliveryStatusCopy, isCustomerActiveStatus } from '../../lib/rider-dispatch.ts';
 ---
 
 <Layout title="订单中心">
@@ -79,9 +79,14 @@ import { getCustomerDeliveryStatusCopy } from '../../lib/rider-dispatch.ts';
   <PlatformBottomNav active="orders" />
 
   <script define:vars={{
+    pendingStatusCopy: getCustomerOrderStatusCopy('pending'),
+    confirmedStatusCopy: getCustomerOrderStatusCopy('confirmed'),
+    awaitingCourierStatusCopy: getCustomerOrderStatusCopy('awaiting_courier'),
     deliveringStatusCopy: getCustomerDeliveryStatusCopy('delivering'),
     pickedUpStatusCopy: getCustomerDeliveryStatusCopy('picked_up'),
     completedStatusCopy: getCustomerDeliveryStatusCopy('completed'),
+    closedStatusCopy: getCustomerOrderStatusCopy('closed'),
+    customerCompletedStatuses: CUSTOMER_COMPLETED_STATUSES,
   }} is:inline>
     function filterUserVisibleOrders(orders) {
       return (orders || []).filter((order) => {
@@ -212,18 +217,23 @@ import { getCustomerDeliveryStatusCopy } from '../../lib/rider-dispatch.ts';
     const ordersCountEl = document.getElementById('orders-count');
 
     function getStatusLabel(status) {
-      if (status === 'pending') return '等待接单';
-      if (status === 'confirmed') return '商家已接单';
+      if (status === 'pending') return pendingStatusCopy;
+      if (status === 'confirmed') return confirmedStatusCopy;
+      if (status === 'awaiting_courier') return awaitingCourierStatusCopy;
       if (status === 'delivering') return deliveringStatusCopy;
       if (status === 'picked_up') return pickedUpStatusCopy;
-      if (status === 'completed') return completedStatusCopy;
-      return '订单已关闭';
+      if (isCustomerCompletedStatus(status)) return completedStatusCopy;
+      return closedStatusCopy;
+    }
+
+    function isCustomerCompletedStatus(status) {
+      return customerCompletedStatuses.includes(String(status || '').trim());
     }
 
     function getStatusClass(status) {
       if (status === 'pending') return 'status-pending';
-      if (status === 'confirmed' || status === 'delivering' || status === 'picked_up') return 'status-active';
-      if (status === 'completed') return 'status-done';
+      if (isCustomerActiveStatus(status)) return 'status-active';
+      if (isCustomerCompletedStatus(status)) return 'status-done';
       return 'status-closed';
     }
 
@@ -232,9 +242,9 @@ import { getCustomerDeliveryStatusCopy } from '../../lib/rider-dispatch.ts';
       const completed = [];
       const others = [];
       for (const order of orders) {
-        if (order.status === 'pending' || order.status === 'confirmed' || order.status === 'delivering' || order.status === 'picked_up') {
+        if (isCustomerActiveStatus(order.status)) {
           active.push(order);
-        } else if (order.status === 'completed') {
+        } else if (isCustomerCompletedStatus(order.status)) {
           completed.push(order);
         } else {
           others.push(order);
@@ -375,7 +385,7 @@ import { getCustomerDeliveryStatusCopy } from '../../lib/rider-dispatch.ts';
 
       const latestOrder = [...orders].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0];
       const leadShop = summaries[0] || {};
-      const activeCount = orders.filter((order) => ['pending', 'confirmed', 'delivering', 'picked_up'].includes(order.status)).length;
+      const activeCount = orders.filter((order) => isCustomerActiveStatus(order.status)).length;
 
       const card = document.createElement('div');
       card.className = 'overview-card';

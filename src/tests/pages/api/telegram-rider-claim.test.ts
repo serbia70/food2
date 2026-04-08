@@ -882,6 +882,64 @@ test('POST rider-claim 在 accept 后给骑手发送已取餐消息', async () =
   }
 });
 
+test('POST rider-claim 在 callback 带店铺 slug 时转发 shop_slug 给 telegram send', async () => {
+  let telegramSendPayload: Record<string, unknown> | null = null;
+  const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url === 'http://localhost/api/rider/status?action=list_available') {
+      return jsonResponse({
+        success: true,
+        riders: [
+          { id: 6, name: '骑手888', phone: '0613888', status: 'available', telegramChatId: 'chat-888' },
+        ],
+      });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse([{
+        id: 108,
+        orderNo: 'A108',
+        tableInfo: 'Cara Lazara 108',
+        userPhone: '060108',
+        totalAmount: 2080,
+        pickupEtaMinutes: 16,
+        remarksJson: '',
+        status: 'awaiting_courier',
+      }]);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
+    if (url === 'http://localhost/api/order/update_status/108') {
+      return jsonResponse({ success: true });
+    }
+    if (url === 'http://localhost/api/telegram/send') {
+      telegramSendPayload = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      return jsonResponse({ success: true, ok: true });
+    }
+
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
+  try {
+    const callbackData = buildTelegramClaimCallback({
+      orderId: 108,
+      riderId: 6,
+      riderName: '骑手888',
+      riderPhone: '0613888',
+      restaurantId: 'demo-shop',
+      telegramChatId: 'chat-888',
+      expiresAt: Date.now() + 60_000,
+    });
+
+    const response = await POST({ request: createClaimRequest(JSON.stringify({ callbackData, chatId: 'chat-888' })) } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true });
+    assert.equal(telegramSendPayload?.shop_slug, 'demo-shop');
+  } finally {
+    restoreFetch();
+  }
+});
+
 test('POST rider-claim 在 picked_up callback 合法时更新订单为 picked_up 并发送已送达消息', async () => {
   const calls: string[] = [];
   let updateStatusPayload: Record<string, unknown> | null = null;

@@ -39,6 +39,12 @@ function readInternalApiBaseUrl(): string {
   return String(process.env.PUBLIC_API_URL || API_BASE_URL || '').trim().replace(/\/$/, '');
 }
 
+function readTelegramSendShopSlug(value: unknown): string {
+  const slug = String(value || '').trim();
+  if (!slug || slug === 'admin') return '';
+  return /^[a-z0-9][a-z0-9-]*$/i.test(slug) ? slug : '';
+}
+
 async function readRiderIdentityByChatId(request: Request, chatId: string): Promise<{ riderName: string; riderPhone: string } | null> {
   const upstream = await fetch(`${readInternalApiBaseUrl()}/api/rider/status?action=list_available`, {
     headers: buildForwardHeaders(request),
@@ -126,6 +132,7 @@ async function sendDeliveryProgressMessage(
         completeCallbackData,
       });
 
+  const notifyShopSlug = readTelegramSendShopSlug(callback.restaurantId);
   await fetch(`${readInternalApiBaseUrl()}/api/telegram/send`, {
     method: 'POST',
     headers: {
@@ -133,6 +140,7 @@ async function sendDeliveryProgressMessage(
       ...buildForwardHeaders(request),
     },
     body: JSON.stringify({
+      ...(notifyShopSlug ? { shop_slug: notifyShopSlug } : {}),
       chat_id: chatId,
       chatId,
       text: message.text,

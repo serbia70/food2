@@ -95,7 +95,7 @@ async function sendDeliveryProgressMessage(
   chatId: string,
   stage: 'picked_up' | 'completed',
 ): Promise<void> {
-  const order = await readOrderDetail(request, String(callback.orderId || '').trim());
+  const order = await readOrderDetail(request, String(callback.orderId || '').trim(), riderPhone);
   if (!order) return;
 
   const completeCallbackData = buildTelegramShortClaimCallback({
@@ -171,7 +171,7 @@ async function readOrderDispatchMeta(request: Request, orderId: string): Promise
   return (await readOrderDispatchSnapshot(request, orderId)).remarksJson;
 }
 
-async function readOrderDetail(request: Request, orderId: string): Promise<Record<string, unknown> | null> {
+async function readOrderDetailFromAdminOrders(request: Request, orderId: string): Promise<Record<string, unknown> | null> {
   const upstream = await fetch(`${readInternalApiBaseUrl()}/api/admin/orders`, {
     headers: buildForwardHeaders(request),
   });
@@ -188,6 +188,27 @@ async function readOrderDetail(request: Request, orderId: string): Promise<Recor
   const rows = Array.isArray(parsed) ? parsed : [];
   const matched = rows.find((row) => String((row as Record<string, unknown>)?.id || '').trim() === orderId);
   return matched && typeof matched === 'object' ? matched as Record<string, unknown> : null;
+}
+
+async function readOrderDetailFromRiderOrders(request: Request, orderId: string, riderPhone: string): Promise<Record<string, unknown> | null> {
+  const phone = String(riderPhone || '').trim();
+  if (!phone) return null;
+
+  const upstream = await fetch(`${readInternalApiBaseUrl()}/api/rider/orders?phone=${encodeURIComponent(phone)}&view=active`, {
+    headers: buildForwardHeaders(request),
+  });
+  const text = await upstream.text();
+  if (!upstream.ok || !text) return null;
+
+  const parsed = readJsonObject(text);
+  const rows = Array.isArray(parsed?.orders) ? parsed.orders : [];
+  const matched = rows.find((row) => String((row as Record<string, unknown>)?.id || '').trim() === orderId);
+  return matched && typeof matched === 'object' ? matched as Record<string, unknown> : null;
+}
+
+async function readOrderDetail(request: Request, orderId: string, riderPhone = ''): Promise<Record<string, unknown> | null> {
+  return await readOrderDetailFromAdminOrders(request, orderId)
+    || await readOrderDetailFromRiderOrders(request, orderId, riderPhone);
 }
 
 async function writeOrderDispatchMeta(

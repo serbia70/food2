@@ -745,6 +745,79 @@ test('POST rider-claim updates order to delivering with courier info from signed
   }
 });
 
+test('POST rider-claim 在 admin orders 未授权时仍给骑手发送已取餐消息', async () => {
+  const calls: string[] = [];
+  let telegramSendPayload: Record<string, unknown> | null = null;
+  const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    calls.push(url);
+    if (url === 'http://localhost/api/rider/status?action=list_available') {
+      return jsonResponse({
+        success: true,
+        riders: [
+          { id: 6, name: '骑手888', phone: '0613888', status: 'available', telegramChatId: 'chat-888' },
+        ],
+      });
+    }
+    if (url === 'http://localhost/api/admin/orders') {
+      return jsonResponse({ success: false, error: 'Unauthorized' }, 401);
+    }
+    if (url === 'http://localhost/api/admin/orders/remarks') {
+      return jsonResponse({ success: false, error: 'Unauthorized' }, 401);
+    }
+    if (url === 'http://localhost/api/order/update_status/108') {
+      return jsonResponse({ success: true });
+    }
+    if (url === 'http://localhost/api/rider/orders?phone=0613888&view=active') {
+      return jsonResponse({
+        success: true,
+        orders: [{
+          id: 108,
+          orderNo: 'A108',
+          tableInfo: 'Cara Lazara 108',
+          userPhone: '060108',
+          totalAmount: 2080,
+          pickupEtaMinutes: 16,
+          status: 'delivering',
+          courierPhone: '0613888',
+        }],
+      });
+    }
+    if (url === 'http://localhost/api/telegram/send') {
+      telegramSendPayload = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      return jsonResponse({ success: true, ok: true });
+    }
+
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
+  try {
+    const callbackData = buildTelegramClaimCallback({
+      orderId: 108,
+      riderId: 6,
+      riderName: '骑手888',
+      riderPhone: '0613888',
+      restaurantId: '101',
+      telegramChatId: 'chat-888',
+      expiresAt: Date.now() + 60_000,
+    });
+
+    const request = createClaimRequest(JSON.stringify({ callbackData, chatId: 'chat-888' }));
+    const response = await POST({ request } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true });
+    assert.ok(calls.includes('http://localhost/api/rider/orders?phone=0613888&view=active'));
+    assert.equal(telegramSendPayload?.chat_id, 'chat-888');
+    assert.match(String(telegramSendPayload?.text || ''), /已接单/);
+    const replyMarkup = telegramSendPayload?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> } | undefined;
+    const pickedUpButton = replyMarkup?.inline_keyboard?.flat().find((button) => button?.text === '已取餐');
+    assert.ok(pickedUpButton?.callback_data);
+    assert.match(String(pickedUpButton?.callback_data || ''), /^rc2\./);
+  } finally {
+    restoreFetch();
+  }
+});
+
 test('POST rider-claim 在 accept 后给骑手发送已取餐消息', async () => {
   let telegramSendPayload: Record<string, unknown> | null = null;
   const restoreFetch = withMockedFetch(async (input: string | URL | Request, init?: RequestInit) => {

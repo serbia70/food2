@@ -47,6 +47,7 @@ type AdminOrderRow = {
 };
 
 const ASSIGN_RIDER_REQUEST_TIMEOUT_MS = 15000;
+let latestLoadOrdersRequestId = 0;
 
 function formatTelegramDiagnostics(notification: TelegramNotificationDiagnostics): string {
   const status = notification.success === true ? 'success' : 'failed';
@@ -329,10 +330,14 @@ function renderAdminOrderList(rows: AdminOrderRow[]) {
 }
 
 export async function loadOrders() {
+  const requestId = ++latestLoadOrdersRequestId;
   const res = await fetch('/api/admin/orders');
   const data = await res.json().catch(() => ([]));
   if (!res.ok) {
     throw new Error('load orders failed');
+  }
+  if (requestId !== latestLoadOrdersRequestId) {
+    return;
   }
 
   const rows = normalizeAdminOrdersPayload(data);

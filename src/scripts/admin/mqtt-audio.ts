@@ -172,7 +172,14 @@ function handleRealtimePayload(payload: any) {
     }
   } catch (e) {}
   const key = `${payload.event||payload.type}:${payload.reservation_id||payload.order_id||payload.id}:${payload.status}`;
-  if (processedMessages.has(key)) return;
+  if (processedMessages.has(key)) {
+    if (payload.event === 'status_update') {
+      const refreshOrderList = getAdminHandler<() => void>('refreshOrderList');
+      if (typeof refreshOrderList === 'function') refreshOrderList();
+      else setTimeout(() => location.reload(), 3000);
+    }
+    return;
+  }
   processedMessages.add(key);
   if (processedMessages.size > 100) processedMessages.delete(processedMessages.values().next().value);
 

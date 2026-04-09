@@ -154,13 +154,12 @@ export function getRiderActionFlags(
   order: {
     status?: string | null;
     courierPhone?: string | null;
-    courier_phone?: string | null;
   },
   riderPhone?: string | null,
 ) {
   const status = String(order?.status || '').trim();
   const phone = String(riderPhone || '').trim();
-  const orderPhone = String(order?.courierPhone || order?.courier_phone || '').trim();
+  const orderPhone = String(order?.courierPhone || '').trim();
   const isCurrentRider = !!phone && phone === orderPhone;
 
   return {
@@ -352,20 +351,14 @@ const STALE_AWAITING_ORDER_MS = 6 * 60 * 60 * 1000;
 
 function readOrderActiveTimestamp(order: {
   pickupReadyAt?: string | null;
-  pickup_ready_at?: string | null;
   riderBroadcastedAt?: string | null;
-  rider_broadcasted_at?: string | null;
   createdAt?: string | null;
-  created_at?: string | null;
 }): number {
   return parseTimestamp(
     String(
       order?.pickupReadyAt
-      || order?.pickup_ready_at
       || order?.riderBroadcastedAt
-      || order?.rider_broadcasted_at
       || order?.createdAt
-      || order?.created_at
       || '',
     ),
   );
@@ -375,11 +368,8 @@ function isActiveAwaitingCourierOrder(
   order: {
     status?: string | null;
     pickupReadyAt?: string | null;
-    pickup_ready_at?: string | null;
     riderBroadcastedAt?: string | null;
-    rider_broadcasted_at?: string | null;
     createdAt?: string | null;
-    created_at?: string | null;
   },
   nowIso?: string,
 ): boolean {
@@ -392,14 +382,10 @@ function isActiveAwaitingCourierOrder(
 
 export function filterRiderActiveOrders<T extends {
   status?: string | null;
-  courier_phone?: string | null;
   courierPhone?: string | null;
   pickupReadyAt?: string | null;
-  pickup_ready_at?: string | null;
   riderBroadcastedAt?: string | null;
-  rider_broadcasted_at?: string | null;
   createdAt?: string | null;
-  created_at?: string | null;
 }>(
   orders: T[],
   riderPhone?: string | null,
@@ -411,20 +397,16 @@ export function filterRiderActiveOrders<T extends {
     const status = String(order?.status || '').trim();
     if (status !== 'delivering' && status !== 'picked_up') return false;
     if (!phone) return false;
-    return String(order?.courierPhone || order?.courier_phone || '').trim() === phone;
+    return String(order?.courierPhone || '').trim() === phone;
   });
 }
 
 export function filterRiderDashboardOrders<T extends {
   status?: string | null;
-  courier_phone?: string | null;
   courierPhone?: string | null;
   pickupReadyAt?: string | null;
-  pickup_ready_at?: string | null;
   riderBroadcastedAt?: string | null;
-  rider_broadcasted_at?: string | null;
   createdAt?: string | null;
-  created_at?: string | null;
 }>(
   orders: T[],
   riderPhone?: string | null,
@@ -435,7 +417,7 @@ export function filterRiderDashboardOrders<T extends {
     const phone = String(riderPhone || '').trim();
     if (!phone) return [];
     return orders.filter(
-      (order) => String(order?.status || '') === 'completed' && String(order?.courierPhone || order?.courier_phone || '').trim() === phone,
+      (order) => String(order?.status || '') === 'completed' && String(order?.courierPhone || '').trim() === phone,
     );
   }
   return filterRiderActiveOrders(orders, riderPhone, nowIso);

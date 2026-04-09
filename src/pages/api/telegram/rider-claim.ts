@@ -23,7 +23,7 @@ function readJsonObject(text: string): Record<string, unknown> | null {
 }
 
 function readRiderChatId(rider: AssignableRider): string {
-  return String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
+  return String(rider.telegramChatId || '').trim();
 }
 
 function buildForwardHeaders(request: Request): Record<string, string> {
@@ -116,19 +116,19 @@ async function sendDeliveryProgressMessage(
 
   const message = stage === 'picked_up'
     ? buildRiderPickedUpTelegramMessage({
-        orderNo: String(order.orderNo || order.order_no || callback.orderId || '').trim(),
-        address: String(order.tableInfo || order.table_info || '').trim() || '未提供地址',
-        phone: String(order.userPhone || order.user_phone || '').trim() || '-',
-        totalAmount: Number(order.totalAmount || order.total_amount || 0) || 0,
-        pickupEtaMinutes: Number(order.pickupEtaMinutes || order.pickup_eta_minutes || 0) || 0,
+        orderNo: String(order.orderNo || callback.orderId || '').trim(),
+        address: String(order.tableInfo || '').trim() || '未提供地址',
+        phone: String(order.userPhone || '').trim() || '-',
+        totalAmount: Number(order.totalAmount || 0) || 0,
+        pickupEtaMinutes: Number(order.pickupEtaMinutes || 0) || 0,
         completeCallbackData,
       })
     : buildRiderDeliveryCompleteTelegramMessage({
-        orderNo: String(order.orderNo || order.order_no || callback.orderId || '').trim(),
-        address: String(order.tableInfo || order.table_info || '').trim() || '未提供地址',
-        phone: String(order.userPhone || order.user_phone || '').trim() || '-',
-        totalAmount: Number(order.totalAmount || order.total_amount || 0) || 0,
-        pickupEtaMinutes: Number(order.pickupEtaMinutes || order.pickup_eta_minutes || 0) || 0,
+        orderNo: String(order.orderNo || callback.orderId || '').trim(),
+        address: String(order.tableInfo || '').trim() || '未提供地址',
+        phone: String(order.userPhone || '').trim() || '-',
+        totalAmount: Number(order.totalAmount || 0) || 0,
+        pickupEtaMinutes: Number(order.pickupEtaMinutes || 0) || 0,
         completeCallbackData,
       });
 
@@ -140,11 +140,10 @@ async function sendDeliveryProgressMessage(
       ...buildForwardHeaders(request),
     },
     body: JSON.stringify({
-      ...(notifyShopSlug ? { shop_slug: notifyShopSlug } : {}),
-      chat_id: chatId,
+      ...(notifyShopSlug ? { shopSlug: notifyShopSlug } : {}),
       chatId,
       text: message.text,
-      reply_markup: message.replyMarkup,
+      replyMarkup: message.replyMarkup,
     }),
   });
 }
@@ -171,7 +170,7 @@ async function readOrderDispatchSnapshot(
   if (!matched || typeof matched !== 'object') return { status: '', remarksJson: '' };
   return {
     status: String((matched as Record<string, unknown>).status || '').trim(),
-    remarksJson: String((matched as Record<string, unknown>).remarksJson || (matched as Record<string, unknown>).remarks_json || '').trim(),
+    remarksJson: String((matched as Record<string, unknown>).remarksJson || '').trim(),
   };
 }
 
@@ -391,9 +390,9 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: callback.orderId,
-        expected_current_status: 'awaiting_courier',
+        expectedCurrentStatus: 'awaiting_courier',
         status: 'awaiting_courier',
-        remarks_json: JSON.stringify(nextRemarks),
+        remarksJson: JSON.stringify(nextRemarks),
       }),
     });
 
@@ -454,25 +453,25 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   const updatePayload = isPickedUpAction
     ? {
         id: callback.orderId,
-        expected_current_status: 'delivering',
+        expectedCurrentStatus: 'delivering',
         status: 'picked_up',
-        courier_name: resolvedName,
-        courier_phone: resolvedPhone,
+        courierName: resolvedName,
+        courierPhone: resolvedPhone,
       }
     : isCompleteAction
       ? {
           id: callback.orderId,
-          expected_current_status: 'picked_up',
+          expectedCurrentStatus: 'picked_up',
           status: 'completed',
-          courier_name: resolvedName,
-          courier_phone: resolvedPhone,
+          courierName: resolvedName,
+          courierPhone: resolvedPhone,
         }
       : {
           id: callback.orderId,
-          expected_current_status: 'awaiting_courier',
+          expectedCurrentStatus: 'awaiting_courier',
           status: 'delivering',
-          courier_name: resolvedName,
-          courier_phone: resolvedPhone,
+          courierName: resolvedName,
+          courierPhone: resolvedPhone,
         };
 
   const feedbackWritten = isPickedUpAction || isCompleteAction

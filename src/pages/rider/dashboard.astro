@@ -452,7 +452,7 @@ import Layout from '../../layouts/Layout.astro';
         const address = o.tableInfo || '';
         const phone = o.userPhone || '';
         const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-        const dispatchMeta = readDispatchMetaFromRemarks(o.remarksJson || o.remarks_json);
+        const dispatchMeta = readDispatchMetaFromRemarks(o.remarksJson);
         const actionState = getRiderDispatchState(o, dispatchMeta, rider?.id);
         const actionFlags = getRiderActionFlags(o, rider?.phone);
         const invalidReason = String(actionState.invalidReason || '').trim();
@@ -656,7 +656,7 @@ import Layout from '../../layouts/Layout.astro';
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             id,
-            expected_current_status: 'awaiting_courier',
+            expectedCurrentStatus: 'awaiting_courier',
             status: 'delivering',
             courierName: rider.name,
             courierPhone: rider.phone,
@@ -670,7 +670,7 @@ import Layout from '../../layouts/Layout.astro';
 
         const rawError = String(data.error || '');
         const shouldHintTaken =
-          rawError.includes('expected_current_status') ||
+          rawError.includes('expectedCurrentStatus') ||
           rawError.includes('status mismatch') ||
           rawError.includes('已被') ||
           rawError.includes('delivering');
@@ -690,7 +690,7 @@ import Layout from '../../layouts/Layout.astro';
         return;
       }
       try {
-        const dispatchMeta = readDispatchMetaFromRemarks(target.remarksJson || target.remarks_json);
+        const dispatchMeta = readDispatchMetaFromRemarks(target.remarksJson);
         const declinedRiderIds = Array.from(new Set([
           ...dispatchMeta.declinedRiderIds,
           String(rider.id || '').trim(),
@@ -699,7 +699,7 @@ import Layout from '../../layouts/Layout.astro';
           ...dispatchMeta.invalidatedRiderIds,
           String(rider.id || '').trim(),
         ].filter(Boolean)));
-        const nextRemarks = buildDispatchMetaRemarks(target.remarksJson || target.remarks_json, {
+        const nextRemarks = buildDispatchMetaRemarks(target.remarksJson, {
           lastRiderDecision: {
             action: 'declined',
             riderId: String(rider.id || '').trim(),
@@ -719,9 +719,9 @@ import Layout from '../../layouts/Layout.astro';
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             id,
-            expected_current_status: 'awaiting_courier',
+            expectedCurrentStatus: 'awaiting_courier',
             status: 'awaiting_courier',
-            remarks_json: JSON.stringify(nextRemarks),
+            remarksJson: JSON.stringify(nextRemarks),
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -743,7 +743,7 @@ import Layout from '../../layouts/Layout.astro';
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             id,
-            expected_current_status: 'delivering',
+            expectedCurrentStatus: 'delivering',
             status: 'picked_up',
             courierName: rider.name, courierPhone: rider.phone,
           }),
@@ -767,7 +767,7 @@ import Layout from '../../layouts/Layout.astro';
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             id,
-            expected_current_status: 'picked_up',
+            expectedCurrentStatus: 'picked_up',
             status: 'completed',
             courierName: rider.name,
             courierPhone: rider.phone,

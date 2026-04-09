@@ -154,13 +154,13 @@ import Layout from '../../layouts/Layout.astro';
   window.__userAuthBrowser = {
     loginUser(payload) {
       return postJSON('/api/user/login', {
-        login_account: payload.loginAccount,
+        loginAccount: payload.loginAccount,
         password: payload.password,
       });
     },
     registerUser(payload) {
       return postJSON('/api/user/register', {
-        account_type: payload.accountType,
+        accountType: payload.accountType,
         account: payload.account,
         password: payload.password,
         name: payload.name,

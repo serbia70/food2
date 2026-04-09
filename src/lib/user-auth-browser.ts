@@ -63,14 +63,14 @@ async function postJSON(url: string, body: Record<string, unknown>) {
 
 async function loginUser(payload: { loginAccount: string; password: string }) {
   return postJSON('/api/user/login', {
-    login_account: payload.loginAccount,
+    loginAccount: payload.loginAccount,
     password: payload.password,
   });
 }
 
 async function registerUser(payload: { accountType: 'phone' | 'email' | 'id'; account: string; password: string; name: string }) {
   return postJSON('/api/user/register', {
-    account_type: payload.accountType,
+    accountType: payload.accountType,
     account: payload.account,
     password: payload.password,
     name: payload.name,

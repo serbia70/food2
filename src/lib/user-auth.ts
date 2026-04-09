@@ -50,14 +50,14 @@ async function postJSON<T>(url: string, body: Record<string, unknown>): Promise<
 
 export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
   return postJSON<AuthResponse>('/api/user/login', {
-    login_account: payload.loginAccount,
+    loginAccount: payload.loginAccount,
     password: payload.password,
   });
 }
 
 export async function registerUser(payload: RegisterPayload): Promise<AuthResponse> {
   return postJSON<AuthResponse>('/api/user/register', {
-    account_type: payload.accountType,
+    accountType: payload.accountType,
     account: payload.account,
     password: payload.password,
     name: payload.name,

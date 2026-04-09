@@ -1,9 +1,9 @@
 // API config
 export const API_BASE_URL =
-  (import.meta as any).env?.PUBLIC_API_URL || process.env.PUBLIC_API_URL || 'https://food2api.serbia70.com';
+  (import.meta as any).env?.PUBLIC_API_URL || 'https://food2api.serbia70.com';
 
 export const SITE_BASE_URL =
-  (import.meta as any).env?.PUBLIC_SITE_URL || process.env.PUBLIC_SITE_URL || 'https://food2.serbia70.com';
+  (import.meta as any).env?.PUBLIC_SITE_URL || 'https://food2.serbia70.com';
 
 // Master auth token
 // NOTE: master token must never be read from PUBLIC_* runtime env.
@@ -29,7 +29,7 @@ export function parsePositiveIntConfig(value: unknown, fallback: number): number
 }
 
 export const DISPATCH_AUTO_REASSIGN_MINUTES = parsePositiveIntConfig(
-  (import.meta as any).env?.PUBLIC_DISPATCH_AUTO_REASSIGN_MINUTES ?? process.env.PUBLIC_DISPATCH_AUTO_REASSIGN_MINUTES,
+  (import.meta as any).env?.PUBLIC_DISPATCH_AUTO_REASSIGN_MINUTES,
   5,
 );
 

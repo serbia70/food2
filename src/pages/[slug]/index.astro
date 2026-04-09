@@ -7,7 +7,7 @@ import ReservationModal from '../../components/ReservationModal';
 import ShopChatModal from '../../components/ShopChatModal';
 import TablePageEntryIsland from '../../components/shop/TablePageEntryIsland.tsx';
 import { normalizeSpecialPromotions, normalizeSpendDiscountPromotions } from '../../store/cartStore';
-import { API_BASE_URL } from '../../config';
+import { API_BASE_URL, APP_VERSION } from '../../config';
 import { classifyShopResponseStatus } from '../../lib/shop-status';
 import { shouldRetryStream } from '../../lib/stream-retry';
 import { resolveShopDisplaySettings } from '../../lib/shop-display-settings';
@@ -28,6 +28,7 @@ export const prerender = false;
 const { slug } = Astro.params;
 if (!slug) return new Response('Not Found', { status: 404 });
 const safeSlug = encodeURIComponent(slug);
+const shopServiceWorker = import.meta.env.DEV ? undefined : `/shop-sw.js?v=${encodeURIComponent(APP_VERSION)}`;
 
 if (slug === 'admin') {
   const q = Astro.url.search || '';
@@ -324,7 +325,7 @@ const enableReservation = reservationEnabled;
   <Layout
     title="店铺打烊中"
     manifest={`/${safeSlug}/manifest.webmanifest`}
-    serviceWorker="/shop-sw.js"
+    serviceWorker={shopServiceWorker}
     serviceWorkerScope={`/${safeSlug}`}
     themeColor="#1e8f44"
   >
@@ -343,7 +344,7 @@ const enableReservation = reservationEnabled;
   <Layout
     title={shop?.name || slug}
     manifest={`/${safeSlug}/manifest.webmanifest`}
-    serviceWorker="/shop-sw.js"
+    serviceWorker={shopServiceWorker}
     serviceWorkerScope={`/${safeSlug}`}
     themeColor="#1e8f44"
   >
@@ -694,6 +695,36 @@ const enableReservation = reservationEnabled;
 
     {enableReservation && <ReservationModal restaurantId={slug} specialPromotionMap={specialPromotionMap} requiresPreOrder={false} client:load />}
     
+    {import.meta.env.DEV ? (
+      <script define:vars={{ safeSlug }} is:inline>
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', function () {
+            var expectedScopePath = '/' + String(safeSlug || '').replace(/^\/+|\/+$/g, '');
+            var reloadKey = '__shop_sw_dev_reload__:' + expectedScopePath;
+            navigator.serviceWorker.getRegistrations().then(function (registrations) {
+              return Promise.all(
+                registrations
+                  .filter(function (registration) {
+                    try {
+                      var scopePath = new URL(registration.scope).pathname.replace(/\/$/, '');
+                      return scopePath === expectedScopePath;
+                    } catch (err) {
+                      return false;
+                    }
+                  })
+                  .map(function (registration) { return registration.unregister(); })
+              ).then(function (results) {
+                if (results.some(Boolean) && !sessionStorage.getItem(reloadKey)) {
+                  sessionStorage.setItem(reloadKey, '1');
+                  window.location.reload();
+                }
+              });
+            }).catch(function () {});
+          });
+        }
+      </script>
+    ) : null}
+
     <script src="/vendor/mqttws31.min.js" is:inline></script>
     <script define:vars={{ slug, shopId, mqttSecret, mqttBroker }} is:inline>
       (function () {

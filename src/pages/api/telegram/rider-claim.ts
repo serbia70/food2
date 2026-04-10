@@ -179,9 +179,10 @@ async function readOrderDispatchSnapshot(
   const rows = Array.isArray(parsed) ? parsed : [];
   const matched = rows.find((row) => String((row as Record<string, unknown>)?.id || '').trim() === orderId);
   if (!matched || typeof matched !== 'object') return { status: '', remarksJson: '' };
+  const matchedRow = matched as Record<string, unknown>;
   return {
-    status: String((matched as Record<string, unknown>).status || '').trim(),
-    remarksJson: String((matched as Record<string, unknown>).remarksJson || '').trim(),
+    status: String(matchedRow.status || '').trim(),
+    remarksJson: String(matchedRow.remarksJson || matchedRow.remarks_json || '').trim(),
   };
 }
 

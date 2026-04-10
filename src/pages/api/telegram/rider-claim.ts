@@ -182,31 +182,40 @@ async function sendDeliveryProgressMessage(
   });
 }
 
+function readOrderSnapshotRow(row: Record<string, unknown> | null | undefined): { status: string; remarksJson: string } {
+  if (!row || typeof row !== 'object') return { status: '', remarksJson: '' };
+  return {
+    status: String(row.status || '').trim(),
+    remarksJson: String(row.remarksJson || row.remarks_json || '').trim(),
+  };
+}
+
 async function readOrderDispatchSnapshot(
   request: Request,
   orderId: string,
+  riderPhone = '',
 ): Promise<{ status: string; remarksJson: string }> {
   const upstream = await fetch(`${readInternalApiBaseUrl()}/api/admin/orders`, {
     headers: buildForwardHeaders(request),
   });
   const text = await upstream.text();
-  if (!upstream.ok || !text) return { status: '', remarksJson: '' };
+  if (upstream.ok && text) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text) as unknown;
+    } catch {
+      parsed = null;
+    }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text) as unknown;
-  } catch {
-    return { status: '', remarksJson: '' };
+    const rows = readOrderRows(parsed);
+    const matched = rows.find((row) => String((row as Record<string, unknown>)?.id || '').trim() === orderId);
+    if (matched && typeof matched === 'object') {
+      return readOrderSnapshotRow(matched as Record<string, unknown>);
+    }
   }
 
-  const rows = readOrderRows(parsed);
-  const matched = rows.find((row) => String((row as Record<string, unknown>)?.id || '').trim() === orderId);
-  if (!matched || typeof matched !== 'object') return { status: '', remarksJson: '' };
-  const matchedRow = matched as Record<string, unknown>;
-  return {
-    status: String(matchedRow.status || '').trim(),
-    remarksJson: String(matchedRow.remarksJson || matchedRow.remarks_json || '').trim(),
-  };
+  const riderOrder = await readOrderDetailFromRiderOrders(request, orderId, riderPhone);
+  return readOrderSnapshotRow(riderOrder);
 }
 
 async function readOrderDispatchMeta(request: Request, orderId: string): Promise<string> {
@@ -360,7 +369,7 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   const orderIdText = String(callback.orderId || '').trim();
   const riderIdText = String(callback.riderId || '').trim();
   const nowIso = new Date().toISOString();
-  const orderSnapshot = await readOrderDispatchSnapshot(request, orderIdText);
+  const orderSnapshot = await readOrderDispatchSnapshot(request, orderIdText, resolvedPhone);
   const existingMeta = readDispatchMetaFromRemarks(orderSnapshot.remarksJson);
   const dispatchState = getRiderDispatchState(
     {

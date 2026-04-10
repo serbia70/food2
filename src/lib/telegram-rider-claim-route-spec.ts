@@ -303,6 +303,60 @@ test('配送阶段当前骑手不匹配时优先返回 dispatch_invalidated', as
   assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), false);
 });
 
+test('配送阶段 admin orders 未授权时回退 rider orders 仍能推进 picked_up', async (t) => {
+  useTestEnv(t);
+  const remarksJson = createRemarksJson();
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({
+        riders: [
+          {
+            id: TEST_RIDER_ID,
+            name: TEST_RIDER_NAME,
+            phone: TEST_RIDER_PHONE,
+            telegramChatId: TEST_CHAT_ID,
+            status: 'online',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse({ success: false, error: 'unauthorized' }, 401);
+    }
+
+    if (url.pathname === '/api/rider/orders') {
+      return jsonResponse({
+        success: true,
+        orders: [
+          createOrderRow({ status: 'delivering', remarksJson }),
+        ],
+      });
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('picked_up', Date.now() - 1_000)));
+  const body = await readJson(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
+  assert.equal(calls.some((call) => call.url.includes('/api/rider/orders?phone=')), true);
+  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
+});
+
 test('配送阶段 admin orders 只返回 remarks_json 时仍能识别当前骑手并推进 picked_up', async (t) => {
   useTestEnv(t);
   const remarksJson = createRemarksJson();

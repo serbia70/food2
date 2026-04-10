@@ -205,7 +205,7 @@ function handleRealtimePayload(payload: any) {
   const isCreation = payload.event === 'new_order' || payload.event === 'order';
   const isReview = payload.status === 'review_needed';
   
-  const orderType = String(payload?.orderType || payload?.order_type || '').trim();
+  const orderType = String(payload?.orderType || '').trim();
 
   if (isCreation || isReview) {
     toast(payload.status === 'review_needed' ? '有加菜请求，等待审核' : '新订单来了');

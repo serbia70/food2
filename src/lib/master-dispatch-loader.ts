@@ -13,7 +13,7 @@ type MasterDispatchOrderSummary = {
     status?: string;
     dispatchRound?: number;
     currentPoolIndex?: number;
-    lastDispatchedRiderID?: number;
+    lastDispatchedRiderId?: number;
     nextEscalateAt?: string;
   };
 };
@@ -81,53 +81,37 @@ const EMPTY_MASTER_DISPATCH_PAYLOAD: MasterDispatchPayload = {
   pools: [],
 };
 
-function normalizeDispatchOrder(order: MasterDispatchOrderSummary): Record<string, unknown> {
+function sanitizeDispatchOrder(order: MasterDispatchOrderSummary): MasterDispatchOrderSummary {
   const dispatch = order?.dispatch && typeof order.dispatch === 'object' ? order.dispatch : undefined;
-  const orderNo = String(order?.orderNo || '').trim();
-  const shopId = Number(order?.shopId || 0) || 0;
-  const shopName = String(order?.shopName || '').trim();
-  const dispatchStatus = String(dispatch?.status || '').trim();
-  const hasDispatchRound = dispatch?.dispatchRound !== undefined;
-  const dispatchRound = Number(dispatch?.dispatchRound ?? 0) || 0;
-  const hasCurrentPoolIndex = dispatch?.currentPoolIndex !== undefined;
-  const currentPoolIndex = Number(dispatch?.currentPoolIndex ?? 0) || 0;
-  const hasLastDispatchedRiderId = dispatch?.lastDispatchedRiderID !== undefined;
-  const lastDispatchedRiderId = Number(dispatch?.lastDispatchedRiderID ?? 0) || 0;
-  const nextEscalateAt = String(dispatch?.nextEscalateAt || '').trim();
 
   return {
     ...(typeof order?.id === 'number' ? { id: order.id } : {}),
-    ...(orderNo ? { order_no: orderNo } : {}),
-    ...(shopId ? { shop_id: shopId } : {}),
-    ...(shopName ? { shop_name: shopName } : {}),
-    ...(typeof order?.status === 'string' && order.status ? { status: order.status } : {}),
-    ...(dispatchStatus ? { dispatch_status: dispatchStatus } : {}),
-    ...(hasDispatchRound ? { dispatch_round: dispatchRound } : {}),
-    ...(hasCurrentPoolIndex ? { current_pool_index: currentPoolIndex } : {}),
-    ...(hasLastDispatchedRiderId ? { last_dispatched_rider_id: lastDispatchedRiderId } : {}),
-    ...(nextEscalateAt ? { next_escalate_at: nextEscalateAt } : {}),
+    ...(String(order?.orderNo || '').trim() ? { orderNo: String(order.orderNo).trim() } : {}),
+    ...(Number(order?.shopId || 0) ? { shopId: Number(order.shopId) } : {}),
+    ...(String(order?.shopName || '').trim() ? { shopName: String(order.shopName).trim() } : {}),
+    ...(String(order?.status || '').trim() ? { status: String(order.status).trim() } : {}),
+    ...(dispatch
+      ? {
+          dispatch: {
+            ...(String(dispatch.status || '').trim() ? { status: String(dispatch.status).trim() } : {}),
+            ...(dispatch.dispatchRound !== undefined ? { dispatchRound: Number(dispatch.dispatchRound ?? 0) || 0 } : {}),
+            ...(dispatch.currentPoolIndex !== undefined ? { currentPoolIndex: Number(dispatch.currentPoolIndex ?? 0) || 0 } : {}),
+            ...(dispatch.lastDispatchedRiderId !== undefined ? { lastDispatchedRiderId: Number(dispatch.lastDispatchedRiderId ?? 0) || 0 } : {}),
+            ...(String(dispatch.nextEscalateAt || '').trim() ? { nextEscalateAt: String(dispatch.nextEscalateAt).trim() } : {}),
+          },
+        }
+      : {}),
   };
 }
 
-function normalizeDispatchPool(pool: MasterDispatchPoolSummary): Record<string, unknown> {
-  const shopId = Number(pool?.shopId || 0) || 0;
-  const shopName = String(pool?.shopName || '').trim();
-  const hasPoolCount = pool?.poolCount !== undefined;
-  const poolCount = Number(pool?.poolCount ?? 0) || 0;
-  const hasAvailableCount = pool?.availableCount !== undefined;
-  const availableCount = Number(pool?.availableCount ?? 0) || 0;
-  const hasBusyCount = pool?.busyCount !== undefined;
-  const busyCount = Number(pool?.busyCount ?? 0) || 0;
-  const hasOfflineCount = pool?.offlineCount !== undefined;
-  const offlineCount = Number(pool?.offlineCount ?? 0) || 0;
-
+function sanitizeDispatchPool(pool: MasterDispatchPoolSummary): MasterDispatchPoolSummary {
   return {
-    ...(shopId ? { shop_id: shopId } : {}),
-    ...(shopName ? { shop_name: shopName } : {}),
-    ...(hasPoolCount ? { pool_count: poolCount } : {}),
-    ...(hasAvailableCount ? { available_count: availableCount } : {}),
-    ...(hasBusyCount ? { busy_count: busyCount } : {}),
-    ...(hasOfflineCount ? { offline_count: offlineCount } : {}),
+    ...(Number(pool?.shopId || 0) ? { shopId: Number(pool.shopId) } : {}),
+    ...(String(pool?.shopName || '').trim() ? { shopName: String(pool.shopName).trim() } : {}),
+    ...(pool?.poolCount !== undefined ? { poolCount: Number(pool.poolCount ?? 0) || 0 } : {}),
+    ...(pool?.availableCount !== undefined ? { availableCount: Number(pool.availableCount ?? 0) || 0 } : {}),
+    ...(pool?.busyCount !== undefined ? { busyCount: Number(pool.busyCount ?? 0) || 0 } : {}),
+    ...(pool?.offlineCount !== undefined ? { offlineCount: Number(pool.offlineCount ?? 0) || 0 } : {}),
   };
 }
 
@@ -158,29 +142,29 @@ export function buildMasterDispatchPageView(payload: MasterDispatchPayload): Mas
   return {
     awaiting: payload.awaiting.map((order) => ({
       id: order.id,
-      orderNo: String(order.order_no || order.id || '-'),
-      shopId: Number(order.shop_id || 0) || 0,
-      shopName: String(order.shop_name || '').trim(),
+      orderNo: String(order.orderNo || order.id || '-'),
+      shopId: Number(order.shopId || 0) || 0,
+      shopName: String(order.shopName || '').trim(),
       status: String(order.status || '').trim(),
-      dispatchStatus: String(order.dispatch_status || 'idle').trim() || 'idle',
-      dispatchRound: Number(order.dispatch_round || 0) || 0,
-      lastDispatchedRiderId: String(order.last_dispatched_rider_id || ''),
+      dispatchStatus: String(order.dispatch?.status || 'idle').trim() || 'idle',
+      dispatchRound: Number(order.dispatch?.dispatchRound || 0) || 0,
+      lastDispatchedRiderId: String(order.dispatch?.lastDispatchedRiderId || ''),
     })),
     delivering: payload.delivering.map((order) => ({
       id: order.id,
-      orderNo: String(order.order_no || order.id || '-'),
-      shopId: Number(order.shop_id || 0) || 0,
-      shopName: String(order.shop_name || '').trim(),
+      orderNo: String(order.orderNo || order.id || '-'),
+      shopId: Number(order.shopId || 0) || 0,
+      shopName: String(order.shopName || '').trim(),
       status: String(order.status || 'delivering').trim() || 'delivering',
-      lastDispatchedRiderId: String(order.last_dispatched_rider_id || '-'),
+      lastDispatchedRiderId: String(order.dispatch?.lastDispatchedRiderId || '-'),
     })),
     pools: payload.pools.map((pool) => ({
-      shopId: Number(pool.shop_id || 0) || 0,
-      shopName: String(pool.shop_name || '').trim(),
-      poolCount: Number(pool.pool_count || 0) || 0,
-      availableCount: Number(pool.available_count || 0) || 0,
-      busyCount: Number(pool.busy_count || 0) || 0,
-      offlineCount: Number(pool.offline_count || 0) || 0,
+      shopId: Number(pool.shopId || 0) || 0,
+      shopName: String(pool.shopName || '').trim(),
+      poolCount: Number(pool.poolCount || 0) || 0,
+      availableCount: Number(pool.availableCount || 0) || 0,
+      busyCount: Number(pool.busyCount || 0) || 0,
+      offlineCount: Number(pool.offlineCount || 0) || 0,
     })),
   };
 }
@@ -214,9 +198,9 @@ export async function loadMasterDispatchData({
       ? data.data
       : null;
     const payload: MasterDispatchPayload = {
-      awaiting: Array.isArray(dispatchData?.awaiting) ? dispatchData.awaiting.map((order) => normalizeDispatchOrder(order)) : [],
-      delivering: Array.isArray(dispatchData?.delivering) ? dispatchData.delivering.map((order) => normalizeDispatchOrder(order)) : [],
-      pools: Array.isArray(dispatchData?.pools) ? dispatchData.pools.map((pool) => normalizeDispatchPool(pool)) : [],
+      awaiting: Array.isArray(dispatchData?.awaiting) ? dispatchData.awaiting.map((order) => sanitizeDispatchOrder(order)) : [],
+      delivering: Array.isArray(dispatchData?.delivering) ? dispatchData.delivering.map((order) => sanitizeDispatchOrder(order)) : [],
+      pools: Array.isArray(dispatchData?.pools) ? dispatchData.pools.map((pool) => sanitizeDispatchPool(pool)) : [],
     };
 
     return {

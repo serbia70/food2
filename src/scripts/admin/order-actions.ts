@@ -130,7 +130,7 @@ registerAdminGlobal('mark-picked-up', async (el: HTMLElement) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: orderId,
-        expected_current_status: 'delivering',
+        expectedCurrentStatus: 'delivering',
         status: 'picked_up',
         courierName: String(hidden?.dataset?.courierName || '').trim(),
         courierPhone: String(hidden?.dataset?.courierPhone || '').trim(),
@@ -162,7 +162,7 @@ registerAdminGlobal('mark-delivered', async (el: HTMLElement) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: orderId,
-        expected_current_status: 'picked_up',
+        expectedCurrentStatus: 'picked_up',
         status: 'completed',
         courierName: String(hidden?.dataset?.courierName || '').trim(),
         courierPhone: String(hidden?.dataset?.courierPhone || '').trim(),

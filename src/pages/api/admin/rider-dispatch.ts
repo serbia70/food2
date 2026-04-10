@@ -10,11 +10,8 @@ export const prerender = false;
 interface DispatchOrderSnapshot {
   id: number | string;
   shopSlug?: string | null;
-  restaurantSlug?: string | null;
-  restaurantId?: number | string | null;
   shopId?: number | string | null;
   shopName?: string | null;
-  restaurantName?: string | null;
   tableInfo?: string | null;
   totalAmount?: number | string | null;
   pickupEtaMinutes?: number | string | null;
@@ -25,7 +22,6 @@ interface DispatchOrderSnapshot {
   riderRemindCount?: number | string | null;
   riderLastRemindedAt?: string | null;
   remarksJson?: string | null;
-  remarks_json?: string | null;
 }
 
 interface TelegramRiderRow {
@@ -33,7 +29,6 @@ interface TelegramRiderRow {
   name?: string | null;
   phone?: string | null;
   telegramChatId?: string | null;
-  telegram_chat_id?: string | null;
 }
 
 interface DispatchProxyPayload {
@@ -96,9 +91,9 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
   const directOrder = extractDispatchOrder(payload, orderId);
   if (directOrder) return directOrder;
 
-  const shopSlug = String(payload.shopSlug || payload.restaurantSlug || '').trim();
-  const shopId = String(payload.shopId || payload.restaurantId || '').trim();
-  const shopName = String(payload.shopName || payload.restaurantName || '').trim();
+  const shopSlug = String(payload.shopSlug || '').trim();
+  const shopId = String(payload.shopId || '').trim();
+  const shopName = String(payload.shopName || '').trim();
   const tableInfo = String(payload.tableInfo || '').trim();
   const totalAmount = String(payload.totalAmount || '').trim();
   const userPhone = String(payload.userPhone || '').trim();
@@ -109,11 +104,8 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
   return {
     id: orderId,
     shopSlug: shopSlug || undefined,
-    restaurantSlug: String(payload.restaurantSlug || '').trim() || undefined,
     shopId: shopId || undefined,
-    restaurantId: String(payload.restaurantId || '').trim() || undefined,
     shopName: shopName || undefined,
-    restaurantName: String(payload.restaurantName || '').trim() || undefined,
     tableInfo: tableInfo || undefined,
     totalAmount: totalAmount || undefined,
     userPhone: userPhone || undefined,
@@ -240,7 +232,7 @@ async function writeDispatchMetaRemarks({
   order: DispatchOrderSnapshot;
   nextMeta: DispatchMeta;
 }) {
-  const existingRemarksJson = String((order as { remarksJson?: unknown; remarks_json?: unknown }).remarksJson || (order as { remarksJson?: unknown; remarks_json?: unknown }).remarks_json || '').trim();
+  const existingRemarksJson = String((order as { remarksJson?: unknown }).remarksJson || '').trim();
   const nextRemarks = buildDispatchMetaRemarks(existingRemarksJson, nextMeta);
 
   const remarksRes = await proxyAdminRequest({
@@ -286,7 +278,7 @@ async function notifyTelegramRecipients(
   riderFilter?: (rider: TelegramRiderRow) => boolean,
 ): Promise<TelegramDispatchSummary> {
   const riders = await fetchAvailableRiders(request, cookies);
-  const readRiderChatId = (rider: TelegramRiderRow) => String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
+  const readRiderChatId = (rider: TelegramRiderRow) => String(rider.telegramChatId || '').trim();
   const scopedRiders = riderFilter ? riders.filter(riderFilter) : riders;
   const availableRiderCount = scopedRiders.length;
   const telegramRiders = scopedRiders.filter((rider) => readRiderChatId(rider) !== '');
@@ -322,7 +314,7 @@ async function notifyTelegramRecipients(
     };
   }
 
-  const restaurantId = String(order.shopSlug || order.restaurantSlug || order.restaurantId || order.shopId || '').trim();
+  const restaurantId = String(order.shopSlug || order.shopId || '').trim();
   if (!restaurantId) {
     return {
       ...baseSummary,
@@ -337,7 +329,7 @@ async function notifyTelegramRecipients(
   }
 
   const dashboardBaseUrl = String(SITE_BASE_URL || '').trim().replace(/\/$/, '') || 'https://food2.serbia70.com';
-  const shopName = String(order.shopName || order.restaurantName || '店铺');
+  const shopName = String(order.shopName || '店铺');
   const address = String(order.tableInfo || '');
   const totalAmount = Number(order.totalAmount || 0);
   const pickupEtaMinutes = Number(order.pickupEtaMinutes || 0);
@@ -391,7 +383,7 @@ async function notifyTelegramRecipients(
           ...(rawCookie ? { cookie: rawCookie } : {}),
         },
         body: JSON.stringify({
-          shop_slug: String(order.shopSlug || order.restaurantSlug || '').trim(),
+          shopSlug: String(order.shopSlug || '').trim(),
           chat_id: riderChatId,
           ...message,
         }),
@@ -512,7 +504,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     const forcedRiderId = readForcedRiderId(parsedBody.forceRiderId);
     const nowIso = readNowIsoFromBody(parsedBody);
-    const existingRemarksJson = String(parsedBody.remarksJson || parsedBody.remarks_json || order.remarksJson || order.remarks_json || '').trim();
+    const existingRemarksJson = String(parsedBody.remarksJson || order.remarksJson || '').trim();
     const existingMeta = readDispatchMetaFromRemarks(existingRemarksJson);
 
     const currentStatus = String(order.status || '').trim();

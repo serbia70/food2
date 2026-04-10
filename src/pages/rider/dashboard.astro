@@ -147,7 +147,7 @@ import Layout from '../../layouts/Layout.astro';
       const safeOrder = order || {};
       const orderId = String(safeOrder.id || '').trim();
       const orderNo = String(safeOrder.orderNo || '').trim();
-      const restaurantId = String(safeOrder.shopSlug || safeOrder.restaurantSlug || safeOrder.restaurantId || safeOrder.shopId || '').trim();
+      const restaurantId = String(safeOrder.shopSlug || safeOrder.shopId || '').trim();
       const restaurantMatched = !deepLinkRestaurantId || restaurantId === deepLinkRestaurantId;
       return restaurantMatched && (orderId === deepLinkOrderId || orderNo === deepLinkOrderId);
     }

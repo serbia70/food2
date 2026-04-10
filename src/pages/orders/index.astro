@@ -115,8 +115,8 @@ import { CUSTOMER_COMPLETED_STATUSES, getCustomerOrderStatusCopy, getCustomerDel
     }
 
     function pickVip(order) {
-      if (order && (order.is_vip === true || order.is_vip === 1 || order.is_vip === '1')) return true;
-      const vipLevelValue = order && order.vip_level ? order.vip_level : '';
+      if (order && (order.isVip === true || order.isVip === 1 || order.isVip === '1')) return true;
+      const vipLevelValue = order && order.vipLevel ? order.vipLevel : '';
       const vipLevel = String(vipLevelValue || '').trim();
       return Boolean(vipLevel && vipLevel !== '0' && vipLevel.toLowerCase() !== 'none');
     }
@@ -130,12 +130,11 @@ import { CUSTOMER_COMPLETED_STATUSES, getCustomerOrderStatusCopy, getCustomerDel
 
     function buildUserOrderView(order, shopMap = {}) {
       const shopIdValue = order ? order.shopId : null;
-      const restaurantIdValue = order ? order.restaurantId : null;
-      const shopId = String(shopIdValue || restaurantIdValue || '').trim();
+      const shopId = String(shopIdValue || '').trim();
       const fallbackShop = shopId ? shopMap[shopId] || {} : {};
-      const shopName = pickFirstString(order, ['shop_name', 'restaurant_name', 'merchant_name']) || String(fallbackShop.name || '').trim() || '未知店铺';
-      const shopSlug = pickFirstString(order, ['shop_slug', 'slug', 'restaurant_slug']) || String(fallbackShop.slug || '').trim();
-      const points = pickFirstNumber(order, ['points', 'user_points', 'points_balance']);
+      const shopName = pickFirstString(order, ['shopName']) || String(fallbackShop.name || '').trim() || '未知店铺';
+      const shopSlug = pickFirstString(order, ['shopSlug']) || String(fallbackShop.slug || '').trim();
+      const points = pickFirstNumber(order, ['points', 'pointsBalance']);
       const isVip = pickVip(order);
       return {
         shopName,

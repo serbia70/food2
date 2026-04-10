@@ -197,7 +197,7 @@ async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute[
   const row = findOrderRow(parsed, orderId);
   return {
     shopSlug: readOrderShopSlug(parsed, orderId),
-    remarksJson: row && typeof row === 'object' ? String(row.remarksJson || row.remarks_json || '').trim() : '',
+    remarksJson: row && typeof row === 'object' ? String(row.remarksJson || '').trim() : '',
     orderSummary: row ? readOrderSummaryFromRow(row, orderId) : null,
   };
 }
@@ -237,7 +237,6 @@ async function notifyAssignedRider({
   orderSummary,
   fallbackChatId,
   inlineTelegramBotToken,
-  debugTelegram,
 }: {
   request: Request;
   rider: AssignableRider;
@@ -254,7 +253,6 @@ async function notifyAssignedRider({
   };
   fallbackChatId?: string;
   inlineTelegramBotToken?: string;
-  debugTelegram?: boolean;
 }): Promise<
   | {
     success: true;
@@ -375,23 +373,6 @@ async function notifyAssignedRider({
       ({ response, responseText, parsedResponse } = await sendTelegram(retryPayload));
     }
 
-    if (debugTelegram === true) {
-      console.error('[admin/rider-assign:telegram]', JSON.stringify({
-        shopSlug,
-        orderId,
-        riderId: String(rider.id || '').trim(),
-        chatId,
-        chatIdSource,
-        textLength: message.text.length,
-        callbackDataLength: callbackData.length,
-        callbackDataPreview: callbackData.slice(0, 80),
-        retriedWithoutReplyMarkup: shouldRetryWithoutReplyMarkup,
-        status: response.status,
-        parsedSuccess: parsedResponse?.success,
-        parsedOk: parsedResponse?.ok,
-        responseText: responseText.slice(0, 600),
-      }));
-    }
     if (!response.ok || parsedResponse?.success === false || parsedResponse?.ok === false) {
       return {
         success: false,
@@ -441,7 +422,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const pickupEtaMinutes = Number.isFinite(pickupEtaMinutesRaw) ? pickupEtaMinutesRaw : 0;
   const riderTelegramChatId = String(body.riderTelegramChatId || '').trim();
   const inlineTelegramBotToken = String(body.telegramBotToken || body.telegram_bot_token || '').trim();
-  const debugTelegram = body.debugTelegram === true;
 
   if (action !== 'manual_assign' && action !== 'auto_assign') {
     return new Response(JSON.stringify({ success: false, error: 'invalid_action' }), {
@@ -538,7 +518,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     orderSummary,
     fallbackChatId: riderTelegramChatId,
     inlineTelegramBotToken,
-    debugTelegram,
   });
 
   return new Response(JSON.stringify({
@@ -548,7 +527,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       name: target.name,
       phone: target.phone,
     },
-    ...((!telegramNotification.success || debugTelegram) ? { telegram_notification: telegramNotification } : {}),
+    ...(!telegramNotification.success ? { telegram_notification: telegramNotification } : {}),
   }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },

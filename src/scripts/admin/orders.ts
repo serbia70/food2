@@ -49,17 +49,6 @@ type AdminOrderRow = {
 const ASSIGN_RIDER_REQUEST_TIMEOUT_MS = 15000;
 let latestLoadOrdersRequestId = 0;
 
-function formatTelegramDiagnostics(notification: TelegramNotificationDiagnostics): string {
-  const status = notification.success === true ? 'success' : 'failed';
-  const chatId = String(notification.chatId || '-').trim() || '-';
-  const source = String(notification.chatIdSource || '-').trim() || '-';
-  const shop = String(notification.shopSlug || '-').trim() || '-';
-  const error = String(notification.error || '').trim();
-  return error
-    ? `派单Telegram: ${status} chat=${chatId} source=${source} shop=${shop} error=${error}`
-    : `派单Telegram: ${status} chat=${chatId} source=${source} shop=${shop}`;
-}
-
 export async function fetchAvailableRiders() {
   const res = await fetch('/api/rider/status?action=list_available');
   const data = await res.json().catch(() => ({}));
@@ -131,29 +120,33 @@ function isDeliveryOrder(row: AdminOrderRow): boolean {
 
 function normalizeAdminOrdersPayload(data: unknown): AdminOrderRow[] {
   if (!Array.isArray(data)) return [];
-  return data.map((row: any) => ({
-    ...row,
-    id: row?.id,
-    orderNo: row?.orderNo ?? row?.order_no ?? row?.id,
-    orderType: row?.orderType ?? row?.order_type ?? (String(row?.tableInfo || row?.table_info || '').trim() ? 'dine_in' : ''),
-    status: row?.status ?? (String(row?.tableInfo || row?.table_info || '').trim() ? 'pending' : ''),
-    totalAmount: row?.totalAmount ?? row?.total_amount ?? 0,
-    itemsJson: normalizeJSONString(row?.itemsJson ?? row?.items_json, '[]'),
-    remarksJson: normalizeRemarkJSONString(row?.remarksJson ?? row?.remarks_json),
-    tableInfo: row?.tableInfo ?? row?.table_info ?? '',
-    userPhone: row?.userPhone ?? row?.user_phone ?? '',
-    scheduledFor: row?.scheduledFor ?? row?.scheduled_for ?? '',
-    pickupEtaMinutes: row?.pickupEtaMinutes ?? row?.pickup_eta_minutes ?? 0,
-    pickupReadyAt: row?.pickupReadyAt ?? row?.pickup_ready_at ?? '',
-    riderBroadcastedAt: row?.riderBroadcastedAt ?? row?.rider_broadcasted_at ?? '',
-    riderRemindCount: row?.riderRemindCount ?? row?.rider_remind_count ?? 0,
-    riderLastRemindedAt: row?.riderLastRemindedAt ?? row?.rider_last_reminded_at ?? '',
-    riderContactAttemptedAt: row?.riderContactAttemptedAt ?? row?.rider_contact_attempted_at ?? '',
-    courierName: row?.courierName ?? row?.courier_name ?? '',
-    courierPhone: row?.courierPhone ?? row?.courier_phone ?? '',
-    createdAt: row?.createdAt ?? row?.created_at ?? '',
-    isDeleted: row?.isDeleted ?? row?.is_deleted ?? 0,
-  } satisfies AdminOrderRow));
+  return data.map((row: unknown) => {
+    const source = row && typeof row === 'object' ? row as Record<string, unknown> : {};
+    const tableInfo = String(source.tableInfo || '').trim();
+    return {
+      ...source,
+      id: source.id,
+      orderNo: source.orderNo ?? source.id,
+      orderType: source.orderType ?? (tableInfo ? 'dine_in' : ''),
+      status: source.status ?? (tableInfo ? 'pending' : ''),
+      totalAmount: source.totalAmount ?? 0,
+      itemsJson: normalizeJSONString(source.itemsJson, '[]'),
+      remarksJson: normalizeRemarkJSONString(source.remarksJson),
+      tableInfo,
+      userPhone: source.userPhone ?? '',
+      scheduledFor: source.scheduledFor ?? '',
+      pickupEtaMinutes: source.pickupEtaMinutes ?? 0,
+      pickupReadyAt: source.pickupReadyAt ?? '',
+      riderBroadcastedAt: source.riderBroadcastedAt ?? '',
+      riderRemindCount: source.riderRemindCount ?? 0,
+      riderLastRemindedAt: source.riderLastRemindedAt ?? '',
+      riderContactAttemptedAt: source.riderContactAttemptedAt ?? '',
+      courierName: source.courierName ?? '',
+      courierPhone: source.courierPhone ?? '',
+      createdAt: source.createdAt ?? '',
+      isDeleted: source.isDeleted ?? 0,
+    } satisfies AdminOrderRow;
+  });
 }
 
 function replaceHiddenOrderData(rows: AdminOrderRow[]) {
@@ -282,7 +275,7 @@ function renderDeliveryOrderList(rows: AdminOrderRow[]) {
     const safePhoneAttr = escapeAttr(toDatasetValue(row.userPhone));
     const safeAmount = escapeHtml(toDatasetValue(row.totalAmount));
 
-    return `<div class="order-card delivery-card-active" style="border-left: 5px solid #ff9800;" data-order-time="${safeOrderTime}"><div class="order-header"><span class="order-type-tag delivery">外卖</span><span class="order-no">#${safeDisplayPrefix}<span style="color:#d32f2f; font-weight:bold;">${safePickupNo}</span></span><span style="margin-left:10px; background:#e3f2fd; color:#1565c0; padding:2px 6px; border-radius:4px; font-size:12px; font-weight:bold;">取餐号: ${safePickupNo}</span><span class="order-time" style="margin-left:auto;">${safeCreatedAtLabel}</span></div><div class="order-address-row" style="margin-top:0; margin-bottom:10px; font-weight:bold; font-size:14px;">📍 ${safeTableInfo}<span style="font-weight:normal; color:#666; margin-left:10px;">(Tel: ${safeUserPhone})</span></div>${scheduledLabel ? `<div class="order-address-row" style="margin-top:-4px; margin-bottom:10px; color:#1565c0; font-size:13px;">⏰ 预约送达: ${safeScheduledLabel}</div>` : ''}<div class="order-items-list">${itemsHtml}</div>${isAwaitingCourierOrder({ status: row.status }) && pickupEtaLabel ? `<div class="order-address-row" style="margin-top:6px; color:#7c3aed; font-weight:700;">${safePickupEtaLabel}</div>` : ''}<div class="order-footer" style="margin-top:10px; padding-top:10px; border-top:1px dashed #eee;"><div class="footer-left"><span class="status-tag ${safeStatusClass}">${safeStatusCopy}</span>${deliveryActionFlags.canAssign ? `<button class="btn-xs" type="button" data-admin-action="assign-rider" data-order-id="${safeOrderIdAttr}" style="background:#7c3aed; color:white;">👤 指派骑手</button><button class="btn-xs" type="button" data-admin-action="auto-assign-rider" data-order-id="${safeOrderIdAttr}" style="background:#0f766e; color:white;">🔁 自动派单</button><button class="btn-xs" type="button" data-admin-action="mark-paid" data-order-id="${safeOrderIdAttr}" style="background:#4caf50; color:white;">💰 结账</button><button class="btn-xs" type="button" data-admin-action="open-reject" data-order-id="${safeOrderIdAttr}" style="background:#f44336; color:white;">❌ 拒绝</button>` : ''}${deliveryActionFlags.canMarkPickedUp ? `<button class="btn-xs" type="button" data-admin-action="mark-picked-up" data-order-id="${safeOrderIdAttr}" style="background:#2563eb; color:white;">✅ 已取餐</button>` : ''}${deliveryActionFlags.canMarkDelivered ? `<button class="btn-xs" type="button" data-admin-action="mark-delivered" data-order-id="${safeOrderIdAttr}" style="background:#16a34a; color:white;">✅ 已送达</button>` : ''}${deliveryActionFlags.showAssignedRider ? `<span style="font-size:12px; color:#7c2d12; font-weight:700;">已指派骑手：${safeCourierName}</span>` : ''}${toDatasetValue(row.userPhone) ? `<button type="button" data-admin-action="open-chat" data-phone="${safePhoneAttr}" title="发消息" style="height:24px; width:24px; font-size:12px; background:#0891b2; color:#fff; border:none; border-radius:4px; cursor:pointer;">💬</button>` : ''}${deliveryActionFlags.canEdit ? `<button type="button" class="btn-action" data-admin-action="edit-order" data-order-id="${safeOrderIdAttr}" title="编辑" style="height:24px; width:24px; font-size:12px;">✏️</button>` : ''}<button type="button" class="btn-action" data-admin-action="print-order" data-order-id="${safeOrderIdAttr}" title="打印" style="height:24px; width:24px; font-size:12px;">🖨️</button></div><div class="footer-right"><span class="order-amount">${safeAmount} RSD</span></div></div>${feedbackHtml}</div>`;
+    return `<div class="order-card delivery-card-active" style="border-left: 5px solid #ff9800;" data-order-time="${safeOrderTime}"><div class="order-header"><span class="order-type-tag delivery">外卖</span><span class="order-no">#${safeDisplayPrefix}<span style="color:#d32f2f; font-weight:bold;">${safePickupNo}</span></span><span style="margin-left:10px; background:#e3f2fd; color:#1565c0; padding:2px 6px; border-radius:4px; font-size:12px; font-weight:bold;">取餐号: ${safePickupNo}</span><span class="order-time" style="margin-left:auto;">${safeCreatedAtLabel}</span></div><div class="order-address-row" style="margin-top:0; margin-bottom:10px; font-weight:bold; font-size:14px;">📍 ${safeTableInfo}<span style="font-weight:normal; color:#666; margin-left:10px;">(Tel: ${safeUserPhone})</span></div>${scheduledLabel ? `<div class="order-address-row" style="margin-top:-4px; margin-bottom:10px; color:#1565c0; font-size:13px;">⏰ 预约送达: ${safeScheduledLabel}</div>` : ''}<div class="order-items-list">${itemsHtml}</div>${isAwaitingCourierOrder({ status: row.status }) && pickupEtaLabel ? `<div class="order-address-row" style="margin-top:6px; color:#7c3aed; font-weight:700;">${safePickupEtaLabel}</div>` : ''}<div class="order-footer" style="margin-top:10px; padding-top:10px; border-top:1px dashed #eee;"><div class="footer-left"><span class="status-tag ${safeStatusClass}">${safeStatusCopy}</span>${deliveryActionFlags.canAssign ? `<button class="btn-xs" type="button" data-admin-action="assign-rider" data-order-id="${safeOrderIdAttr}" style="background:#7c3aed; color:white;">👤 指派骑手</button><button class="btn-xs" type="button" data-admin-action="auto-assign-rider" data-order-id="${safeOrderIdAttr}" style="background:#0f766e; color:white;">🔁 自动派单</button><button class="btn-xs" type="button" data-admin-action="mark-paid" data-order-id="${safeOrderIdAttr}" style="background:#4caf50; color:white;">💰 结账</button><button class="btn-xs" type="button" data-admin-action="open-reject" data-order-id="${safeOrderIdAttr}" style="background:#f44336; color:white;">❌ 拒绝</button>` : ''}${deliveryActionFlags.canMarkPickedUp ? `<button class="btn-xs" type="button" data-admin-action="mark-picked-up" data-order-id="${safeOrderIdAttr}" style="background:#2563eb; color:white;">✅ 已取餐</button>` : ''}${deliveryActionFlags.canMarkDelivered ? `<button class="btn-xs" type="button" data-admin-action="mark-delivered" data-order-id="${safeOrderIdAttr}" style="background:#16a34a; color:white;">✅ 确认送达</button>` : ''}${deliveryActionFlags.showAssignedRider ? `<span style="font-size:12px; color:#7c2d12; font-weight:700;">已指派骑手：${safeCourierName}</span>` : ''}${toDatasetValue(row.userPhone) ? `<button type="button" data-admin-action="open-chat" data-phone="${safePhoneAttr}" title="发消息" style="height:24px; width:24px; font-size:12px; background:#0891b2; color:#fff; border:none; border-radius:4px; cursor:pointer;">💬</button>` : ''}${deliveryActionFlags.canEdit ? `<button type="button" class="btn-action" data-admin-action="edit-order" data-order-id="${safeOrderIdAttr}" title="编辑" style="height:24px; width:24px; font-size:12px;">✏️</button>` : ''}<button type="button" class="btn-action" data-admin-action="print-order" data-order-id="${safeOrderIdAttr}" title="打印" style="height:24px; width:24px; font-size:12px;">🖨️</button></div><div class="footer-right"><span class="order-amount">${safeAmount} RSD</span></div></div>${feedbackHtml}</div>`;
   }).join('');
 }
 
@@ -346,11 +339,7 @@ export async function loadOrders() {
   renderAdminOrderList(rows);
 }
 
-export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number; riderTelegramChatId?: string; telegramBotToken?: string; debugTelegram?: boolean } = {}) {
-  if (input.debugTelegram === true && typeof alert === 'function') {
-    alert('派单调试: 已进入 assignRider，准备请求 /api/admin/rider-assign');
-  }
-
+export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number; riderTelegramChatId?: string; telegramBotToken?: string } = {}) {
   window.__adminAssignInFlight = true;
   window.__adminPendingOrderRefresh = false;
 
@@ -371,7 +360,6 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
         pickupEtaMinutes: Number(input.pickupEtaMinutes || 0),
         riderTelegramChatId: String(input.riderTelegramChatId || '').trim(),
         telegramBotToken: String(input.telegramBotToken || '').trim(),
-        debugTelegram: input.debugTelegram === true,
       }),
       signal: controller.signal,
     }).finally(() => clearTimeout(timeoutId));
@@ -384,9 +372,6 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
     const normalizedDetail = controller.signal.aborted && String(detail || '').trim() === 'Failed to fetch'
       ? 'request timeout'
       : (detail || 'assign rider failed');
-    if (input.debugTelegram === true && typeof alert === 'function') {
-      alert(`派单调试: /api/admin/rider-assign 请求失败 ${normalizedDetail}`);
-    }
     assignError = new Error(normalizedDetail || 'assign rider failed');
   } finally {
     window.__adminAssignInFlight = false;
@@ -404,14 +389,7 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
     throw assignError;
   }
 
-  if (input.debugTelegram === true && typeof alert === 'function') {
-    alert(`派单调试: /api/admin/rider-assign 已返回 ${res.status}`);
-  }
-
   const responseText = await res.text().catch(() => '');
-  if (input.debugTelegram === true && typeof alert === 'function') {
-    alert(`派单调试: /api/admin/rider-assign 响应 ${responseText.slice(0, 300) || '<empty>'}`);
-  }
 
   let data: Record<string, unknown> = {};
   if (responseText) {
@@ -423,25 +401,16 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
   }
   if (!res.ok || data?.success === false) {
     const detail = String(data?.error || 'assign rider failed').trim() || 'assign rider failed';
-    if (input.debugTelegram === true && typeof alert === 'function') alert(`派单失败: ${detail}`);
     throw new Error(detail);
   }
 
   const diagnostics = data?.telegram_notification as TelegramNotificationDiagnostics | undefined;
-  if (input.debugTelegram === true) {
-    const message = diagnostics
-      ? formatTelegramDiagnostics(diagnostics)
-      : '派单Telegram: missing_diagnostics';
-    if (typeof alert === 'function') alert(message);
-    else if (window.showToast) window.showToast(message);
-  }
-
   if (diagnostics?.success === false) {
     const detail = String(diagnostics.error || 'telegram notify failed').trim();
     throw new Error(detail || 'telegram notify failed');
   }
 
-  if (input.debugTelegram !== true && window.showToast) {
+  if (window.showToast) {
     window.showToast('已指派骑手');
   }
   if (window.refreshOrderList) window.refreshOrderList();

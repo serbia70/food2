@@ -47,7 +47,6 @@ async function loadProtectedMasterSettings(): Promise<Record<string, unknown>> {
   if (cookie) adminMasterHeaders.cookie = cookie;
 
   const adminSettingsUrl = new URL('/api/admin/settings/master', Astro.url);
-  const adminMethod = 'POST';
   const adminMasterRes = await fetch(adminSettingsUrl, {
     method: 'POST',
     headers: {
@@ -72,12 +71,7 @@ async function loadProtectedMasterSettings(): Promise<Record<string, unknown>> {
       ? (adminMasterRaw as { data?: unknown; settings?: unknown }).data || (adminMasterRaw as { data?: unknown; settings?: unknown }).settings || adminMasterRaw
       : adminMasterRaw,
   );
-  const resolvedAdminSettings = asObject(adminMasterData.settings || adminMasterData);
-  resolvedAdminSettings.__adminSettingsDebug = {
-    adminMethod,
-    adminResponsePreview: adminMasterText.slice(0, 400),
-  };
-  return resolvedAdminSettings;
+  return asObject(adminMasterData.settings || adminMasterData);
 }
 
 const ordersApiUrl = new URL(`/api/admin/orders?_=${Date.now()}`, Astro.url);
@@ -132,15 +126,6 @@ const shop = {
 };
 
 const settings = asObject(parseMaybeJSON(shop.settings));
-const adminSettingsDebug = asObject(masterSettings.__adminSettingsDebug);
-const masterSettingsDiagnostics = {
-  topLevelKeys: Object.keys(masterSettings),
-  telegramKeys: Object.keys(asObject(masterSettings.telegram)),
-  serverKeys: Object.keys(asObject(masterSettings.server)),
-  successValue: masterSettings.success,
-  adminMethod: String(adminSettingsDebug.adminMethod || ''),
-  adminResponsePreview: String(adminSettingsDebug.adminResponsePreview || ''),
-};
 const mergedAdminSettings = {
   ...masterSettings,
   ...settings,
@@ -153,7 +138,6 @@ const mergedAdminSettings = {
     ...asObject(settings.server),
   },
 };
-mergedAdminSettings.__debugMasterSettings = masterSettingsDiagnostics;
 const resolvedDisplaySettings = resolveShopDisplaySettings(shop, settings, masterSettings);
 
 const billingPlanTier = String(rawShop?.billingPlanType || rawShop?.billing_plan_type || '').trim();
@@ -232,25 +216,25 @@ const rawOrders = Array.isArray(ordersResp.data) ? ordersResp.data : [];
 const orders = rawOrders.map((o: any) => ({
   ...o,
   id: Number(o?.id || 0),
-  orderNo: String(o?.orderNo || o?.order_no || o?.id || ''),
-  orderType: String(o?.orderType || o?.order_type || (String(o?.tableInfo || o?.table_info || '').trim() ? 'dine_in' : '')),
-  status: String(o?.status || (String(o?.tableInfo || o?.table_info || '').trim() ? 'pending' : '')),
-  totalAmount: Number(o?.totalAmount ?? o?.total_amount ?? 0),
-  itemsJson: normalizeJSONString(o?.itemsJson ?? o?.items_json, '{}'),
-  remarksJson: normalizeRemarkJSONString(o?.remarksJson ?? o?.remarks_json),
-  tableInfo: String(o?.tableInfo || o?.table_info || ''),
-  userPhone: String(o?.userPhone || o?.user_phone || ''),
-  scheduledFor: String(o?.scheduledFor || o?.scheduled_for || ''),
-  pickupEtaMinutes: Number(o?.pickupEtaMinutes ?? o?.pickup_eta_minutes ?? 0),
-  pickupReadyAt: String(o?.pickupReadyAt || o?.pickup_ready_at || ''),
-  riderBroadcastedAt: String(o?.riderBroadcastedAt || o?.rider_broadcasted_at || ''),
-  riderRemindCount: Number(o?.riderRemindCount ?? o?.rider_remind_count ?? 0),
-  riderLastRemindedAt: String(o?.riderLastRemindedAt || o?.rider_last_reminded_at || ''),
-  riderContactAttemptedAt: String(o?.riderContactAttemptedAt || o?.rider_contact_attempted_at || ''),
-  courierName: String(o?.courierName || o?.courier_name || ''),
-  courierPhone: String(o?.courierPhone || o?.courier_phone || ''),
-  createdAt: String(o?.createdAt || o?.created_at || ''),
-  isDeleted: Number(o?.isDeleted ?? o?.is_deleted ?? 0),
+  orderNo: String(o?.orderNo || o?.id || ''),
+  orderType: String(o?.orderType || (String(o?.tableInfo || '').trim() ? 'dine_in' : '')),
+  status: String(o?.status || (String(o?.tableInfo || '').trim() ? 'pending' : '')),
+  totalAmount: Number(o?.totalAmount ?? 0),
+  itemsJson: normalizeJSONString(o?.itemsJson, '{}'),
+  remarksJson: normalizeRemarkJSONString(o?.remarksJson),
+  tableInfo: String(o?.tableInfo || ''),
+  userPhone: String(o?.userPhone || ''),
+  scheduledFor: String(o?.scheduledFor || ''),
+  pickupEtaMinutes: Number(o?.pickupEtaMinutes ?? 0),
+  pickupReadyAt: String(o?.pickupReadyAt || ''),
+  riderBroadcastedAt: String(o?.riderBroadcastedAt || ''),
+  riderRemindCount: Number(o?.riderRemindCount ?? 0),
+  riderLastRemindedAt: String(o?.riderLastRemindedAt || ''),
+  riderContactAttemptedAt: String(o?.riderContactAttemptedAt || ''),
+  courierName: String(o?.courierName || ''),
+  courierPhone: String(o?.courierPhone || ''),
+  createdAt: String(o?.createdAt || ''),
+  isDeleted: Number(o?.isDeleted ?? 0),
 }));
 
 const tableConfig = resolveTableConfig(shop, settings);

@@ -73,8 +73,8 @@ const overlayCardStyle = {
 function renderStatus(order: any): ComponentChildren {
   const status = String(order?.status || '').trim();
   if (isCustomerDeliveryStatus(status)) {
-    const courierName = String(order?.courier_name || order?.courierName || '').trim();
-    const courierPhone = String(order?.courier_phone || order?.courierPhone || '').trim();
+    const courierName = String(order?.courierName || '').trim();
+    const courierPhone = String(order?.courierPhone || '').trim();
     const isCompleted = isCustomerCompletedStatus(status);
     const label = getCustomerDeliveryStatusCopy(status);
     const bg = isCompleted ? '#ecfdf5' : '#e3f2fd';

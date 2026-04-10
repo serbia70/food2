@@ -144,7 +144,6 @@ export function getDeliveryStatusTone(status: string | null | undefined): 'defau
 
 export function isRiderClaimableOrder(order: {
   status?: string | null;
-  courier_phone?: string | null;
   courierPhone?: string | null;
 }): boolean {
   return isAwaitingCourierOrder(order);
@@ -253,7 +252,6 @@ export function getRiderDispatchState(
   order: {
     status?: string | null;
     courierPhone?: string | null;
-    courier_phone?: string | null;
   },
   meta: DispatchMeta,
   riderId?: string | null,

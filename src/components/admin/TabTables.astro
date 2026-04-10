@@ -279,7 +279,7 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
                   <button class="btn-xs" type="button" data-admin-action="mark-picked-up" data-order-id={o.id} style="background:#2563eb; color:white;">✅ 已取餐</button>
                 )}
                 {deliveryActionFlags.canMarkDelivered && (
-                  <button class="btn-xs" type="button" data-admin-action="mark-delivered" data-order-id={o.id} style="background:#16a34a; color:white;">✅ 已送达</button>
+                  <button class="btn-xs" type="button" data-admin-action="mark-delivered" data-order-id={o.id} style="background:#16a34a; color:white;">✅ 确认送达</button>
                 )}
                 {deliveryActionFlags.showAssignedRider && (
                   <span style="font-size:12px; color:#7c2d12; font-weight:700;">已指派骑手：{o.courierName || o.courierPhone || '未命名骑手'}</span>

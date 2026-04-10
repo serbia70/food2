@@ -14,15 +14,15 @@
 
 - Modify: `src/lib/telegram-dispatch.ts`
   - 将 callback 过期策略从“所有动作统一 TTL”改为“仅 accept/decline 校验过期”。
-- Create: `src/lib/telegram-dispatch.test.ts`
+- Create: `src/lib/telegram-dispatch-spec.ts`
   - 锁定 accept/decline 仍会过期，picked_up/complete 过期后仍可解析。
 - Modify: `src/pages/api/telegram/rider-claim.ts`
   - 让配送阶段旧按钮进入业务状态判断，并返回 `order_status_updated` / `order_completed` / `dispatch_invalidated` 等明确错误。
-- Create: `src/lib/telegram-rider-claim-route.test.ts`
+- Create: `src/lib/telegram-rider-claim-route-spec.ts`
   - 锁定 stale `picked_up` 可成功、stale `accept` 仍失败、已完成订单返回 `order_completed`。
 - Modify: `src/pages/api/telegram/webhook.ts`
   - 提取并统一 callback 错误文案映射，不再把配送阶段失败一律回成“操作已过期/操作失败”。
-- Create: `src/lib/telegram-webhook-route.test.ts`
+- Create: `src/lib/telegram-webhook-route-spec.ts`
   - 锁定 `expired_callback`、`dispatch_invalidated`、`order_status_updated`、`order_completed` 的回包文案。
 - Modify: `docs/superpowers/specs/2026-04-08-delivery-telegram-webhook-contract-design.md`
   - 同步契约：5 分钟只限制接单阶段，配送推进阶段按业务状态拒绝。
@@ -33,7 +33,7 @@
 
 **Files:**
 - Modify: `src/lib/telegram-dispatch.ts`
-- Create: `src/lib/telegram-dispatch.test.ts`
+- Create: `src/lib/telegram-dispatch-spec.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -104,7 +104,7 @@ test('picked_up and complete callbacks remain parseable after the dispatch windo
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/telegram-dispatch.test.ts`
+Run: `node --test src/lib/telegram-dispatch-spec.ts`
 Expected: FAIL，当前 `picked_up` / `complete` 仍会抛出 `expired_callback`。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -170,13 +170,13 @@ function parseShortTelegramClaimCallback(payload: string): TelegramClaimCallback
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/telegram-dispatch.test.ts`
+Run: `node --test src/lib/telegram-dispatch-spec.ts`
 Expected: PASS。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/telegram-dispatch.ts src/lib/telegram-dispatch.test.ts
+git add src/lib/telegram-dispatch.ts src/lib/telegram-dispatch-spec.ts
 git commit -m "fix: split telegram callback expiry by action"
 ```
 
@@ -184,7 +184,7 @@ git commit -m "fix: split telegram callback expiry by action"
 
 **Files:**
 - Modify: `src/pages/api/telegram/rider-claim.ts`
-- Create: `src/lib/telegram-rider-claim-route.test.ts`
+- Create: `src/lib/telegram-rider-claim-route-spec.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -353,7 +353,7 @@ test('handleTelegramRiderClaim returns order_completed for stale complete button
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/telegram-rider-claim-route.test.ts`
+Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: FAIL，当前 stale `picked_up` 会被提前拦成 `expired_callback`，完成态按钮也不会返回 `order_completed`。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -427,13 +427,13 @@ if (!upstream.ok && isDeliveryStageAction) {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/telegram-rider-claim-route.test.ts`
+Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: PASS。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pages/api/telegram/rider-claim.ts src/lib/telegram-rider-claim-route.test.ts
+git add src/pages/api/telegram/rider-claim.ts src/lib/telegram-rider-claim-route-spec.ts
 git commit -m "fix: return delivery stage telegram errors by business state"
 ```
 
@@ -441,7 +441,7 @@ git commit -m "fix: return delivery stage telegram errors by business state"
 
 **Files:**
 - Modify: `src/pages/api/telegram/webhook.ts`
-- Create: `src/lib/telegram-webhook-route.test.ts`
+- Create: `src/lib/telegram-webhook-route-spec.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -464,7 +464,7 @@ test('mapTelegramClaimErrorToCallbackText covers dispatch and delivery failures'
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/telegram-webhook-route.test.ts`
+Run: `node --test src/lib/telegram-webhook-route-spec.ts`
 Expected: FAIL，当前文件里还没有 `mapTelegramClaimErrorToCallbackText`，且错误文案仍只区分 `expired_callback` 和其他失败。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -499,13 +499,13 @@ if (!upstream.ok) {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/telegram-webhook-route.test.ts`
+Run: `node --test src/lib/telegram-webhook-route-spec.ts`
 Expected: PASS。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pages/api/telegram/webhook.ts src/lib/telegram-webhook-route.test.ts
+git add src/pages/api/telegram/webhook.ts src/lib/telegram-webhook-route-spec.ts
 git commit -m "fix: map telegram callback errors to business copy"
 ```
 
@@ -541,7 +541,7 @@ git commit -m "fix: map telegram callback errors to business copy"
 
 - [ ] **Step 2: Run targeted tests**
 
-Run: `node --test src/lib/telegram-dispatch.test.ts src/lib/telegram-rider-claim-route.test.ts src/lib/telegram-webhook-route.test.ts`
+Run: `node --test src/lib/telegram-dispatch-spec.ts src/lib/telegram-rider-claim-route-spec.ts src/lib/telegram-webhook-route-spec.ts`
 Expected: PASS。
 
 - [ ] **Step 3: Run build to catch route/module regressions**

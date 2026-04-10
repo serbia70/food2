@@ -22,6 +22,29 @@ function readJsonObject(text: string): Record<string, unknown> | null {
   }
 }
 
+function readOrderRows(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) {
+    return payload.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
+  }
+  if (!payload || typeof payload !== 'object') return [];
+
+  const root = payload as Record<string, unknown>;
+  const directOrders = Array.isArray(root.orders) ? root.orders : [];
+  if (directOrders.length > 0) {
+    return directOrders.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
+  }
+
+  const data = root.data;
+  if (data && typeof data === 'object') {
+    const nestedOrders = Array.isArray((data as Record<string, unknown>).orders)
+      ? (data as Record<string, unknown>).orders as unknown[]
+      : [];
+    return nestedOrders.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
+  }
+
+  return [];
+}
+
 function buildUpstreamFailureResponse(
   upstream: Response,
   text: string,
@@ -176,7 +199,7 @@ async function readOrderDispatchSnapshot(
     return { status: '', remarksJson: '' };
   }
 
-  const rows = Array.isArray(parsed) ? parsed : [];
+  const rows = readOrderRows(parsed);
   const matched = rows.find((row) => String((row as Record<string, unknown>)?.id || '').trim() === orderId);
   if (!matched || typeof matched !== 'object') return { status: '', remarksJson: '' };
   const matchedRow = matched as Record<string, unknown>;
@@ -204,7 +227,7 @@ async function readOrderDetailFromAdminOrders(request: Request, orderId: string)
     return null;
   }
 
-  const rows = Array.isArray(parsed) ? parsed : [];
+  const rows = readOrderRows(parsed);
   const matched = rows.find((row) => String((row as Record<string, unknown>)?.id || '').trim() === orderId);
   return matched && typeof matched === 'object' ? matched as Record<string, unknown> : null;
 }

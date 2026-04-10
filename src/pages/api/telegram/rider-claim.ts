@@ -22,6 +22,17 @@ function readJsonObject(text: string): Record<string, unknown> | null {
   }
 }
 
+function buildUpstreamFailureResponse(
+  upstream: Response,
+  text: string,
+  fallbackBody: Record<string, unknown>,
+): Response {
+  return new Response(text || JSON.stringify(fallbackBody), {
+    status: upstream.status,
+    headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
+  });
+}
+
 function readRiderChatId(rider: AssignableRider): string {
   return String(rider.telegramChatId || '').trim();
 }
@@ -143,7 +154,7 @@ async function sendDeliveryProgressMessage(
       ...(notifyShopSlug ? { shopSlug: notifyShopSlug } : {}),
       chatId,
       text: message.text,
-      replyMarkup: message.replyMarkup,
+      reply_markup: message.replyMarkup,
     }),
   });
 }
@@ -338,6 +349,29 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   );
 
   const enforceDispatchConstraints = hasDispatchMetaConstraints(orderSnapshot.remarksJson, existingMeta);
+  const isDeclineAction = callback.action === 'decline';
+  const isPickedUpAction = callback.action === 'picked_up';
+  const isCompleteAction = callback.action === 'complete';
+  const isDeliveryProgressAction = isPickedUpAction || isCompleteAction;
+  const orderStatus = String(orderSnapshot.status || '').trim();
+
+  if (isDeliveryProgressAction) {
+    if (orderStatus === 'completed') {
+      return new Response(JSON.stringify({ success: false, error: 'order_completed' }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const expectedOrderStatus = isPickedUpAction ? 'delivering' : 'picked_up';
+    if (orderStatus && orderStatus !== expectedOrderStatus) {
+      return new Response(JSON.stringify({ success: false, error: 'order_status_updated' }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
   if (dispatchState.invalidReason) {
     return new Response(JSON.stringify({ success: false, error: 'dispatch_invalidated', reason: dispatchState.invalidReason }), {
       status: 409,
@@ -345,15 +379,12 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
     });
   }
 
-  const isDeclineAction = callback.action === 'decline';
-  const isPickedUpAction = callback.action === 'picked_up';
-  const isCompleteAction = callback.action === 'complete';
   const actionAllowed = isDeclineAction
     ? dispatchState.canDecline
-    : isPickedUpAction || isCompleteAction
+    : isDeliveryProgressAction
       ? dispatchState.canComplete
       : dispatchState.canAccept;
-  if (enforceDispatchConstraints && !actionAllowed) {
+  if ((isDeliveryProgressAction || enforceDispatchConstraints) && !actionAllowed) {
     return new Response(JSON.stringify({ success: false, error: 'dispatch_invalidated', reason: '已改派' }), {
       status: 409,
       headers: { 'Content-Type': 'application/json' },
@@ -485,6 +516,11 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
           at: nowIso,
         },
         declinedRiderIds: [],
+        currentRiderId: riderIdText,
+        currentAssignedAt: existingMeta.currentAssignedAt,
+        currentExpiresAt: existingMeta.currentExpiresAt,
+        invalidatedRiderIds: existingMeta.invalidatedRiderIds,
+        lastInvalidationReason: existingMeta.lastInvalidationReason,
       });
 
   const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status/${encodeURIComponent(String(callback.orderId || '').trim())}`, {
@@ -514,13 +550,19 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   }
 
   if (isPickedUpAction) {
-    return new Response(JSON.stringify({ success: upstream.ok, action: 'picked_up' }), {
+    if (!upstream.ok) {
+      return buildUpstreamFailureResponse(upstream, text, { success: false, error: 'order_status_updated' });
+    }
+    return new Response(JSON.stringify({ success: true, action: 'picked_up' }), {
       status: upstream.status,
       headers: { 'Content-Type': 'application/json' },
     });
   }
   if (isCompleteAction) {
-    return new Response(JSON.stringify({ success: upstream.ok, action: 'complete' }), {
+    if (!upstream.ok) {
+      return buildUpstreamFailureResponse(upstream, text, { success: false, error: 'order_completed' });
+    }
+    return new Response(JSON.stringify({ success: true, action: 'complete' }), {
       status: upstream.status,
       headers: { 'Content-Type': 'application/json' },
     });

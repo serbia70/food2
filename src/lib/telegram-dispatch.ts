@@ -122,6 +122,10 @@ function normalizeTelegramClaimPayload(input: TelegramClaimCallbackInput): Teleg
   };
 }
 
+function shouldValidateTelegramCallbackExpiry(action: TelegramClaimAction): boolean {
+  return action === 'accept' || action === 'decline';
+}
+
 function validateTelegramClaimPayload(payload: TelegramClaimPayload): void {
   if (!Number.isFinite(payload.orderId) || payload.orderId <= 0) throw new Error('invalid_order_id');
   if (!Number.isFinite(payload.riderId) || payload.riderId <= 0) throw new Error('invalid_rider_id');
@@ -130,7 +134,8 @@ function validateTelegramClaimPayload(payload: TelegramClaimPayload): void {
   if (!payload.riderPhone) throw new Error('invalid_rider_phone');
   if (!payload.telegramChatId) throw new Error('invalid_telegram_chat_id');
   if (payload.action !== 'accept' && payload.action !== 'decline' && payload.action !== 'picked_up' && payload.action !== 'complete') throw new Error('invalid_callback_action');
-  if (!Number.isFinite(payload.expiresAt) || payload.expiresAt <= Date.now()) throw new Error('expired_callback');
+  if (!Number.isFinite(payload.expiresAt)) throw new Error('expired_callback');
+  if (shouldValidateTelegramCallbackExpiry(payload.action) && payload.expiresAt <= Date.now()) throw new Error('expired_callback');
 }
 
 function requireTelegramCallbackSecret(): string {
@@ -266,8 +271,6 @@ function parseShortTelegramClaimCallback(payload: string): TelegramClaimCallback
   if (!safeEqualSignature(sigPart, expectedSig)) throw new Error('invalid_signature');
 
   const expiresAt = readBase36PositiveInt(expiresPart) * 1000;
-  if (expiresAt <= Date.now()) throw new Error('expired_callback');
-
   const action = actionPart === 'd'
     ? 'decline'
     : actionPart === 'p'
@@ -275,6 +278,7 @@ function parseShortTelegramClaimCallback(payload: string): TelegramClaimCallback
       : actionPart === 'c'
         ? 'complete'
         : 'accept';
+  if (shouldValidateTelegramCallbackExpiry(action) && expiresAt <= Date.now()) throw new Error('expired_callback');
 
   return {
     orderId: readBase36PositiveInt(orderPart),

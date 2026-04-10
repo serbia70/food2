@@ -23,6 +23,27 @@ type TelegramWebhookBody = {
   };
 };
 
+type TelegramClaimErrorPayload = {
+  error?: unknown;
+  reason?: unknown;
+};
+
+export function mapTelegramClaimErrorToCallbackText(payload: TelegramClaimErrorPayload | null | undefined): string {
+  const error = String(payload?.error || '').trim();
+  const reason = String(payload?.reason || '').trim();
+
+  if (error === 'expired_callback') return '操作已过期';
+  if (error === 'dispatch_invalidated') {
+    if (reason === '接单超时') return '接单超时';
+    if (reason === '已改派') return '已改派';
+    return '操作失败';
+  }
+  if (error === 'order_status_updated') return '订单状态已更新';
+  if (error === 'order_completed') return '订单已完成';
+  if (error === 'rider_identity_mismatch') return '当前订单不属于你';
+  return '操作失败';
+}
+
 function isTrustedTelegramRequest(request: Request): boolean {
   const expected = readTelegramRequestSecret();
   const provided = String(request.headers.get('x-telegram-bot-api-secret-token') || '').trim();
@@ -88,7 +109,7 @@ export const POST: APIRoute = async ({ request }) => {
     }
     if (!upstream.ok) {
       const errorText = String(upstreamJson?.error || '').trim();
-      const text = errorText === 'expired_callback' ? '操作已过期' : '操作失败';
+      const text = mapTelegramClaimErrorToCallbackText(upstreamJson);
       return buildJsonResponse(
         callbackId
           ? { method: 'answerCallbackQuery', callback_query_id: callbackId, text }

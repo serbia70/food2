@@ -39,7 +39,12 @@
   - `{"method":"answerCallbackQuery","callback_query_id":"...","text":"..."}`
 - 当无 callback id 时，回普通 JSON。
 - rider-claim 上游失败时：
-  - `expired_callback` 映射 `操作已过期`
+  - `expired_callback` 映射 `操作已过期`（仅 `accept/decline` 的 callback 过期仍走该分支）
+  - `dispatch_invalidated` + `reason = "接单超时"` 映射 `接单超时`
+  - `dispatch_invalidated` + `reason = "已改派"` 映射 `已改派`
+  - `order_status_updated` 映射 `订单状态已更新`
+  - `order_completed` 映射 `订单已完成`
+  - `rider_identity_mismatch` 映射 `当前订单不属于你`
   - 其他错误映射 `操作失败`
 
 ---
@@ -67,6 +72,7 @@
 ---
 
 ## 4. 身份/签名/过期/chatId 约束与错误语义
+说明：当前实现已拆分 callback 时限语义——`accept/decline` 继续执行 callback 过期校验；`picked_up/complete` 不再因 callback TTL 直接失败，而改由订单真实状态与当前骑手身份决定是否允许推进。
 
 ### 4.1 请求级鉴权
 `/api/telegram/rider-claim` 接受以下任一 secret 头并做常量时序比较：
@@ -89,7 +95,7 @@
 
 ### 4.3 callback 安全约束
 `parseTelegramClaimCallback` 与二次身份补全后，仅暴露以下安全错误：
-- `expired_callback`
+- `expired_callback`（仅 `accept/decline` 执行 callback 过期校验）
 - `invalid_signature`
 - `rider_identity_mismatch`
 - 其他解析失败统一收敛为 `invalid_callback_data`
@@ -107,6 +113,15 @@
 - `{"success":false,"error":"dispatch_invalidated","reason":"..."}`
 - 常见 reason：`已改派`、`接单超时`
 
+### 4.6 配送推进阶段错误语义
+`picked_up/complete` 进入配送推进分支后，不再因 callback TTL 直接失败，错误语义以业务状态机为准：
+- 订单已是 `completed`：HTTP `409` + `order_completed`
+- 订单当前状态不再匹配动作所需前置状态：HTTP `409` + `order_status_updated`
+  - `picked_up` 要求订单当前状态仍为 `delivering`
+  - `complete` 要求订单当前状态仍为 `picked_up`
+- 当前骑手已失效、被改派，或 dispatch 约束判定动作不可执行：HTTP `409` + `dispatch_invalidated`
+  - 业务 reason 由 `dispatchState.invalidReason` 或兜底 `已改派` 给出
+
 ---
 
 ## 5. decline 语义（关键）
@@ -114,7 +129,7 @@
 ### 5.1 主状态不推进
 `decline` 必须保持订单主状态为 `awaiting_courier`，禁止推进到 delivering/picked_up/completed。
 
-### 5.2 反馈仅写入 remarks_json 内 dispatch_meta
+### 5.2 反馈仅写入 remarksJson 内 dispatch_meta
 `decline` 通过 `buildDispatchMetaRemarks` 写入：
 - `lastRiderDecision.action = "declined"`
 - `declinedRiderIds` 追加当前 riderId
@@ -123,44 +138,46 @@
 - `lastInvalidationReason = "declined"`
 
 并通过 `/api/order/update_status/:id` 提交：
-- `expected_current_status = "awaiting_courier"`
-- `status = "awaiting_courier"`
-- `remarks_json = JSON.stringify(<remarks数组>)`
+- `expectedCurrentStatus: "awaiting_courier"`
+- `status: "awaiting_courier"`
+- `remarksJson: JSON.stringify(<remarks数组>)`
 
 结论：decline 是“反馈记录 + 保持待接单”，不是主链状态推进。
 
 ---
 
-## 6. accept / picked_up / complete 的 update_status payload 与 expected_current_status
+## 6. accept / picked_up / complete 的 update_status payload 与 expectedCurrentStatus
 
 统一调用：`POST /api/order/update_status/:id`
 
 ### 6.1 accept
 - payload：
   - `id`
-  - `expected_current_status: "awaiting_courier"`
+  - `expectedCurrentStatus: "awaiting_courier"`
   - `status: "delivering"`
-  - `courier_name`
-  - `courier_phone`
+  - `courierName`
+  - `courierPhone`
 - 额外：先写 dispatch_meta 接单反馈（`lastRiderDecision.action = accepted`）。
 
 ### 6.2 picked_up
 - payload：
   - `id`
-  - `expected_current_status: "delivering"`
+  - `expectedCurrentStatus: "delivering"`
   - `status: "picked_up"`
-  - `courier_name`
-  - `courier_phone`
+  - `courierName`
+  - `courierPhone`
+- 约束：不再因为 callback TTL 直接失败；是否允许取餐，改由订单真实状态仍为 `delivering` 且当前骑手身份仍有效共同决定。
 
 ### 6.3 complete
 - payload：
   - `id`
-  - `expected_current_status: "picked_up"`
+  - `expectedCurrentStatus: "picked_up"`
   - `status: "completed"`
-  - `courier_name`
-  - `courier_phone`
+  - `courierName`
+  - `courierPhone`
+- 约束：不再因为 callback TTL 直接失败；是否允许送达，改由订单真实状态仍为 `picked_up` 且当前骑手身份仍有效共同决定。
 
-### 6.4 expected_current_status 的契约意义
+### 6.4 expectedCurrentStatus 的契约意义
 前端/中间层声明“我认为当前状态应为 X”，后端据此做并发保护：
 - 不匹配即拒绝（409），避免乱序回调覆盖。
 
@@ -220,8 +237,8 @@
 - `skipValidation`
 - 以及同类“仅为绕过校验”的字段
 
-### 9.2 dispatch_meta 仅存 remarks_json
-- dispatch 元信息唯一落点：`remarks_json` 中 `dispatch_meta:*`。
+### 9.2 dispatch_meta 仅存 remarksJson
+- dispatch 元信息唯一落点：`remarksJson` 中 `dispatch_meta:*`。
 - 读写必须统一使用共享 helper：
   - `readDispatchMetaFromRemarks`
   - `buildDispatchMetaRemarks`
@@ -232,13 +249,13 @@
 ## 10. 回归验证点（4 条）
 
 1. **webhook secret + callback 文案回包**  
-   使用合法 secret 触发四动作 callback，验证 `answerCallbackQuery.text` 分别为：已接单/已拒单/已取餐/已送达；`expired_callback` 在 webhook 层映射为 `操作已过期`，其他 callback 失败映射为 `操作失败`；secret 错误返回 401 unauthorized。
+   使用合法 secret 触发四动作 callback，验证 `answerCallbackQuery.text` 分别为：已接单/已拒单/已取餐/已送达；`expired_callback` 仅用于 `accept/decline` 过期并在 webhook 层映射为 `操作已过期`；配送推进阶段失败需按 `order_status_updated` / `order_completed` / `dispatch_invalidated + reason` 映射为真实业务文案；secret 错误返回 401 unauthorized。
 
 2. **decline 不推进主状态**  
-   在 `awaiting_courier` 下执行 decline，验证订单状态仍为 `awaiting_courier`，且 `remarks_json` 中 `dispatch_meta` 出现 declined 反馈与 riderId 失效记录。
+   在 `awaiting_courier` 下执行 decline，验证订单状态仍为 `awaiting_courier`，且 `remarksJson` 中 `dispatch_meta` 出现 declined 反馈与 riderId 失效记录。
 
-3. **主链顺序与 expected_current_status 防乱序**  
-   依次验证 `awaiting_courier->delivering->picked_up->completed` 成功；任一阶段传错 `expected_current_status` 返回 409 + `expected_current_status_mismatch`；非法跳级返回 400 + `invalid_status_transition`。
+3. **主链顺序与 expectedCurrentStatus 防乱序**  
+   依次验证 `awaiting_courier->delivering->picked_up->completed` 成功；任一阶段传错 `expectedCurrentStatus` 返回 409 + `expected_current_status_mismatch`；非法跳级返回 400 + `invalid_status_transition`。
 
 4. **telegram send 回退与错误语义**  
    验证 `shop_slug` 为空时可走全局 token；`reply_markup` 可透传；参数缺失命中 `invalid_send_request`，缺 token 命中 `telegram_bot_token_not_configured`，外部发送失败命中 `telegram_send_failed`。

@@ -224,6 +224,7 @@ html, body {
 .status-pending { background: #ff9800; }
 .status-confirmed { background: #2196f3; }
 .status-delivering { background: #9c27b0; }
+.status-picked_up { background: #2563eb; }
 .status-awaiting_courier {
   background: #7c3aed;
   color: #fff;

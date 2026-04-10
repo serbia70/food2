@@ -568,6 +568,19 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     } satisfies DispatchOrderSnapshot;
 
     if (action === 'republish_on_timeout') {
+      if (currentStatus !== 'awaiting_courier') {
+        return new Response(JSON.stringify({
+          success: true,
+          action,
+          skipped: true,
+          reason: 'order_status_changed',
+          order: mergedOrderBase,
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       const riders = readOnlineRiders({ riders: await fetchAvailableRiders(request, cookies) });
       const currentRiderId = String(existingMeta.currentRiderId || '').trim();
       const nextRider = pickNextRiderOnTimeout({

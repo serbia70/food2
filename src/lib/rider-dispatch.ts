@@ -90,7 +90,7 @@ export function getCustomerDeliveryStatusCopy(status: string | null | undefined)
 export const CUSTOMER_ACTIVE_STATUSES = ['pending', 'confirmed', 'awaiting_courier', 'delivering', 'picked_up'] as const;
 export const CUSTOMER_DELIVERY_STATUSES = ['delivering', 'picked_up', 'completed'] as const;
 export const CUSTOMER_COMPLETED_STATUSES = ['completed'] as const;
-export const ADMIN_ACTIVE_DELIVERY_STATUSES = ['pending', 'confirmed', 'awaiting_courier', 'delivering'] as const;
+export const ADMIN_ACTIVE_DELIVERY_STATUSES = ['pending', 'confirmed', 'awaiting_courier', 'delivering', 'picked_up'] as const;
 
 export function isCustomerActiveStatus(status: string | null | undefined): boolean {
   return CUSTOMER_ACTIVE_STATUSES.includes(String(status || '').trim() as (typeof CUSTOMER_ACTIVE_STATUSES)[number]);

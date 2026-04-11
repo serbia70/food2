@@ -182,11 +182,12 @@ async function sendDeliveryProgressMessage(
   });
 }
 
-function readOrderSnapshotRow(row: Record<string, unknown> | null | undefined): { status: string; remarksJson: string } {
-  if (!row || typeof row !== 'object') return { status: '', remarksJson: '' };
+function readOrderSnapshotRow(row: Record<string, unknown> | null | undefined): { status: string; remarksJson: string; courierPhone: string } {
+  if (!row || typeof row !== 'object') return { status: '', remarksJson: '', courierPhone: '' };
   return {
     status: String(row.status || '').trim(),
     remarksJson: String(row.remarksJson || row.remarks_json || '').trim(),
+    courierPhone: String(row.courierPhone || row.courier_phone || '').trim(),
   };
 }
 
@@ -194,7 +195,7 @@ async function readOrderDispatchSnapshot(
   request: Request,
   orderId: string,
   riderPhone = '',
-): Promise<{ status: string; remarksJson: string }> {
+): Promise<{ status: string; remarksJson: string; courierPhone: string }> {
   const upstream = await fetch(`${readInternalApiBaseUrl()}/api/admin/orders`, {
     headers: buildForwardHeaders(request),
   });
@@ -371,10 +372,11 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   const nowIso = new Date().toISOString();
   const orderSnapshot = await readOrderDispatchSnapshot(request, orderIdText, resolvedPhone);
   const existingMeta = readDispatchMetaFromRemarks(orderSnapshot.remarksJson);
+  const snapshotCourierPhone = String(orderSnapshot.courierPhone || '').trim();
   const dispatchState = getRiderDispatchState(
     {
       status: orderSnapshot.status || 'awaiting_courier',
-      courierPhone: resolvedPhone,
+      courierPhone: snapshotCourierPhone || resolvedPhone,
     },
     existingMeta,
     riderIdText,
@@ -412,11 +414,18 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
     });
   }
 
-  const actionAllowed = isDeclineAction
-    ? dispatchState.canDecline
-    : isDeliveryProgressAction
-      ? dispatchState.canComplete
-      : dispatchState.canAccept;
+  const deliveryProgressAllowedWithoutDispatchMeta = isDeliveryProgressAction
+    && !enforceDispatchConstraints
+    && !!snapshotCourierPhone
+    && snapshotCourierPhone === resolvedPhone;
+
+  const actionAllowed = deliveryProgressAllowedWithoutDispatchMeta
+    ? true
+    : isDeclineAction
+      ? dispatchState.canDecline
+      : isDeliveryProgressAction
+        ? dispatchState.canComplete
+        : dispatchState.canAccept;
   if ((isDeliveryProgressAction || enforceDispatchConstraints) && !actionAllowed) {
     return new Response(JSON.stringify({ success: false, error: 'dispatch_invalidated', reason: '已改派' }), {
       status: 409,

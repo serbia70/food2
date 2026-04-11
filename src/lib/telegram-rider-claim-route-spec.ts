@@ -25,6 +25,7 @@ interface MockFetchCall {
 interface OrderSnapshot {
   status: string;
   remarksJson: string;
+  courierPhone?: string;
 }
 
 function useTestEnv(t: TestContext): void {
@@ -110,6 +111,7 @@ function createOrderRow(snapshot: OrderSnapshot): Record<string, unknown> {
     orderNo: 'A101',
     status: snapshot.status,
     remarksJson: snapshot.remarksJson,
+    courierPhone: snapshot.courierPhone ?? TEST_RIDER_PHONE,
     tableInfo: 'Test Address',
     userPhone: '381600000000',
     totalAmount: 1500,
@@ -354,6 +356,23 @@ test('配送阶段 admin orders 未授权时回退 rider orders 仍能推进 pic
   assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.equal(calls.some((call) => call.url.includes('/api/rider/orders?phone=')), true);
+  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
+});
+
+test('配送阶段 remarksJson 为空但订单仍属于当前骑手时可推进 picked_up', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'delivering',
+    remarksJson: '',
+    courierPhone: TEST_RIDER_PHONE,
+  }));
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('picked_up', Date.now() - 1_000)));
+  const body = await readJson(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
   assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
 });
 

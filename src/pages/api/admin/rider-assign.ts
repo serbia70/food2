@@ -7,7 +7,7 @@ import {
   readOnlineRiders,
   type AssignableRider,
 } from '../../../lib/rider-assignment.ts';
-import { filterAvailableRidersForOrder } from '../../../lib/rider-dispatch.ts';
+import { buildRiderOrderView, filterAvailableRidersForOrder } from '../../../lib/rider-dispatch.ts';
 import {
   buildAdminAssignedOrderTelegramMessage,
   buildTelegramShortClaimCallback,
@@ -24,8 +24,18 @@ type OrderSummaryItem = { name?: unknown; quantity?: unknown };
 type OrderSummaryInput = {
   orderNo?: unknown;
   order_no?: unknown;
+  shopName?: unknown;
+  shop_name?: unknown;
+  shopAddress?: unknown;
+  shop_address?: unknown;
+  shopMapUrl?: unknown;
+  shop_map_url?: unknown;
   tableInfo?: unknown;
   table_info?: unknown;
+  deliveryAddress?: unknown;
+  delivery_address?: unknown;
+  deliveryMapUrl?: unknown;
+  delivery_map_url?: unknown;
   userPhone?: unknown;
   user_phone?: unknown;
   totalAmount?: unknown;
@@ -66,7 +76,11 @@ function readOrderSummaryItems(raw: OrderSummaryInput): OrderSummaryItem[] {
 
 function readOrderSummary(body: Record<string, unknown>, orderId: string): {
   orderNo: string;
+  shopName: string;
+  shopAddress: string;
+  shopMapUrl: string;
   address: string;
+  deliveryMapUrl: string;
   phone: string;
   totalAmount: number;
   scheduledFor: string;
@@ -79,9 +93,24 @@ function readOrderSummary(body: Record<string, unknown>, orderId: string): {
 
   const parsedTotalAmount = Number(raw.totalAmount ?? raw.total_amount);
 
+  const orderView = buildRiderOrderView({
+    shopName: String(raw.shopName ?? raw.shop_name ?? '').trim(),
+    shopAddress: String(raw.shopAddress ?? raw.shop_address ?? '').trim(),
+    shopMapUrl: String(raw.shopMapUrl ?? raw.shop_map_url ?? '').trim(),
+    tableInfo: String(raw.tableInfo ?? raw.table_info ?? '').trim(),
+    deliveryAddress: String(raw.deliveryAddress ?? raw.delivery_address ?? '').trim(),
+    deliveryMapUrl: String(raw.deliveryMapUrl ?? raw.delivery_map_url ?? '').trim(),
+    userPhone: String(raw.userPhone ?? raw.user_phone ?? '').trim(),
+    totalAmount: raw.totalAmount ?? raw.total_amount,
+  });
+
   return {
     orderNo: String(raw.orderNo ?? raw.order_no ?? orderId ?? '').trim(),
-    address: String(raw.tableInfo ?? raw.table_info ?? '').trim() || '未提供地址',
+    shopName: orderView.shopName,
+    shopAddress: orderView.shopAddress,
+    shopMapUrl: orderView.shopMapUrl,
+    address: orderView.deliveryAddress || '未提供地址',
+    deliveryMapUrl: orderView.deliveryMapUrl,
     phone: String(raw.userPhone ?? raw.user_phone ?? '').trim() || '-',
     totalAmount: Number.isFinite(parsedTotalAmount) ? parsedTotalAmount : 0,
     scheduledFor: String(raw.scheduledFor ?? raw.scheduled_for ?? '').trim(),
@@ -163,7 +192,11 @@ function readOrderShopSlug(payload: unknown, orderId: string): string {
 
 function readOrderSummaryFromRow(row: Record<string, unknown>, orderId: string): {
   orderNo: string;
+  shopName: string;
+  shopAddress: string;
+  shopMapUrl: string;
   address: string;
+  deliveryMapUrl: string;
   phone: string;
   totalAmount: number;
   scheduledFor: string;
@@ -177,7 +210,11 @@ async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute[
   remarksJson: string;
   orderSummary: {
     orderNo: string;
+    shopName: string;
+    shopAddress: string;
+    shopMapUrl: string;
     address: string;
+    deliveryMapUrl: string;
     phone: string;
     totalAmount: number;
     scheduledFor: string;
@@ -245,7 +282,11 @@ async function notifyAssignedRider({
   pickupEtaMinutes: number;
   orderSummary: {
     orderNo: string;
+    shopName: string;
+    shopAddress: string;
+    shopMapUrl: string;
     address: string;
+    deliveryMapUrl: string;
     phone: string;
     totalAmount: number;
     scheduledFor: string;
@@ -306,12 +347,15 @@ async function notifyAssignedRider({
 
     const message = buildAdminAssignedOrderTelegramMessage({
       orderNo: orderSummary.orderNo,
+      shopName: orderSummary.shopName,
       address: orderSummary.address,
       totalAmount: orderSummary.totalAmount,
       phone: orderSummary.phone,
       pickupEtaMinutes,
       scheduledFor: orderSummary.scheduledFor,
       itemSummary: orderSummary.itemSummary,
+      shopMapUrl: orderSummary.shopMapUrl,
+      deliveryMapUrl: orderSummary.deliveryMapUrl,
       claimCallbackData: claimCallbackData || undefined,
       declineCallbackData: declineCallbackData || undefined,
     });

@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL, DISPATCH_AUTO_REASSIGN_MINUTES, SITE_BASE_URL } from '../../../config.ts';
 import { buildAdminAuthHeader, proxyAdminRequest } from '../../../lib/admin-api-route.ts';
-import { buildDispatchMetaRemarks, readDispatchMetaFromRemarks, type DispatchMeta } from '../../../lib/rider-dispatch.ts';
+import { buildDispatchMetaRemarks, buildRiderOrderView, readDispatchMetaFromRemarks, type DispatchMeta } from '../../../lib/rider-dispatch.ts';
 import { readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
 import { buildTelegramClaimCallback, buildTelegramDeepLink, buildTelegramDispatchMessage } from '../../../lib/telegram-dispatch.ts';
 
@@ -12,7 +12,11 @@ interface DispatchOrderSnapshot {
   shopSlug?: string | null;
   shopId?: number | string | null;
   shopName?: string | null;
+  shopAddress?: string | null;
+  shopMapUrl?: string | null;
   tableInfo?: string | null;
+  deliveryAddress?: string | null;
+  deliveryMapUrl?: string | null;
   totalAmount?: number | string | null;
   pickupEtaMinutes?: number | string | null;
   userPhone?: string | null;
@@ -94,11 +98,15 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
   const shopSlug = String(payload.shopSlug || '').trim();
   const shopId = String(payload.shopId || '').trim();
   const shopName = String(payload.shopName || '').trim();
+  const shopAddress = String(payload.shopAddress || '').trim();
+  const shopMapUrl = String(payload.shopMapUrl || '').trim();
   const tableInfo = String(payload.tableInfo || '').trim();
+  const deliveryAddress = String(payload.deliveryAddress || '').trim();
+  const deliveryMapUrl = String(payload.deliveryMapUrl || '').trim();
   const totalAmount = String(payload.totalAmount || '').trim();
   const userPhone = String(payload.userPhone || '').trim();
   const status = String(payload.status || '').trim();
-  const hasSnapshotFields = !!(shopSlug || shopId || shopName || tableInfo || totalAmount || userPhone);
+  const hasSnapshotFields = !!(shopSlug || shopId || shopName || shopAddress || shopMapUrl || tableInfo || deliveryAddress || deliveryMapUrl || totalAmount || userPhone);
   if (!hasSnapshotFields) return null;
 
   return {
@@ -106,7 +114,11 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
     shopSlug: shopSlug || undefined,
     shopId: shopId || undefined,
     shopName: shopName || undefined,
+    shopAddress: shopAddress || undefined,
+    shopMapUrl: shopMapUrl || undefined,
     tableInfo: tableInfo || undefined,
+    deliveryAddress: deliveryAddress || undefined,
+    deliveryMapUrl: deliveryMapUrl || undefined,
     totalAmount: totalAmount || undefined,
     userPhone: userPhone || undefined,
     status: status || undefined,
@@ -329,8 +341,7 @@ async function notifyTelegramRecipients(
   }
 
   const dashboardBaseUrl = String(SITE_BASE_URL || '').trim().replace(/\/$/, '') || 'https://food2.serbia70.com';
-  const shopName = String(order.shopName || '店铺');
-  const address = String(order.tableInfo || '');
+  const orderView = buildRiderOrderView(order);
   const totalAmount = Number(order.totalAmount || 0);
   const pickupEtaMinutes = Number(order.pickupEtaMinutes || 0);
   const phone = String(order.userPhone || '');
@@ -362,12 +373,14 @@ async function notifyTelegramRecipients(
       }
     }
     const message = buildTelegramDispatchMessage({
-      shopName,
-      address,
+      shopName: orderView.shopName,
+      address: orderView.deliveryAddress || '未提供地址',
       totalAmount,
       pickupEtaMinutes,
       phone,
       dashboardLink,
+      shopMapUrl: orderView.shopMapUrl,
+      deliveryMapUrl: orderView.deliveryMapUrl,
       claimCallbackData,
     });
 

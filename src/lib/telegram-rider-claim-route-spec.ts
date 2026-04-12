@@ -112,6 +112,9 @@ function createOrderRow(snapshot: OrderSnapshot): Record<string, unknown> {
     status: snapshot.status,
     remarksJson: snapshot.remarksJson,
     courierPhone: snapshot.courierPhone ?? TEST_RIDER_PHONE,
+    shopName: 'Pizza One',
+    shopAddress: 'Shop Street 1',
+    shopMapUrl: 'https://maps.example.com/shop',
     tableInfo: 'Test Address',
     userPhone: '381600000000',
     totalAmount: 1500,
@@ -240,6 +243,9 @@ test('stale picked_up callback 在 delivering 且当前骑手匹配时可成功�
   assert.ok(telegramSendCall);
   assert.match(telegramSendCall.body, /"reply_markup":/);
   assert.doesNotMatch(telegramSendCall.body, /"replyMarkup":/);
+  assert.match(telegramSendCall.body, /Pizza One/);
+  assert.match(telegramSendCall.body, /https:\/\/maps\.example\.com\/shop/);
+  assert.match(telegramSendCall.body, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=Test%20Address/);
 });
 
 test('stale accept callback 仍返回 expired_callback', async (t) => {
@@ -522,6 +528,120 @@ test('complete 调用 update_status 返回 409 时透传业务错误', async (t)
   assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
 });
 
+test('complete 在订单快照仍为 delivering 时返回 order_status_updated 且不调用 update_status', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'delivering',
+    remarksJson: createRemarksJson(),
+  }));
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('complete', Date.now() - 1_000)));
+  const body = await readJson(response);
+
+  assert.equal(response.status, 409);
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'order_status_updated');
+  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), false);
+});
+
+test('decline 通过共享 actionDecision 的单一路径写回 update_status remarks 且不走 admin remarks', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({
+        riders: [
+          {
+            id: TEST_RIDER_ID,
+            name: TEST_RIDER_NAME,
+            phone: TEST_RIDER_PHONE,
+            telegramChatId: TEST_CHAT_ID,
+            status: 'online',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse([createOrderRow({
+        status: 'awaiting_courier',
+        remarksJson: createRemarksJson({ declinedRiderIds: ['404'] }),
+      })]);
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/admin/rider-dispatch') {
+      return jsonResponse({ success: false }, 500);
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const declineCallback = buildTelegramShortClaimCallback({
+    orderId: TEST_ORDER_ID,
+    riderId: TEST_RIDER_ID,
+    riderName: TEST_RIDER_NAME,
+    riderPhone: TEST_RIDER_PHONE,
+    restaurantId: 'shop-1',
+    telegramChatId: TEST_CHAT_ID,
+    action: 'decline',
+    expiresAt: Date.now() + 60_000,
+  });
+  const response = await handleTelegramRiderClaim(createRequest(declineCallback));
+  const body = await readJson(response);
+  const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'decline');
+  assert.ok(updateCall);
+  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
+
+  const updatePayload = JSON.parse(updateCall.body) as {
+    expectedCurrentStatus?: string;
+    status?: string;
+    remarksJson?: string;
+  };
+  assert.equal(updatePayload.expectedCurrentStatus, 'awaiting_courier');
+  assert.equal(updatePayload.status, 'awaiting_courier');
+  assert.equal(typeof updatePayload.remarksJson, 'string');
+
+  const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
+  assert.equal(nextMeta.lastRiderDecision?.action, 'declined');
+  assert.equal(nextMeta.lastRiderDecision?.riderId, String(TEST_RIDER_ID));
+  assert.equal(nextMeta.lastRiderDecision?.riderPhone, TEST_RIDER_PHONE);
+  assert.equal(nextMeta.currentRiderId, '');
+  assert.deepEqual(nextMeta.declinedRiderIds, ['404', String(TEST_RIDER_ID)]);
+  assert.deepEqual(nextMeta.invalidatedRiderIds, [String(TEST_RIDER_ID)]);
+  assert.equal(nextMeta.lastInvalidationReason, 'declined');
+  assert.doesNotMatch(updateCall.body, /"courierName"/);
+  assert.doesNotMatch(updateCall.body, /"courierPhone"/);
+});
+
+test('accept 失败时走共享错误出口并且不补发阶段消息', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'awaiting_courier',
+    remarksJson: createRemarksJson(),
+  }, {
+    updateStatusOk: false,
+    updateStatusStatus: 409,
+    updateStatusBody: { success: false, error: 'order_status_updated' },
+  }));
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('accept', Date.now() + 60_000)));
+  const body = await readJson(response);
+
+  assert.equal(response.status, 409);
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'order_status_updated');
+  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+});
+
 test('accept 成功时写回 dispatch_meta 保留当前骑手位', async (t) => {
   useTestEnv(t);
   const currentAssignedAt = new Date(Date.now() - 60_000).toISOString();
@@ -558,3 +678,4 @@ test('accept 成功时写回 dispatch_meta 保留当前骑手位', async (t) => 
   assert.equal(nextMeta.lastInvalidationReason, null);
   assert.deepEqual(nextMeta.declinedRiderIds, []);
 });
+

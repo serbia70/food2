@@ -61,6 +61,64 @@ function createCookies() {
   };
 }
 
+test('publish dispatch telegram includes shared shopName and explicit shopMapUrl', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/admin/orders/902/status') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/admin/riders') {
+      return jsonResponse({
+        riders: [
+          { id: '202', name: 'Rider 1', phone: '381641234567', telegramChatId: 'chat-1', status: 'available' },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders/remarks') {
+      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const request = new Request('https://example.com/api/admin/rider-dispatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderId: '902',
+      action: 'publish',
+      shopSlug: 'shop-a',
+      shopName: 'Shop A',
+      shopAddress: 'Bulevar 1',
+      shopMapUrl: 'https://maps.example.com/shop-a',
+      tableInfo: 'Address',
+      totalAmount: 100,
+      userPhone: '381600000000',
+      pickupEtaMinutes: 12,
+      status: 'awaiting_courier',
+    }),
+  });
+
+  const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
+  const body = JSON.parse(await response.text()) as { success?: boolean };
+  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
+  assert.ok(telegramCall);
+  const telegramBody = JSON.parse(telegramCall.body) as { text?: string };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.match(String(telegramBody.text || ''), /Shop A/);
+  assert.match(String(telegramBody.text || ''), /https:\/\/maps\.example\.com\/shop-a/);
+});
+
 test('republish_on_timeout 在 delivering 状态下不得改写 dispatch_meta 当前骑手位', async (t) => {
   useTestEnv(t);
   const originalMeta = {

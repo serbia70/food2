@@ -5,17 +5,22 @@ interface TelegramDispatchInput {
   pickupEtaMinutes: number;
   phone: string;
   dashboardLink: string;
+  shopMapUrl?: string;
+  deliveryMapUrl?: string;
   claimCallbackData?: string;
 }
 
 interface AdminAssignedOrderTelegramInput {
   orderNo: string;
+  shopName?: string;
   address: string;
   totalAmount: number;
   phone: string;
   pickupEtaMinutes: number;
   scheduledFor?: string;
   itemSummary: string[];
+  shopMapUrl?: string;
+  deliveryMapUrl?: string;
   claimCallbackData?: string;
   declineCallbackData?: string;
 }
@@ -24,19 +29,25 @@ type TelegramClaimAction = 'accept' | 'decline' | 'picked_up' | 'complete';
 
 interface RiderDeliveryCompleteTelegramInput {
   orderNo: string;
+  shopName: string;
   address: string;
   phone: string;
   totalAmount: number;
   pickupEtaMinutes: number;
+  shopMapUrl?: string;
+  deliveryMapUrl?: string;
   completeCallbackData?: string;
 }
 
 interface RiderPickedUpTelegramInput {
   orderNo: string;
+  shopName: string;
   address: string;
   phone: string;
   totalAmount: number;
   pickupEtaMinutes: number;
+  shopMapUrl?: string;
+  deliveryMapUrl?: string;
   completeCallbackData?: string;
 }
 
@@ -349,14 +360,26 @@ export function buildTelegramDispatchMessage(input: TelegramDispatchInput): Tele
     primaryButtons.push({ text: `联系门店：${phone}`, url: `tel:${phone}` });
   }
 
+  const lines = [
+    `${input.shopName}有新单`,
+    `约 ${input.pickupEtaMinutes} 分钟后送达`,
+    `地址：${input.address}`,
+    `金额：${input.totalAmount} RSD`,
+    `联系电话：${input.phone}`,
+  ];
+
+  const shopMapUrl = String(input.shopMapUrl || '').trim();
+  if (shopMapUrl) {
+    lines.push(`店铺地图：${shopMapUrl}`);
+  }
+
+  const deliveryMapUrl = String(input.deliveryMapUrl || '').trim();
+  if (deliveryMapUrl) {
+    lines.push(`客户导航：${deliveryMapUrl}`);
+  }
+
   return {
-    text: [
-      `${input.shopName}有新单`,
-      `约 ${input.pickupEtaMinutes} 分钟后送达`,
-      `地址：${input.address}`,
-      `金额：${input.totalAmount} RSD`,
-      `联系电话：${input.phone}`,
-    ].join('\n'),
+    text: lines.join('\n'),
     replyMarkup: {
       inline_keyboard: [primaryButtons],
     },
@@ -388,10 +411,46 @@ function trimTelegramLinesToByteLimit(lines: string[], maxBytes: number): string
   return [...kept, suffix].join('\n');
 }
 
+function buildDeliveryProgressLines(input: {
+  heading: string;
+  etaLabel: string;
+  orderNo: string;
+  shopName: string;
+  address: string;
+  phone: string;
+  totalAmount: number;
+  pickupEtaMinutes: number;
+  shopMapUrl?: string;
+  deliveryMapUrl?: string;
+}): string[] {
+  const lines = [
+    input.heading,
+    `订单号：${input.orderNo}`,
+    `店铺：${input.shopName}`,
+    `地址：${input.address}`,
+    `电话：${input.phone}`,
+    `金额：${input.totalAmount} RSD`,
+    `${input.etaLabel}${input.pickupEtaMinutes} 分钟${input.etaLabel === '预计还需 ' ? '送达' : '后可取'}`,
+  ];
+
+  const shopMapUrl = String(input.shopMapUrl || '').trim();
+  if (shopMapUrl) {
+    lines.push(`店铺地图：${shopMapUrl}`);
+  }
+
+  const deliveryMapUrl = String(input.deliveryMapUrl || '').trim();
+  if (deliveryMapUrl) {
+    lines.push(`客户导航：${deliveryMapUrl}`);
+  }
+
+  return lines;
+}
+
 export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrderTelegramInput): TelegramDispatchMessage {
   const lines = [
     '你有新的指派订单',
     `订单号：${input.orderNo}`,
+    `店铺：${String(input.shopName || '').trim() || '店铺'}`,
     `地址：${input.address}`,
     `电话：${input.phone}`,
     `金额：${input.totalAmount} RSD`,
@@ -400,7 +459,17 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
   ];
 
   if (String(input.scheduledFor || '').trim()) {
-    lines.splice(5, 0, `预约送达：${String(input.scheduledFor).trim()}`);
+    lines.splice(6, 0, `预约送达：${String(input.scheduledFor).trim()}`);
+  }
+
+  const shopMapUrl = String(input.shopMapUrl || '').trim();
+  if (shopMapUrl) {
+    lines.push(`店铺地图：${shopMapUrl}`);
+  }
+
+  const deliveryMapUrl = String(input.deliveryMapUrl || '').trim();
+  if (deliveryMapUrl) {
+    lines.push(`客户导航：${deliveryMapUrl}`);
   }
 
   const primaryButtons: TelegramInlineKeyboardButton[] = [];
@@ -421,14 +490,18 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
 
 export function buildRiderPickedUpTelegramMessage(input: RiderPickedUpTelegramInput): TelegramDispatchMessage {
   return {
-    text: [
-      '骑手已接单',
-      `订单号：${input.orderNo}`,
-      `地址：${input.address}`,
-      `电话：${input.phone}`,
-      `金额：${input.totalAmount} RSD`,
-      `预计 ${input.pickupEtaMinutes} 分钟后可取`,
-    ].join('\n'),
+    text: buildDeliveryProgressLines({
+      heading: '骑手已接单',
+      etaLabel: '预计 ',
+      orderNo: input.orderNo,
+      shopName: input.shopName,
+      address: input.address,
+      phone: input.phone,
+      totalAmount: input.totalAmount,
+      pickupEtaMinutes: input.pickupEtaMinutes,
+      shopMapUrl: input.shopMapUrl,
+      deliveryMapUrl: input.deliveryMapUrl,
+    }).join('\n'),
     replyMarkup: {
       inline_keyboard: String(input.completeCallbackData || '').trim()
         ? [[{ text: '已取餐', callback_data: String(input.completeCallbackData).trim() }]]
@@ -439,14 +512,18 @@ export function buildRiderPickedUpTelegramMessage(input: RiderPickedUpTelegramIn
 
 export function buildRiderDeliveryCompleteTelegramMessage(input: RiderDeliveryCompleteTelegramInput): TelegramDispatchMessage {
   return {
-    text: [
-      '骑手已取餐',
-      `订单号：${input.orderNo}`,
-      `地址：${input.address}`,
-      `电话：${input.phone}`,
-      `金额：${input.totalAmount} RSD`,
-      `预计还需 ${input.pickupEtaMinutes} 分钟送达`,
-    ].join('\n'),
+    text: buildDeliveryProgressLines({
+      heading: '骑手已取餐',
+      etaLabel: '预计还需 ',
+      orderNo: input.orderNo,
+      shopName: input.shopName,
+      address: input.address,
+      phone: input.phone,
+      totalAmount: input.totalAmount,
+      pickupEtaMinutes: input.pickupEtaMinutes,
+      shopMapUrl: input.shopMapUrl,
+      deliveryMapUrl: input.deliveryMapUrl,
+    }).join('\n'),
     replyMarkup: {
       inline_keyboard: String(input.completeCallbackData || '').trim()
         ? [[{ text: '已送达', callback_data: String(input.completeCallbackData).trim() }]]

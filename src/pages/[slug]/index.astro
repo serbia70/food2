@@ -21,6 +21,7 @@ import {
 import { buildDineInBillingState } from '../../lib/dine-in-billing.ts';
 import { fetchJsonWithSingleRetry } from '../../lib/public-page-fetch.ts';
 import { isActiveDineInOrder } from '../../lib/admin-dashboard-utils.ts';
+import { buildRiderOrderView } from '../../lib/rider-dispatch.ts';
 import { buildTableLookupKeys } from '../../scripts/shop/table-utils';
 
 export const prerender = false;
@@ -127,8 +128,20 @@ const shopId = Number(shop?.id || 0);
 const resolvedDisplaySettings = resolveShopDisplaySettings(shop, settings, publicMasterSettings);
 
 const phone = settings?.contact?.phone || settings?.phone || shop?.phone || '0613083899';
-const addressForMap = String(settings?.contact?.address || settings?.address || shop?.address || shop?.zone || shop?.name || slug || '').trim();
-const mapUrl = String(settings?.contact?.map_url || settings?.map_url || (addressForMap ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressForMap)}` : '')).trim();
+const mapUrl = buildRiderOrderView({
+  shopAddress: String(settings?.contact?.address || settings?.address || shop?.address || shop?.zone || shop?.name || slug || '').trim(),
+  shopMapUrl: String(
+    settings?.contact?.mapUrl
+    || settings?.contact?.map_url
+    || settings?.mapUrl
+    || settings?.map_url
+    || shop?.contact?.mapUrl
+    || shop?.contact?.map_url
+    || shop?.mapUrl
+    || shop?.map_url
+    || ''
+  ).trim(),
+}).shopMapUrl;
 
 let isDeliveryLocked = Boolean(shop?.deliveryLocked);
 const deliveryLockReason = String(

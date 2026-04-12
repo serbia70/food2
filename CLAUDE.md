@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 2. 安全与测试
 - 运行完整测试套件: `pnpm run test:security`
-- 运行单个测试: `node --test <路径>`（如 `src/lib/master-auth.test.ts`）
+- 运行单个测试: `node --test <路径>`（如 `src/lib/master-auth-spec.ts`）
 - 注意: 部分安全测试需在 `pnpm build` 后才能通过
 
 ## 3. 技术架构与规范

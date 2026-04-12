@@ -123,7 +123,7 @@ admin 端维持单一事实来源：订单状态。
   - 只做必要兼容，不重写协议
 - `src/tests/pages/api/admin-rider-assign.test.ts`
   - 断言消息文本与按钮 payload
-- `src/tests/pages/api/telegram-rider-claim.test.ts`
+- `src/lib/telegram-rider-claim-route-spec.ts`
   - 断言接单后状态变为 `delivering`
 - `src/components/admin/TabTables.astro`
   - 仅在需要时微调文案/显示，不新增第二套状态逻辑

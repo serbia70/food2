@@ -20,7 +20,7 @@
   - Unit tests for session normalization and binding-state helpers.
 - Modify: `src/lib/rider-dispatch.ts`
   - Add rider dashboard filters/copy helpers shared by dashboard rendering and admin hints.
-- Modify: `src/lib/rider-dispatch.test.ts`
+- Modify: `src/lib/rider-dispatch-spec.ts`
   - Unit tests for rider dashboard order filtering and Telegram eligibility copy.
 - Modify: `src/pages/rider/login.astro`
   - Normalize login result into one stable rider session object and redirect logged-in riders cleanly.
@@ -160,7 +160,7 @@ git commit -m "feat: add rider session helpers"
 
 **Files:**
 - Modify: `src/lib/rider-dispatch.ts`
-- Modify: `src/lib/rider-dispatch.test.ts`
+- Modify: `src/lib/rider-dispatch-spec.ts`
 - Modify: `src/scripts/admin/settings-ui.ts:316-345`
 
 - [ ] **Step 1: 先给现有 helper 加失败测试，锁定 dashboard 过滤规则**
@@ -204,7 +204,7 @@ test('getRiderStatusHintCopy explains available status', () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL because the new exports do not exist yet.
 
 - [ ] **Step 3: 在 helper 文件里补最小实现**
@@ -237,7 +237,7 @@ export function getRiderStatusHintCopy(status: string | null | undefined): strin
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS
 
 - [ ] **Step 5: 调整后台文案，让商家明确去骑手端绑定**
@@ -249,7 +249,7 @@ warn.textContent = '阻断原因：未绑定 Telegram，骑手需先在骑手端
 - [ ] **Step 6: 提交这一小步**
 
 ```bash
-git add src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts src/scripts/admin/settings-ui.ts
+git add src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts src/scripts/admin/settings-ui.ts
 git commit -m "feat: clarify rider dashboard eligibility copy"
 ```
 
@@ -433,7 +433,7 @@ git commit -m "feat: add rider dashboard binding panel"
 **Files:**
 - Modify: `src/pages/api/rider/orders.ts`
 - Modify: `src/lib/rider-dispatch.ts`
-- Test: `src/lib/rider-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
 
 - [ ] **Step 1: 先写过滤视图的失败测试**
 
@@ -455,7 +455,7 @@ test('history view only keeps completed rider orders', () => {
 
 - [ ] **Step 2: 跑测试确认通过/或补齐后通过**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS once helper is in place.
 
 - [ ] **Step 3: 调整 `/api/rider/orders`，明确支持 `view=active|history`**
@@ -485,7 +485,7 @@ Expected: “进行中”只显示待接/配送中；“已完成”只显示当
 - [ ] **Step 6: 提交这一小步**
 
 ```bash
-git add src/pages/api/rider/orders.ts src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts src/pages/rider/dashboard.astro
+git add src/pages/api/rider/orders.ts src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts src/pages/rider/dashboard.astro
 git commit -m "feat: align rider order tabs with dashboard views"
 ```
 
@@ -928,13 +928,13 @@ git commit -m "feat: clarify admin rider binding requirements"
 
 **Files:**
 - Test: `src/lib/rider-session.test.ts`
-- Test: `src/lib/rider-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
 - Test: `src/lib/telegram-rider-bind.test.ts`
 - Modify: touched files only if bugs are found during verification
 
 - [ ] **Step 1: 跑单元测试**
 
-Run: `node --test src/lib/rider-session.test.ts src/lib/rider-dispatch.test.ts src/lib/telegram-rider-bind.test.ts`
+Run: `node --test src/lib/rider-session.test.ts src/lib/rider-dispatch-spec.ts src/lib/telegram-rider-bind.test.ts`
 Expected: PASS
 
 - [ ] **Step 2: 跑项目构建**
@@ -995,7 +995,7 @@ Expected:
 
 ```bash
 pnpm build
-node --test src/lib/rider-session.test.ts src/lib/rider-dispatch.test.ts src/lib/telegram-rider-bind.test.ts
+node --test src/lib/rider-session.test.ts src/lib/rider-dispatch-spec.ts src/lib/telegram-rider-bind.test.ts
 ```
 
 Expected: PASS
@@ -1003,7 +1003,7 @@ Expected: PASS
 - [ ] **Step 8: 提交最终整体验证结果**
 
 ```bash
-git add src/pages/rider/login.astro src/pages/rider/register.astro src/pages/rider/dashboard.astro src/pages/api/rider/telegram/bind.ts src/pages/api/telegram/rider-bind.ts src/pages/api/telegram/rider-claim.ts src/pages/api/rider/orders.ts src/pages/api/rider/status.ts src/scripts/admin/settings-ui.ts src/scripts/admin/orders.ts src/lib/rider-session.ts src/lib/rider-session.test.ts src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts src/lib/telegram-rider-bind.ts src/lib/telegram-rider-bind.test.ts src/types/index.ts
+git add src/pages/rider/login.astro src/pages/rider/register.astro src/pages/rider/dashboard.astro src/pages/api/rider/telegram/bind.ts src/pages/api/telegram/rider-bind.ts src/pages/api/telegram/rider-claim.ts src/pages/api/rider/orders.ts src/pages/api/rider/status.ts src/scripts/admin/settings-ui.ts src/scripts/admin/orders.ts src/lib/rider-session.ts src/lib/rider-session.test.ts src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts src/lib/telegram-rider-bind.ts src/lib/telegram-rider-bind.test.ts src/types/index.ts
 git commit -m "feat: complete rider app and telegram binding flow"
 ```
 

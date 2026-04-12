@@ -187,10 +187,10 @@
 
 ### 测试
 - `src/tests/pages/admin/*`
-- `src/tests/pages/api/telegram-rider-claim.test.ts`
+- `src/lib/telegram-rider-claim-route-spec.ts`
 - `src/tests/pages/rider/*` 或已有 rider dashboard 相关测试入口
-- `src/lib/telegram-dispatch.test.ts`
-- `src/lib/rider-dispatch.test.ts`
+- `src/lib/telegram-dispatch-spec.ts`
+- `src/lib/rider-dispatch-spec.ts`
 
 ## 关键风险与处理
 ### 1. 重复点击 / 旧按钮点击

@@ -16,11 +16,11 @@
   - Extend `Order` and `Rider` types with pickup ETA, reminder, and Telegram binding fields used across admin/rider flows.
 - Create: `src/lib/rider-dispatch.ts`
   - Pure helpers for status guards, ETA labels, reminder state, rider filtering, Telegram recipient selection, and deep-link payload formatting.
-- Create: `src/lib/rider-dispatch.test.ts`
+- Create: `src/lib/rider-dispatch-spec.ts`
   - Unit tests for the new dispatch helpers.
 - Create: `src/lib/telegram-dispatch.ts`
   - Telegram message builders, deep-link/callback payload helpers, and channel selection logic.
-- Create: `src/lib/telegram-dispatch.test.ts`
+- Create: `src/lib/telegram-dispatch-spec.ts`
   - Unit tests for Telegram message formatting and callback/deep-link generation.
 - Modify: `src/pages/admin/[slug]/index.astro`
   - Normalize new order fields from backend data so downstream UI receives typed values.
@@ -46,7 +46,7 @@
 **Files:**
 - Modify: `src/types/index.ts`
 - Create: `src/lib/rider-dispatch.ts`
-- Test: `src/lib/rider-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
 
 - [ ] **Step 1: 先写失败测试，固定状态与 ETA 规则**
 
@@ -85,7 +85,7 @@ test('pickAvailableRiders only keeps available riders with phone', () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL with module export errors because `src/lib/rider-dispatch.ts` does not exist yet.
 
 - [ ] **Step 3: 扩展共享类型，先把新字段放到类型层**
@@ -211,13 +211,13 @@ export function shouldEscalateUnclaimedOrder(
 }
 ```
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS
 
 - [ ] **Step 7: 提交这一小步**
 
 ```bash
-git add src/types/index.ts src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts
+git add src/types/index.ts src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts
 git commit -m "feat: add rider dispatch state helpers"
 ```
 
@@ -226,7 +226,7 @@ git commit -m "feat: add rider dispatch state helpers"
 **Files:**
 - Modify: `src/pages/admin/[slug]/index.astro`
 - Modify: `src/components/admin/TabOrders.astro`
-- Test: `src/lib/rider-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
 
 - [ ] **Step 1: 先加视图层测试，锁定 badge 与 ETA 文案**
 
@@ -245,7 +245,7 @@ test('formatPickupEtaLabel still returns empty string for invalid input', () => 
 
 - [ ] **Step 2: 跑测试确认新增断言失败**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL with `getAdminDispatchStatusCopy is not a function`.
 
 - [ ] **Step 3: 在 helper 里补状态映射实现**
@@ -333,7 +333,7 @@ import { formatPickupEtaLabel, getAdminDispatchStatusCopy, isAwaitingCourierOrde
 
 - [ ] **Step 6: 跑测试并手动 build 页面片段**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS
 
 Run: `pnpm build`
@@ -342,7 +342,7 @@ Expected: PASS and Astro compiles updated admin page without import/type errors.
 - [ ] **Step 7: 提交这一小步**
 
 ```bash
-git add src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts src/pages/admin/[slug]/index.astro src/components/admin/TabOrders.astro
+git add src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts src/pages/admin/[slug]/index.astro src/components/admin/TabOrders.astro
 git commit -m "feat: show admin rider dispatch status"
 ```
 
@@ -352,7 +352,7 @@ git commit -m "feat: show admin rider dispatch status"
 - Modify: `src/scripts/admin/order-actions.ts`
 - Modify: `src/scripts/admin/orders.ts`
 - Create: `src/pages/api/admin/rider-dispatch.ts`
-- Test: `src/lib/rider-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
 
 - [ ] **Step 1: 先写 payload 纯函数测试，避免在 DOM 里堆逻辑**
 
@@ -374,7 +374,7 @@ test('buildDispatchPublishPayload stores awaiting_courier state and eta metadata
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL with missing export `buildDispatchPublishPayload`.
 
 - [ ] **Step 3: 在 helper 中补 publish payload 实现**
@@ -481,7 +481,7 @@ export async function publishRiderDispatch(orderId: string, etaMinutes: number) 
 
 - [ ] **Step 6: 跑测试与构建，确认发布流程无语法错误**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS
 
 Run: `pnpm build`
@@ -499,7 +499,7 @@ git commit -m "feat: publish rider dispatch with pickup eta"
 **Files:**
 - Modify: `src/pages/rider/dashboard.astro`
 - Modify: `src/pages/api/rider/orders.ts`
-- Test: `src/lib/rider-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
 
 - [ ] **Step 1: 先加 rider 过滤测试，锁定只显示待抢单**
 
@@ -522,7 +522,7 @@ test('filterRiderActiveOrders keeps awaiting_courier and delivering cards in act
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL with missing export `filterRiderActiveOrders`.
 
 - [ ] **Step 3: 在 helper 中补 rider 过滤实现**
@@ -606,7 +606,7 @@ window.takeOrder = async function(id) {
 
 - [ ] **Step 6: 跑测试与 build**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS
 
 Run: `pnpm build`
@@ -625,7 +625,7 @@ git commit -m "feat: show awaiting courier orders to riders"
 - Modify: `src/scripts/admin/orders.ts`
 - Modify: `src/scripts/admin/order-actions.ts`
 - Modify: `src/pages/api/rider/status.ts`
-- Test: `src/lib/rider-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
 
 - [ ] **Step 1: 先写 available rider 列表与 reminder action 测试**
 
@@ -652,7 +652,7 @@ test('buildReminderPayload increments reminder count and stamp', () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL with missing exports.
 
 - [ ] **Step 3: 在 helper 中补实现**
@@ -717,7 +717,7 @@ export const GET: APIRoute = async ({ url }) => {
 
 - [ ] **Step 6: 跑测试与 build**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS
 
 Run: `pnpm build`
@@ -734,9 +734,9 @@ git commit -m "feat: add rider reminder and contact actions"
 
 **Files:**
 - Create: `src/lib/telegram-dispatch.ts`
-- Create: `src/lib/telegram-dispatch.test.ts`
+- Create: `src/lib/telegram-dispatch-spec.ts`
 - Modify: `src/pages/api/admin/rider-dispatch.ts`
-- Test: `src/lib/telegram-dispatch.test.ts`
+- Test: `src/lib/telegram-dispatch-spec.ts`
 
 - [ ] **Step 1: 先写 Telegram 消息构造测试**
 
@@ -769,7 +769,7 @@ test('buildTelegramDispatchMessage includes eta and action labels', () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `node --test src/lib/telegram-dispatch.test.ts`
+Run: `node --test src/lib/telegram-dispatch-spec.ts`
 Expected: FAIL because `src/lib/telegram-dispatch.ts` does not exist.
 
 - [ ] **Step 3: 写最小 Telegram 深链接实现**
@@ -843,7 +843,7 @@ async function notifyTelegramRecipients(order: any, riders: Array<{ telegram_cha
 
 - [ ] **Step 5: 跑 Telegram 单测与 build**
 
-Run: `node --test src/lib/telegram-dispatch.test.ts`
+Run: `node --test src/lib/telegram-dispatch-spec.ts`
 Expected: PASS
 
 Run: `pnpm build`
@@ -852,7 +852,7 @@ Expected: PASS and no type/import errors from Telegram adapter wiring.
 - [ ] **Step 6: 提交这一小步**
 
 ```bash
-git add src/lib/telegram-dispatch.ts src/lib/telegram-dispatch.test.ts src/pages/api/admin/rider-dispatch.ts
+git add src/lib/telegram-dispatch.ts src/lib/telegram-dispatch-spec.ts src/pages/api/admin/rider-dispatch.ts
 git commit -m "feat: send rider dispatch telegram deep links"
 ```
 
@@ -862,7 +862,7 @@ git commit -m "feat: send rider dispatch telegram deep links"
 - Modify: `src/lib/telegram-dispatch.ts`
 - Create: `src/pages/api/telegram/rider-claim.ts`
 - Modify: `src/pages/rider/dashboard.astro`
-- Test: `src/lib/telegram-dispatch.test.ts`
+- Test: `src/lib/telegram-dispatch-spec.ts`
 
 - [ ] **Step 1: 先写 callback payload 测试，固定第二阶段按钮格式**
 
@@ -877,7 +877,7 @@ test('telegram claim callback round-trips order and rider identity', () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `node --test src/lib/telegram-dispatch.test.ts`
+Run: `node --test src/lib/telegram-dispatch-spec.ts`
 Expected: FAIL with missing callback helpers.
 
 - [ ] **Step 3: 在 Telegram helper 中增加 callback 编解码与按钮**
@@ -954,7 +954,7 @@ if (deepLinkOrderId) {
 
 - [ ] **Step 6: 跑测试与 build**
 
-Run: `node --test src/lib/telegram-dispatch.test.ts`
+Run: `node --test src/lib/telegram-dispatch-spec.ts`
 Expected: PASS
 
 Run: `pnpm build`
@@ -963,7 +963,7 @@ Expected: PASS and new Telegram claim API compiles.
 - [ ] **Step 7: 提交这一小步**
 
 ```bash
-git add src/lib/telegram-dispatch.ts src/lib/telegram-dispatch.test.ts src/pages/api/telegram/rider-claim.ts src/pages/rider/dashboard.astro
+git add src/lib/telegram-dispatch.ts src/lib/telegram-dispatch-spec.ts src/pages/api/telegram/rider-claim.ts src/pages/rider/dashboard.astro
 git commit -m "feat: support telegram rider claim callbacks"
 ```
 
@@ -971,12 +971,12 @@ git commit -m "feat: support telegram rider claim callbacks"
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-03-29-rider-pickup-eta-and-notifications-design.md`（仅当实现中发现必须回写的设计差异时）
-- Test: `src/lib/rider-dispatch.test.ts`
-- Test: `src/lib/telegram-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
+- Test: `src/lib/telegram-dispatch-spec.ts`
 
 - [ ] **Step 1: 跑 dispatch 与 Telegram 单测**
 
-Run: `node --test src/lib/rider-dispatch.test.ts src/lib/telegram-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts src/lib/telegram-dispatch-spec.ts`
 Expected: PASS
 
 - [ ] **Step 2: 跑项目构建**
@@ -1007,7 +1007,7 @@ Expected: 所有状态流转符合 spec；Telegram 失败不阻断 admin 发布�
 - [ ] **Step 5: 最终提交**
 
 ```bash
-git add src/types/index.ts src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts src/lib/telegram-dispatch.ts src/lib/telegram-dispatch.test.ts src/pages/admin/[slug]/index.astro src/components/admin/TabOrders.astro src/scripts/admin/order-actions.ts src/scripts/admin/orders.ts src/pages/api/admin/rider-dispatch.ts src/pages/api/rider/orders.ts src/pages/api/rider/status.ts src/pages/rider/dashboard.astro src/pages/api/telegram/rider-claim.ts
+git add src/types/index.ts src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts src/lib/telegram-dispatch.ts src/lib/telegram-dispatch-spec.ts src/pages/admin/[slug]/index.astro src/components/admin/TabOrders.astro src/scripts/admin/order-actions.ts src/scripts/admin/orders.ts src/pages/api/admin/rider-dispatch.ts src/pages/api/rider/orders.ts src/pages/api/rider/status.ts src/pages/rider/dashboard.astro src/pages/api/telegram/rider-claim.ts
 git commit -m "feat: add rider pickup eta dispatch flow"
 ```
 

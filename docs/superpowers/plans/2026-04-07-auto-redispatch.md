@@ -14,17 +14,17 @@
 
 - Modify: `src/lib/rider-dispatch.ts`
   - 扩展 `DispatchMeta` 与当前轮/失效判断 helper
-- Modify: `src/lib/rider-dispatch.test.ts`
+- Modify: `src/lib/rider-dispatch-spec.ts`
   - 锁定当前轮有效性、超时、改派、失效文案判断
 - Modify: `src/lib/rider-assignment.ts`
   - 支持按失效骑手集合选择下一个骑手
 - Modify: `src/pages/api/telegram/rider-claim.ts`
   - 在接单/拒单前校验当前轮是否有效；拒单时触发自动续派
-- Modify: `src/tests/pages/api/telegram-rider-claim.test.ts`
+- Modify: `src/lib/telegram-rider-claim-route-spec.ts`
   - 锁定失效 callback、拒单立即续派、新骑手可接单
 - Modify: `src/pages/api/admin/rider-dispatch.ts`
   - 收口首次派单、手动改派、超时续派到统一当前轮逻辑
-- Modify: `src/tests/pages/api/admin-rider-dispatch.test.ts`
+- Modify: `src/lib/admin-rider-dispatch-route-spec.ts`
   - 锁定首次派单、改派、超时续派、无候选骑手场景
 - Modify: `src/pages/rider/dashboard.astro`
   - 用共享 helper 显示接单/暂不接单/送餐完成/已改派/接单超时
@@ -41,7 +41,7 @@
 
 **Files:**
 - Modify: `src/lib/rider-dispatch.ts`
-- Test: `src/lib/rider-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -103,7 +103,7 @@ test('filterAvailableRidersForOrder excludes invalidated riders from current ord
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL，提示 `getRiderDispatchState` 未定义或 `DispatchMeta` 断言不满足。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -176,13 +176,13 @@ export function filterAvailableRidersForOrder<T extends Pick<Rider, 'id' | 'name
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS，现有 rider dispatch 相关断言保持通过。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts
+git add src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts
 git commit -m "feat: track current rider dispatch round"
 ```
 
@@ -271,7 +271,7 @@ git commit -m "feat: add auto redispatch config"
 **Files:**
 - Modify: `src/pages/api/telegram/rider-claim.ts`
 - Modify: `src/lib/rider-dispatch.ts`
-- Test: `src/tests/pages/api/telegram-rider-claim.test.ts`
+- Test: `src/lib/telegram-rider-claim-route-spec.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -369,7 +369,7 @@ test('POST rider-claim decline immediately republishes order to next rider', asy
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/tests/pages/api/telegram-rider-claim.test.ts`
+Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: FAIL，提示当前 callback 仍然允许旧骑手接单，或拒单后未触发续派。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -434,13 +434,13 @@ if (callback.action === 'decline') {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/tests/pages/api/telegram-rider-claim.test.ts`
+Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: PASS，旧骑手 callback 被拒，拒单后会立即续派下一个。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pages/api/telegram/rider-claim.ts src/lib/rider-dispatch.ts src/tests/pages/api/telegram-rider-claim.test.ts
+git add src/pages/api/telegram/rider-claim.ts src/lib/rider-dispatch.ts src/lib/telegram-rider-claim-route-spec.ts
 git commit -m "feat: invalidate stale telegram rider claims"
 ```
 
@@ -450,7 +450,7 @@ git commit -m "feat: invalidate stale telegram rider claims"
 - Modify: `src/pages/api/admin/rider-dispatch.ts`
 - Modify: `src/lib/rider-assignment.ts`
 - Modify: `src/lib/rider-dispatch.ts`
-- Test: `src/tests/pages/api/admin-rider-dispatch.test.ts`
+- Test: `src/lib/admin-rider-dispatch-route-spec.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -548,7 +548,7 @@ test('POST rider-dispatch republish_on_timeout picks next rider and preserves aw
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/tests/pages/api/admin-rider-dispatch.test.ts`
+Run: `node --test src/lib/admin-rider-dispatch-route-spec.ts`
 Expected: FAIL，提示 publish 未写当前轮 meta，或超时续派动作不存在。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -638,13 +638,13 @@ if (action === 'publish' || action === 'republish_on_timeout') {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/tests/pages/api/admin-rider-dispatch.test.ts`
+Run: `node --test src/lib/admin-rider-dispatch-route-spec.ts`
 Expected: PASS，首次派单/改派/超时续派都写入当前轮元数据，且只给当前有效骑手发消息。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pages/api/admin/rider-dispatch.ts src/lib/rider-assignment.ts src/lib/rider-dispatch.ts src/tests/pages/api/admin-rider-dispatch.test.ts
+git add src/pages/api/admin/rider-dispatch.ts src/lib/rider-assignment.ts src/lib/rider-dispatch.ts src/lib/admin-rider-dispatch-route-spec.ts
 git commit -m "feat: unify admin redispatch flow"
 ```
 
@@ -748,26 +748,26 @@ git commit -m "feat: show invalidated rider dispatch state"
 ### Task 6: 跑自动续派聚焦回归
 
 **Files:**
-- Test: `src/lib/rider-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
 - Test: `src/config.test.ts`
 - Test: `src/lib/rider-assignment.test.ts`
-- Test: `src/tests/pages/api/telegram-rider-claim.test.ts`
-- Test: `src/tests/pages/api/admin-rider-dispatch.test.ts`
+- Test: `src/lib/telegram-rider-claim-route-spec.ts`
+- Test: `src/lib/admin-rider-dispatch-route-spec.ts`
 - Test: `src/tests/pages/rider-dashboard-canonical.test.ts`
 
 - [ ] **Step 1: Run shared helper and config tests**
 
-Run: `node --test src/lib/rider-dispatch.test.ts src/config.test.ts src/lib/rider-assignment.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts src/config.test.ts src/lib/rider-assignment.test.ts`
 Expected: PASS
 
 - [ ] **Step 2: Run Telegram callback regression**
 
-Run: `node --test src/tests/pages/api/telegram-rider-claim.test.ts`
+Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: PASS
 
 - [ ] **Step 3: Run admin redispatch regression**
 
-Run: `node --test src/tests/pages/api/admin-rider-dispatch.test.ts`
+Run: `node --test src/lib/admin-rider-dispatch-route-spec.ts`
 Expected: PASS
 
 - [ ] **Step 4: Run rider dashboard regression**
@@ -778,6 +778,6 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/rider-dispatch.test.ts src/config.test.ts src/lib/rider-assignment.test.ts src/tests/pages/api/telegram-rider-claim.test.ts src/tests/pages/api/admin-rider-dispatch.test.ts src/tests/pages/rider-dashboard-canonical.test.ts
+git add src/lib/rider-dispatch-spec.ts src/config.test.ts src/lib/rider-assignment.test.ts src/lib/telegram-rider-claim-route-spec.ts src/lib/admin-rider-dispatch-route-spec.ts src/tests/pages/rider-dashboard-canonical.test.ts
 git commit -m "test: verify auto redispatch flow"
 ```

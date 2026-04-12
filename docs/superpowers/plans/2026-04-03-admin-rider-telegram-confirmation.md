@@ -451,12 +451,12 @@ git commit -m "fix: clarify admin rider confirmation status copy"
 - Test: `src/tests/pages/master/master-dispatch-ui.test.ts`
 - Test: `src/tests/pages/admin/admin-order-status-copy.test.ts`
 - Test: `src/tests/pages/api/admin-rider-assign.test.ts`
-- Test: `src/tests/pages/api/admin-rider-dispatch.test.ts`
-- Test: `src/tests/pages/api/telegram-rider-claim.test.ts`
+- Test: `src/lib/admin-rider-dispatch-route-spec.ts`
+- Test: `src/lib/telegram-rider-claim-route-spec.ts`
 
 - [ ] **Step 1: Run focused regression suite**
 
-Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/pages/api/admin/rider-telegram-test.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/scripts/admin/settings-ui.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/master/master-dispatch-ui.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/admin/admin-order-status-copy.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/admin-rider-assign.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/admin-rider-dispatch.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/telegram-rider-claim.test.ts"`
+Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/pages/api/admin/rider-telegram-test.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/scripts/admin/settings-ui.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/master/master-dispatch-ui.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/admin/admin-order-status-copy.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/admin-rider-assign.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/lib/admin-rider-dispatch-route-spec.ts" "D:/ai/food/.worktrees/260311/food2astro/src/lib/telegram-rider-claim-route-spec.ts"`
 Expected: PASS.
 
 - [ ] **Step 2: Manual verification checklist**

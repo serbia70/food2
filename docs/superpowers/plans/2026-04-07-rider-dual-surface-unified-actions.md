@@ -14,15 +14,15 @@
 
 - Modify: `src/lib/rider-dispatch.ts`
   - 收口统一状态文案、双端动作判断、rider 侧按钮可见性 helper
-- Modify: `src/lib/rider-dispatch.test.ts`
+- Modify: `src/lib/rider-dispatch-spec.ts`
   - 为统一文案与动作规则补共享红灯
 - Modify: `src/lib/telegram-dispatch.ts`
   - 为 Telegram 阶段 1/阶段 2 消息构建补统一按钮逻辑
-- Modify: `src/lib/telegram-dispatch.test.ts`
+- Modify: `src/lib/telegram-dispatch-spec.ts`
   - 锁定 Telegram 初始消息与接单后完成消息结构
 - Modify: `src/pages/api/telegram/rider-claim.ts`
   - 接单成功后触发“配送中 / 送餐完成”消息；拒单继续沿用现有反馈持久化
-- Modify: `src/tests/pages/api/telegram-rider-claim.test.ts`
+- Modify: `src/lib/telegram-rider-claim-route-spec.ts`
   - 锁定接单、拒单、完成消息链路
 - Modify: `src/pages/rider/dashboard.astro`
   - 使用共享动作规则展示待接单池 / 我的配送，补“暂不接单”按钮，并做简洁商务风重排
@@ -43,7 +43,7 @@
 
 **Files:**
 - Modify: `src/lib/rider-dispatch.ts`
-- Test: `src/lib/rider-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -69,7 +69,7 @@ test('dispatch copy and action visibility stay unified across rider/admin surfac
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL，提示 `getRiderActionFlags` 未定义或断言不满足。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -93,13 +93,13 @@ export function getRiderActionFlags(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS，且已有 rider-dispatch 相关断言保持通过。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts
+git add src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts
 git commit -m "feat: unify rider dispatch action rules"
 ```
 
@@ -107,7 +107,7 @@ git commit -m "feat: unify rider dispatch action rules"
 
 **Files:**
 - Modify: `src/lib/telegram-dispatch.ts`
-- Test: `src/lib/telegram-dispatch.test.ts`
+- Test: `src/lib/telegram-dispatch-spec.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -149,7 +149,7 @@ test('buildRiderDeliveryCompleteTelegramMessage renders complete button for deli
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/telegram-dispatch.test.ts`
+Run: `node --test src/lib/telegram-dispatch-spec.ts`
 Expected: FAIL，提示新函数不存在或按钮文案不匹配。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -187,13 +187,13 @@ export function buildRiderDeliveryCompleteTelegramMessage(input: {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/telegram-dispatch.test.ts`
+Run: `node --test src/lib/telegram-dispatch-spec.ts`
 Expected: PASS，消息按钮改为统一中文文案。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/telegram-dispatch.ts src/lib/telegram-dispatch.test.ts
+git add src/lib/telegram-dispatch.ts src/lib/telegram-dispatch-spec.ts
 git commit -m "feat: unify telegram rider action messages"
 ```
 
@@ -201,7 +201,7 @@ git commit -m "feat: unify telegram rider action messages"
 
 **Files:**
 - Modify: `src/pages/api/telegram/rider-claim.ts`
-- Test: `src/tests/pages/api/telegram-rider-claim.test.ts`
+- Test: `src/lib/telegram-rider-claim-route-spec.ts`
 - Modify: `src/lib/telegram-dispatch.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -230,7 +230,7 @@ test('POST rider-claim sends delivery-complete telegram message after accept suc
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/tests/pages/api/telegram-rider-claim.test.ts`
+Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: FAIL，提示未发送完成消息。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -253,13 +253,13 @@ if (upstream.ok) {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/tests/pages/api/telegram-rider-claim.test.ts`
+Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: PASS，接单后新增完成消息链路通过；既有拒单 / 接单测试不回归。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pages/api/telegram/rider-claim.ts src/tests/pages/api/telegram-rider-claim.test.ts src/lib/telegram-dispatch.ts
+git add src/pages/api/telegram/rider-claim.ts src/lib/telegram-rider-claim-route-spec.ts src/lib/telegram-dispatch.ts
 git commit -m "feat: send telegram completion action after rider accepts"
 ```
 
@@ -268,7 +268,7 @@ git commit -m "feat: send telegram completion action after rider accepts"
 **Files:**
 - Modify: `src/lib/telegram-dispatch.ts`
 - Modify: `src/pages/api/telegram/rider-claim.ts`
-- Test: `src/tests/pages/api/telegram-rider-claim.test.ts`
+- Test: `src/lib/telegram-rider-claim-route-spec.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -309,7 +309,7 @@ test('POST rider-claim completes delivering order when complete callback is vali
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/tests/pages/api/telegram-rider-claim.test.ts`
+Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: FAIL，说明 callback action 未支持 `complete`。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -335,13 +335,13 @@ if (callback.action === 'complete') {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/tests/pages/api/telegram-rider-claim.test.ts`
+Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: PASS，`complete` callback 能推进到 `completed`。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/telegram-dispatch.ts src/pages/api/telegram/rider-claim.ts src/tests/pages/api/telegram-rider-claim.test.ts
+git add src/lib/telegram-dispatch.ts src/pages/api/telegram/rider-claim.ts src/lib/telegram-rider-claim-route-spec.ts
 git commit -m "feat: support telegram completion callback"
 ```
 
@@ -523,21 +523,21 @@ git commit -m "refactor: unify admin dispatch copy"
 ### Task 8: 跑聚焦回归验证整条链路
 
 **Files:**
-- Test: `src/lib/rider-dispatch.test.ts`
-- Test: `src/lib/telegram-dispatch.test.ts`
-- Test: `src/tests/pages/api/telegram-rider-claim.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
+- Test: `src/lib/telegram-dispatch-spec.ts`
+- Test: `src/lib/telegram-rider-claim-route-spec.ts`
 - Test: `src/tests/pages/rider-dashboard-canonical.test.ts`
 - Test: `src/tests/pages/admin/tab-orders-rider-feedback.test.ts`
 - Test: `src/tests/pages/admin/tab-tables-rider-status-copy.test.ts`
 
 - [ ] **Step 1: Run shared helper tests**
 
-Run: `node --test src/lib/rider-dispatch.test.ts src/lib/telegram-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts src/lib/telegram-dispatch-spec.ts`
 Expected: PASS
 
 - [ ] **Step 2: Run Telegram callback regression**
 
-Run: `node --test src/tests/pages/api/telegram-rider-claim.test.ts`
+Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: PASS
 
 - [ ] **Step 3: Run rider dashboard regression**
@@ -553,6 +553,6 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/rider-dispatch.test.ts src/lib/telegram-dispatch.test.ts src/tests/pages/api/telegram-rider-claim.test.ts src/tests/pages/rider-dashboard-canonical.test.ts src/tests/pages/admin/tab-orders-rider-feedback.test.ts src/tests/pages/admin/tab-tables-rider-status-copy.test.ts
+git add src/lib/rider-dispatch-spec.ts src/lib/telegram-dispatch-spec.ts src/lib/telegram-rider-claim-route-spec.ts src/tests/pages/rider-dashboard-canonical.test.ts src/tests/pages/admin/tab-orders-rider-feedback.test.ts src/tests/pages/admin/tab-tables-rider-status-copy.test.ts
 git commit -m "test: verify unified rider dispatch flow"
 ```

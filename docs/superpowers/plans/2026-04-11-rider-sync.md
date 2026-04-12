@@ -14,7 +14,7 @@
 
 - Modify: `src/lib/rider-dispatch.ts`
   - 扩展共享动作判定、统一状态文案、统一骑手展示字段与地图链接解析。
-- Modify: `src/lib/rider-dispatch.test.ts`
+- Modify: `src/lib/rider-dispatch-spec.ts`
   - 为共享动作判定、snake_case 数据兼容、共享展示字段补红灯。
 - Modify: `src/lib/telegram-dispatch.ts`
   - 复用共享展示字段生成 Telegram 各阶段消息，补店铺名与地图链接。
@@ -43,7 +43,7 @@
 
 **Files:**
 - Modify: `src/lib/rider-dispatch.ts`
-- Test: `src/lib/rider-dispatch.test.ts`
+- Test: `src/lib/rider-dispatch-spec.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -101,7 +101,7 @@ test('getRiderActionFlags and dispatch state stay aligned for picked_up orders',
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL，提示 `buildRiderOrderView` 未定义，或 `picked_up` 文案仍不是 `配送中`。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -153,13 +153,13 @@ export function getAdminDispatchStatusCopy(status: string | null | undefined): s
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS，且现有 snake_case 回归测试仍通过。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts
+git add src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts
 git commit -m "feat: unify rider dispatch state helpers"
 ```
 
@@ -440,7 +440,7 @@ test('dashboard script calls rider action route instead of update_status and ren
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL，页面里还在调用 `/api/order/update_status`，也还在前端手拼 `buildDispatchMetaRemarks(...)`。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -484,7 +484,7 @@ async function submitRiderAction(action, orderId) {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS，页面源码不再包含 `/api/order/update_status` 与 `buildDispatchMetaRemarks(`，且出现摘要区关键文案。
 
 - [ ] **Step 5: Commit**
@@ -522,7 +522,7 @@ test('shared rider order view prefers explicit shop map url before falling back 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/rider-dispatch.test.ts && node --test src/lib/telegram-rider-claim-route-spec.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts && node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: FAIL，地图来源仍分散，admin 派单消息没有统一共享字段。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -551,7 +551,7 @@ const riderView = buildRiderOrderView({
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/rider-dispatch.test.ts && node --test src/lib/telegram-rider-claim-route-spec.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts && node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: PASS，显式地图链接被优先使用；Telegram 待接单消息与阶段消息都能带店铺名。
 
 - [ ] **Step 5: Commit**
@@ -581,7 +581,7 @@ test('admin order list uses 配送中 and 已完成 as primary rider states', as
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL，当前 helper 仍返回 `骑手已接单 / 骑手已取餐`。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -616,13 +616,13 @@ export function getAdminDispatchStatusCopy(status: string | null | undefined): s
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS，状态 helper 输出统一为 `待骑手接单 / 配送中 / 已完成`。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/components/admin/TabOrders.astro src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts
+git add src/components/admin/TabOrders.astro src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts
 git commit -m "refactor: align admin rider status copy"
 ```
 
@@ -647,7 +647,7 @@ test('dashboard source no longer contains guessed rider-side dispatch meta write
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/rider-dispatch.test.ts && node --test src/lib/telegram-rider-claim-route-spec.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts && node --test src/lib/telegram-rider-claim-route-spec.ts`
 Expected: FAIL，页面源码里仍含旧直调逻辑或旧变量名。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -667,7 +667,7 @@ Expected: FAIL，页面源码里仍含旧直调逻辑或旧变量名。
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/rider-dispatch.test.ts && node --test src/lib/telegram-rider-claim-route-spec.ts && pnpm build`
+Run: `node --test src/lib/rider-dispatch-spec.ts && node --test src/lib/telegram-rider-claim-route-spec.ts && pnpm build`
 Expected: 全部 PASS，且 `pnpm build` 成功，无新增类型错误。
 
 - [ ] **Step 5: Commit**

@@ -18,7 +18,7 @@
   - 补一个适用于 admin 指派消息的构造函数，输出文本 + `replyMarkup`
 - Modify: `src/tests/pages/api/admin-rider-assign.test.ts`
   - 锁定指派消息内容、按钮 payload、失败透出
-- Modify: `src/tests/pages/api/telegram-rider-claim.test.ts`
+- Modify: `src/lib/telegram-rider-claim-route-spec.ts`
   - 锁定点击按钮后状态更新仍为 `delivering`
 - Modify: `src/components/admin/TabTables.astro`
   - 仅当需要时收紧 `awaiting_courier` / `delivering` 的显示文案与骑手回显
@@ -248,12 +248,12 @@ EOF
 ## Task 2: 锁定 Telegram 接单后仍更新为 delivering
 
 **Files:**
-- Modify: `src/tests/pages/api/telegram-rider-claim.test.ts`
+- Modify: `src/lib/telegram-rider-claim-route-spec.ts`
 - Modify: `src/pages/api/telegram/rider-claim.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-在 `src/tests/pages/api/telegram-rider-claim.test.ts` 追加：
+在 `src/lib/telegram-rider-claim-route-spec.ts` 追加：
 
 ```ts
 test('POST rider-claim updates order to delivering with courier info from signed callback', async () => {
@@ -306,7 +306,7 @@ test('POST rider-claim updates order to delivering with courier info from signed
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/telegram-rider-claim.test.ts"`
+Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/lib/telegram-rider-claim-route-spec.ts"`
 Expected: 若当前实现或测试覆盖不足，应先 FAIL；若直接 PASS，则补下一步源断言确认当前实现被锁住。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -330,13 +330,13 @@ test('rider-claim source keeps awaiting_courier to delivering transition for tel
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/telegram-rider-claim.test.ts"`
+Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/lib/telegram-rider-claim-route-spec.ts"`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/tests/pages/api/telegram-rider-claim.test.ts src/pages/api/telegram/rider-claim.ts && git commit -m "$(cat <<'EOF'
+git add src/lib/telegram-rider-claim-route-spec.ts src/pages/api/telegram/rider-claim.ts && git commit -m "$(cat <<'EOF'
 test: lock telegram rider claim transition
 EOF
 )"
@@ -406,15 +406,15 @@ EOF
 
 **Files:**
 - Test: `src/tests/pages/api/admin-rider-assign.test.ts`
-- Test: `src/tests/pages/api/telegram-rider-claim.test.ts`
+- Test: `src/lib/telegram-rider-claim-route-spec.ts`
 - Test: `src/tests/pages/master/master-dispatch-ui.test.ts`
-- Test: `src/tests/pages/api/admin-rider-dispatch.test.ts`
+- Test: `src/lib/admin-rider-dispatch-route-spec.ts`
 - Test: `src/tests/pages/api/telegram-send.test.ts`
 - Test: `src/tests/pages/api/rider-status.test.ts`
 
 - [ ] **Step 1: Run focused regression suite**
 
-Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/admin-rider-assign.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/telegram-rider-claim.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/master/master-dispatch-ui.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/admin-rider-dispatch.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/telegram-send.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/rider-status.test.ts"`
+Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/admin-rider-assign.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/lib/telegram-rider-claim-route-spec.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/master/master-dispatch-ui.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/lib/admin-rider-dispatch-route-spec.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/telegram-send.test.ts" "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/rider-status.test.ts"`
 Expected: PASS.
 
 - [ ] **Step 2: Manual verification checklist**
@@ -433,7 +433,7 @@ Run these checks in dev:
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/pages/api/admin/rider-assign.ts src/lib/telegram-dispatch.ts src/tests/pages/api/admin-rider-assign.test.ts src/tests/pages/api/telegram-rider-claim.test.ts src/components/admin/TabTables.astro src/tests/pages/master/master-dispatch-ui.test.ts && git commit -m "$(cat <<'EOF'
+git add src/pages/api/admin/rider-assign.ts src/lib/telegram-dispatch.ts src/tests/pages/api/admin-rider-assign.test.ts src/lib/telegram-rider-claim-route-spec.ts src/components/admin/TabTables.astro src/tests/pages/master/master-dispatch-ui.test.ts && git commit -m "$(cat <<'EOF'
 feat: add telegram rider claim message for admin assign
 EOF
 )"

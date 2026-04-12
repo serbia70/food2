@@ -25,7 +25,7 @@
 - `src/pages/api/admin/rider-dispatch.ts`
   - 继续保留广播/提醒
   - 明确只负责 `awaiting_courier` 与 Telegram 广播，不承担最终归属
-- `src/tests/pages/api/admin-rider-dispatch.test.ts`
+- `src/lib/admin-rider-dispatch-route-spec.ts`
   - 扩充广播语义测试，锁住“广播成功但部分通知失败不回滚”
 - `src/components/admin/TabTables.astro`
   - 为外卖卡片保留 `指派骑手 / 自动派单` 按钮与已归属显示
@@ -936,7 +936,7 @@ EOF
 
 **Files:**
 - Modify: `src/pages/api/admin/rider-dispatch.ts`
-- Modify: `src/tests/pages/api/admin-rider-dispatch.test.ts`
+- Modify: `src/lib/admin-rider-dispatch-route-spec.ts`
 - Verify: `src/tests/pages/api/admin-rider-assign.test.ts`
 - Verify: `src/tests/pages/rider-dashboard-canonical.test.ts`
 - Verify: `src/tests/pages/master/master-dispatch-ui.test.ts`
@@ -944,7 +944,7 @@ EOF
 
 - [ ] **Step 1: Write the failing broadcast test**
 
-在 `src/tests/pages/api/admin-rider-dispatch.test.ts` 追加下面测试，锁住“广播成功但无最终归属”语义：
+在 `src/lib/admin-rider-dispatch-route-spec.ts` 追加下面测试，锁住“广播成功但无最终归属”语义：
 
 ```ts
 test('publish updates order into awaiting_courier without courier assignment fields', async () => {
@@ -1002,7 +1002,7 @@ test('publish updates order into awaiting_courier without courier assignment fie
 
 - [ ] **Step 2: Run focused tests to verify current failures**
 
-Run: `node --test src/tests/pages/api/admin-rider-dispatch.test.ts src/tests/pages/api/admin-rider-assign.test.ts src/tests/pages/rider-dashboard-canonical.test.ts src/tests/pages/master/master-dispatch-ui.test.ts src/tests/pages/master/dine-in-panel-routing.test.ts`
+Run: `node --test src/lib/admin-rider-dispatch-route-spec.ts src/tests/pages/api/admin-rider-assign.test.ts src/tests/pages/rider-dashboard-canonical.test.ts src/tests/pages/master/master-dispatch-ui.test.ts src/tests/pages/master/dine-in-panel-routing.test.ts`
 
 Expected: 至少首个新加广播测试 FAIL；如果前面任务还未实施完，这里也会一起暴露 assign / rider / master 相关缺口。
 
@@ -1025,7 +1025,7 @@ const updatePayload = {
 
 - [ ] **Step 4: Run the full focused regression set**
 
-Run: `node --test src/tests/pages/api/admin-rider-dispatch.test.ts src/tests/pages/api/admin-rider-assign.test.ts src/tests/pages/rider-dashboard-canonical.test.ts src/tests/pages/master/master-dispatch-ui.test.ts src/tests/pages/master/dine-in-panel-routing.test.ts src/scripts/admin/orders.test.ts src/lib/rider-assignment.test.ts`
+Run: `node --test src/lib/admin-rider-dispatch-route-spec.ts src/tests/pages/api/admin-rider-assign.test.ts src/tests/pages/rider-dashboard-canonical.test.ts src/tests/pages/master/master-dispatch-ui.test.ts src/tests/pages/master/dine-in-panel-routing.test.ts src/scripts/admin/orders.test.ts src/lib/rider-assignment.test.ts`
 
 Expected: PASS；广播、assign API、rider 页面、master 复用与 admin UI/脚本层全部通过。
 
@@ -1040,7 +1040,7 @@ Expected: PASS；Astro 页面、API 路由与客户端脚本构建通过。
 如果本任务为了修正回归有代码变更，再创建收尾提交；若只有测试验证且工作树干净，则跳过提交。需要提交时使用：
 
 ```bash
-git add src/pages/api/admin/rider-dispatch.ts src/tests/pages/api/admin-rider-dispatch.test.ts && git commit -m "$(cat <<'EOF'
+git add src/pages/api/admin/rider-dispatch.ts src/lib/admin-rider-dispatch-route-spec.ts && git commit -m "$(cat <<'EOF'
 fix: finalize admin-first dispatch flow
 EOF
 )"

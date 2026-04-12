@@ -211,7 +211,7 @@ test('delivery status helpers cover delivering, picked_up and completed consiste
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: FAIL，缺少 `picked_up` 文案 / tone / 动作规则。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -271,13 +271,13 @@ return {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/rider-dispatch.test.ts`
+Run: `node --test src/lib/rider-dispatch-spec.ts`
 Expected: PASS。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts
+git add src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts
 git commit -m "feat: unify delivery status helpers"
 ```
 
@@ -335,7 +335,7 @@ test('POST rider-claim sends picked_up follow-up message after accept succeeds',
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test src/lib/telegram-dispatch.test.ts src/tests/pages/api/telegram-rider-claim.test.ts`
+Run: `node --test src/lib/telegram-dispatch-spec.ts src/lib/telegram-rider-claim-route-spec.ts`
 Expected: FAIL，缺少 `buildRiderPickedUpTelegramMessage` 或 accept 后未发送“已取餐”阶段消息。
 
 - [ ] **Step 3: Write minimal implementation**
@@ -383,13 +383,13 @@ type TelegramClaimAction = 'accept' | 'decline' | 'picked_up' | 'complete';
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test src/lib/telegram-dispatch.test.ts src/tests/pages/api/telegram-rider-claim.test.ts`
+Run: `node --test src/lib/telegram-dispatch-spec.ts src/lib/telegram-rider-claim-route-spec.ts`
 Expected: PASS，且旧 accept/decline 测试仍通过。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/telegram-dispatch.ts src/lib/telegram-dispatch.test.ts src/pages/api/telegram/rider-claim.ts src/tests/pages/api/telegram-rider-claim.test.ts
+git add src/lib/telegram-dispatch.ts src/lib/telegram-dispatch-spec.ts src/pages/api/telegram/rider-claim.ts src/lib/telegram-rider-claim-route-spec.ts
 git commit -m "feat: add telegram delivery progress actions"
 ```
 
@@ -577,13 +577,13 @@ Expected: PASS。
 
 - [ ] **Step 5: Run focused regression suites**
 
-Run: `cd /d D:\ai\food\.worktrees\260311\foos2Go && go test ./internal/handlers -run "TestOrderUpdateStatus(SupportsPickedUpTransition|RejectsPickedUpWithoutDelivering)" && cd /d D:\ai\food\.worktrees\260311\food2astro && node --test src/lib/rider-dispatch.test.ts src/lib/telegram-dispatch.test.ts src/tests/pages/api/telegram-rider-claim.test.ts src/tests/pages/rider-dashboard-canonical.test.ts src/tests/pages/admin/tab-tables-rider-status-copy.test.ts && pnpm exec node --test src/components/UserCenterPanel.test.tsx`
+Run: `cd /d D:\ai\food\.worktrees\260311\foos2Go && go test ./internal/handlers -run "TestOrderUpdateStatus(SupportsPickedUpTransition|RejectsPickedUpWithoutDelivering)" && cd /d D:\ai\food\.worktrees\260311\food2astro && node --test src/lib/rider-dispatch-spec.ts src/lib/telegram-dispatch-spec.ts src/lib/telegram-rider-claim-route-spec.ts src/tests/pages/rider-dashboard-canonical.test.ts src/tests/pages/admin/tab-tables-rider-status-copy.test.ts && pnpm exec node --test src/components/UserCenterPanel.test.tsx`
 Expected: 全部 PASS。
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/components/UserCenterPanel.tsx src/components/UserCenterPanel.test.tsx D:/ai/food/.worktrees/260311/foos2Go/internal/handlers/order_status_flow_test.go src/lib/rider-dispatch.ts src/lib/rider-dispatch.test.ts src/lib/telegram-dispatch.ts src/lib/telegram-dispatch.test.ts src/pages/api/telegram/rider-claim.ts src/tests/pages/api/telegram-rider-claim.test.ts src/pages/rider/dashboard.astro src/tests/pages/rider-dashboard-canonical.test.ts src/components/admin/TabTables.astro src/tests/pages/admin/tab-tables-rider-status-copy.test.ts
+git add src/components/UserCenterPanel.tsx src/components/UserCenterPanel.test.tsx D:/ai/food/.worktrees/260311/foos2Go/internal/handlers/order_status_flow_test.go src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts src/lib/telegram-dispatch.ts src/lib/telegram-dispatch-spec.ts src/pages/api/telegram/rider-claim.ts src/lib/telegram-rider-claim-route-spec.ts src/pages/rider/dashboard.astro src/tests/pages/rider-dashboard-canonical.test.ts src/components/admin/TabTables.astro src/tests/pages/admin/tab-tables-rider-status-copy.test.ts
 
 git commit -m "feat: close rider delivery status loop"
 ```

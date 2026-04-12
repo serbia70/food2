@@ -246,7 +246,7 @@
   - 明确拆分待接单池与我的配送
 
 ### Existing tests to update
-- `src/tests/pages/api/admin-rider-dispatch.test.ts`
+- `src/lib/admin-rider-dispatch-route-spec.ts`
 - rider dashboard / rider status 相关测试
 - admin delivery cards 相关测试
 

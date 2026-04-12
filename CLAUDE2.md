@@ -11,7 +11,7 @@
 ## 2. 安全与测试
 本项目采用 Node 内置测试运行器进行安全门控：
 - 运行完整测试套件: `pnpm run test:security`
-- 运行单个测试: `node --test <路径>` (如 `src/lib/master-auth.test.ts`)
+- 运行单个测试: `node --test <路径>` (如 `src/lib/master-auth-spec.ts`)
 - **注意**: 部分安全测试需在 `pnpm build` 后才能通过。
 
 ## 2.1 Lint

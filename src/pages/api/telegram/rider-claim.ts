@@ -81,7 +81,8 @@ function isTrustedTelegramRequest(request: Request): boolean {
   return provided !== '' && safeEqualText(provided, expected);
 }
 
-function resolveTelegramClaimStage(action: TelegramClaimAction): 'picked_up' | 'completed' | null {
+function resolveTelegramClaimStage(action: TelegramClaimAction): 'delivering' | 'picked_up' | 'completed' | null {
+  if (action === 'accept') return 'delivering';
   if (action === 'picked_up') return 'picked_up';
   if (action === 'complete') return 'completed';
   return null;
@@ -94,7 +95,7 @@ async function editDeliveryProgressMessage(
   riderPhone: string,
   fallbackChatId: string,
   remarksJson: string,
-  targetStatus: 'picked_up' | 'completed',
+  targetStatus: 'delivering' | 'picked_up' | 'completed',
 ): Promise<void> {
   const meta = readDispatchMetaFromRemarks(remarksJson);
   const messageRef = meta.telegramMessageRef;
@@ -396,7 +397,9 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
         resolvedPhone,
         chatId,
         nextRemarksJson,
-        actionDecision.targetStatus === 'completed' ? 'completed' : 'picked_up',
+        actionDecision.targetStatus === 'completed'
+          ? 'completed'
+          : (actionDecision.targetStatus === 'picked_up' ? 'picked_up' : 'delivering'),
       );
     } catch {
       // 不阻断接单成功回包

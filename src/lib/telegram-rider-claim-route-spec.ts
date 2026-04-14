@@ -751,7 +751,7 @@ test('accept 失败时走共享错误出口并且不补发阶段消息', async (
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
 
-test('accept 成功时写回 dispatch_meta 保留当前骑手位', async (t) => {
+test('accept 成功时写回 dispatch_meta 保留当前骑手位，并把 Telegram 原消息切到待取餐', async (t) => {
   useTestEnv(t);
   const currentAssignedAt = new Date(Date.now() - 60_000).toISOString();
   const currentExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
@@ -760,6 +760,7 @@ test('accept 成功时写回 dispatch_meta 保留当前骑手位', async (t) => 
     currentExpiresAt,
     invalidatedRiderIds: ['303'],
     declinedRiderIds: ['404'],
+    telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
   });
   const calls = useMockFetch(t, createFetchHandler({
     status: 'awaiting_courier',
@@ -769,6 +770,7 @@ test('accept 成功时写回 dispatch_meta 保留当前骑手位', async (t) => 
   const response = await handleTelegramRiderClaim(createRequest(createCallback('accept', Date.now() + 60_000)));
   const body = await readJson(response);
   const remarksCall = calls.find((call) => call.url.endsWith('/api/admin/orders/remarks'));
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
@@ -786,5 +788,10 @@ test('accept 成功时写回 dispatch_meta 保留当前骑手位', async (t) => 
   assert.deepEqual(nextMeta.invalidatedRiderIds, ['303']);
   assert.equal(nextMeta.lastInvalidationReason, null);
   assert.deepEqual(nextMeta.declinedRiderIds, []);
+  assert.equal(telegramCalls.length, 1);
+  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
+  assert.match(telegramCalls[0]?.body || '', /状态：待取餐/);
+  assert.match(telegramCalls[0]?.body || '', /取餐/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /送达/);
 });
 

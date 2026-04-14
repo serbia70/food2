@@ -188,7 +188,7 @@ function createFetchHandler(
   };
 }
 
-test('accept 主链路先写 admin remarks 再 update_status', async (t) => {
+test('accept 主链路先写 admin remarks 再 update_status，并把 Telegram 原消息切到待取餐', async (t) => {
   useTestEnv(t);
   const currentAssignedAt = new Date(Date.now() - 60_000).toISOString();
   const currentExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
@@ -197,6 +197,7 @@ test('accept 主链路先写 admin remarks 再 update_status', async (t) => {
     currentExpiresAt,
     invalidatedRiderIds: ['303'],
     declinedRiderIds: ['404'],
+    telegramMessageRef: { chatId: '123456789', messageId: 7788 },
   });
   const calls = useMockFetch(t, createFetchHandler({
     status: 'awaiting_courier',
@@ -210,11 +211,13 @@ test('accept 主链路先写 admin remarks 再 update_status', async (t) => {
       riderId: String(TEST_RIDER_ID),
       riderName: TEST_RIDER_NAME,
       riderPhone: TEST_RIDER_PHONE,
+      shopSlug: 'real-shop',
     }),
   } as never);
   const body = await readJson(response);
   const remarksIndex = calls.findIndex((call) => call.url.endsWith('/api/admin/orders/remarks'));
   const updateIndex = calls.findIndex((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
@@ -242,6 +245,11 @@ test('accept 主链路先写 admin remarks 再 update_status', async (t) => {
   };
   assert.equal(updatePayload.expectedCurrentStatus, 'awaiting_courier');
   assert.equal(updatePayload.status, 'delivering');
+  assert.equal(telegramCalls.length, 1);
+  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
+  assert.match(telegramCalls[0]?.body || '', /状态：待取餐/);
+  assert.match(telegramCalls[0]?.body || '', /取餐/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /送达/);
 });
 
 test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达按钮', async (t) => {

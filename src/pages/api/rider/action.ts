@@ -216,6 +216,21 @@ export const POST: APIRoute = async ({ request }) => {
   });
   const text = await upstream.text();
 
+  if (action === 'accept') {
+    if (!upstream.ok) {
+      return buildUpstreamFailureResponse(upstream, text, { success: false, error: 'order_status_updated' });
+    }
+    try {
+      await syncTelegramRiderMessage(request, orderId, riderId, riderName, riderPhone, nextRemarksJson, 'delivering', fallbackShopSlug);
+    } catch {
+      // 不阻断主流程成功回包
+    }
+    return new Response(JSON.stringify({ success: true, action: 'accept' }), {
+      status: upstream.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   if (action === 'picked_up') {
     if (!upstream.ok) {
       return buildUpstreamFailureResponse(upstream, text, { success: false, error: 'order_status_updated' });

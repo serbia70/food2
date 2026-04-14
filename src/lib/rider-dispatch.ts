@@ -8,6 +8,11 @@ export interface DispatchDecisionMeta {
   at: string;
 }
 
+export interface DispatchTelegramMessageRef {
+  chatId: string;
+  messageId: number;
+}
+
 export interface DispatchMeta {
   lastRiderDecision: DispatchDecisionMeta | null;
   declinedRiderIds: string[];
@@ -16,6 +21,10 @@ export interface DispatchMeta {
   currentExpiresAt: string;
   invalidatedRiderIds: string[];
   lastInvalidationReason: 'declined' | 'timeout' | 'reassigned' | null;
+  acceptedAt: string;
+  pickedUpAt: string;
+  completedAt: string;
+  telegramMessageRef: DispatchTelegramMessageRef | null;
 }
 
 export type RiderOrderAction = 'accept' | 'decline' | 'picked_up' | 'complete';
@@ -33,15 +42,21 @@ export interface ResolveRiderOrderActionResult {
 
 const DISPATCH_META_PREFIX = 'dispatch_meta:';
 
-const EMPTY_DISPATCH_META: DispatchMeta = {
-  lastRiderDecision: null,
-  declinedRiderIds: [],
-  currentRiderId: '',
-  currentAssignedAt: '',
-  currentExpiresAt: '',
-  invalidatedRiderIds: [],
-  lastInvalidationReason: null,
-};
+function createEmptyDispatchMeta(): DispatchMeta {
+  return {
+    lastRiderDecision: null,
+    declinedRiderIds: [],
+    currentRiderId: '',
+    currentAssignedAt: '',
+    currentExpiresAt: '',
+    invalidatedRiderIds: [],
+    lastInvalidationReason: null,
+    acceptedAt: '',
+    pickedUpAt: '',
+    completedAt: '',
+    telegramMessageRef: null,
+  };
+}
 
 export function formatPickupEtaLabel(minutes: number | null | undefined): string {
   const value = Number(minutes || 0);
@@ -278,6 +293,20 @@ export function readDispatchMetaFromRemarks(remarksJson: string | null | undefin
 
       const currentAssignedAt = String(parsed.currentAssignedAt || '').trim();
       const currentExpiresAt = String(parsed.currentExpiresAt || '').trim();
+      const acceptedAt = String(parsed.acceptedAt || '').trim();
+      const pickedUpAt = String(parsed.pickedUpAt || '').trim();
+      const completedAt = String(parsed.completedAt || '').trim();
+      const rawTelegramMessageRef = parsed.telegramMessageRef && typeof parsed.telegramMessageRef === 'object'
+        ? parsed.telegramMessageRef
+        : null;
+      const telegramChatId = String(rawTelegramMessageRef?.chatId || '').trim();
+      const telegramMessageId = Number(rawTelegramMessageRef?.messageId || 0);
+      const telegramMessageRef = telegramChatId && telegramMessageId > 0
+        ? {
+            chatId: telegramChatId,
+            messageId: telegramMessageId,
+          }
+        : null;
 
       return {
         lastRiderDecision: last && last.riderId && last.riderName && last.riderPhone && last.at ? last : null,
@@ -291,13 +320,17 @@ export function readDispatchMetaFromRemarks(remarksJson: string | null | undefin
           ? parsed.invalidatedRiderIds.map((item) => String(item || '').trim()).filter(Boolean)
           : [],
         lastInvalidationReason,
+        acceptedAt: parseTimestamp(acceptedAt) > 0 ? acceptedAt : '',
+        pickedUpAt: parseTimestamp(pickedUpAt) > 0 ? pickedUpAt : '',
+        completedAt: parseTimestamp(completedAt) > 0 ? completedAt : '',
+        telegramMessageRef,
       };
     } catch {
       continue;
     }
   }
 
-  return { ...EMPTY_DISPATCH_META };
+  return createEmptyDispatchMeta();
 }
 
 export function buildDispatchMetaRemarks(
@@ -317,8 +350,7 @@ export function buildDispatchMetaRemarks(
   return filtered;
 }
 
-function hasDispatchMetaConstraints(remarksJson: string, meta: DispatchMeta): boolean {
-  if (remarksJson.includes(DISPATCH_META_PREFIX)) return true;
+function hasDispatchMetaConstraints(_remarksJson: string, meta: DispatchMeta): boolean {
   return !!(
     meta.lastRiderDecision
     || meta.declinedRiderIds.length > 0
@@ -419,6 +451,81 @@ export function getRiderDispatchState(
   };
 }
 
+export function resolveRiderUnifiedStatus(input: {
+  status?: string | null;
+  remarksJson?: string | null;
+  remarks_json?: string | null;
+  courierPhone?: string | null;
+  courier_phone?: string | null;
+}, rider: {
+  riderId?: string | null;
+  riderPhone?: string | null;
+  nowIso?: string;
+}): {
+  statusLabel: string;
+  primaryAction: string;
+  secondaryAction: string;
+  acceptedAt: string;
+  pickedUpAt: string;
+  completedAt: string;
+} {
+  const status = String(input.status || '').trim();
+  const remarksJson = readOrderRemarksJson(input);
+  const meta = readDispatchMetaFromRemarks(remarksJson);
+  const state = resolveRiderDashboardActionState({
+    order: {
+      status,
+      remarksJson,
+      courierPhone: readOrderCourierPhone(input),
+    },
+    riderId: rider.riderId,
+    riderPhone: rider.riderPhone,
+    nowIso: rider.nowIso,
+  });
+
+  if (status === 'awaiting_courier') {
+    return {
+      statusLabel: '待接单',
+      primaryAction: state.canAccept ? '接单' : '',
+      secondaryAction: state.canDecline ? '暂不接单' : '',
+      acceptedAt: meta.acceptedAt,
+      pickedUpAt: meta.pickedUpAt,
+      completedAt: meta.completedAt,
+    };
+  }
+
+  if (status === 'delivering') {
+    return {
+      statusLabel: '待取餐',
+      primaryAction: state.canPickUp ? '取餐' : '',
+      secondaryAction: '',
+      acceptedAt: meta.acceptedAt,
+      pickedUpAt: meta.pickedUpAt,
+      completedAt: meta.completedAt,
+    };
+  }
+
+  if (status === 'picked_up') {
+    return {
+      statusLabel: '配送中',
+      primaryAction: state.canComplete ? '送达' : '',
+      secondaryAction: '',
+      acceptedAt: meta.acceptedAt,
+      pickedUpAt: meta.pickedUpAt,
+      completedAt: meta.completedAt,
+    };
+  }
+
+  return {
+    statusLabel: '已送达',
+    primaryAction: '',
+    secondaryAction: '',
+    acceptedAt: meta.acceptedAt,
+    pickedUpAt: meta.pickedUpAt,
+    completedAt: meta.completedAt,
+  };
+}
+
 export function resolveRiderDashboardActionState(input: {
   order: {
     status?: string | null;
@@ -481,12 +588,21 @@ export function resolveRiderDashboardActionState(input: {
     nowIso,
   });
 
+  let invalidReason = '';
+  if (order.status === 'awaiting_courier') {
+    invalidReason = accept.allowed || decline.allowed ? '' : (accept.reason || decline.reason || '');
+  } else if (order.status === 'delivering') {
+    invalidReason = pickedUp.allowed ? '' : (pickedUp.reason || '');
+  } else if (order.status === 'picked_up') {
+    invalidReason = complete.allowed ? '' : (complete.reason || '');
+  }
+
   return {
     canAccept: accept.allowed,
     canDecline: decline.allowed,
     canPickUp: pickedUp.allowed,
     canComplete: complete.allowed,
-    invalidReason: accept.reason || decline.reason || pickedUp.reason || complete.reason || '',
+    invalidReason,
   };
 }
 
@@ -596,6 +712,19 @@ export function resolveRiderOrderAction(input: {
     };
   }
 
+  if (status !== 'awaiting_courier') {
+    return {
+      allowed: false,
+      error: status === 'completed' ? 'order_completed' : 'order_status_updated',
+      reason: '',
+      expectedCurrentStatus: 'awaiting_courier',
+      targetStatus: action === 'accept' ? 'delivering' : 'awaiting_courier',
+      nextRemarksJson: '',
+      feedbackWriteMode: 'none',
+      excludedRiderIds: [],
+    };
+  }
+
   if (dispatchState.invalidReason) {
     return {
       allowed: false,
@@ -653,6 +782,10 @@ export function resolveRiderOrderAction(input: {
         currentExpiresAt: '',
         invalidatedRiderIds,
         lastInvalidationReason: 'declined',
+        acceptedAt: meta.acceptedAt,
+        pickedUpAt: meta.pickedUpAt,
+        completedAt: meta.completedAt,
+        telegramMessageRef: meta.telegramMessageRef,
       })),
       feedbackWriteMode: 'update_status_remarks',
       excludedRiderIds: Array.from(new Set([...declinedRiderIds, ...invalidatedRiderIds])),
@@ -679,6 +812,10 @@ export function resolveRiderOrderAction(input: {
       currentExpiresAt: meta.currentExpiresAt,
       invalidatedRiderIds: meta.invalidatedRiderIds,
       lastInvalidationReason: meta.lastInvalidationReason,
+      acceptedAt: meta.acceptedAt,
+      pickedUpAt: meta.pickedUpAt,
+      completedAt: meta.completedAt,
+      telegramMessageRef: meta.telegramMessageRef,
     })),
     feedbackWriteMode: 'admin_remarks',
     excludedRiderIds: [],
@@ -786,9 +923,26 @@ function readRiderOrderCompletedTimestamp(order: {
   );
 }
 
-function isSameIsoDay(leftTs: number, rightTs: number): boolean {
-  if (leftTs <= 0 || rightTs <= 0) return false;
-  return new Date(leftTs).toISOString().slice(0, 10) === new Date(rightTs).toISOString().slice(0, 10);
+const belgradeDayFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Belgrade',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function readBelgradeDayKey(timestamp: number): string {
+  if (timestamp <= 0) return '';
+  const parts = belgradeDayFormatter.formatToParts(new Date(timestamp));
+  const year = parts.find((part) => part.type === 'year')?.value || '';
+  const month = parts.find((part) => part.type === 'month')?.value || '';
+  const day = parts.find((part) => part.type === 'day')?.value || '';
+  return year && month && day ? `${year}-${month}-${day}` : '';
+}
+
+function isSameBelgradeDay(leftTs: number, rightTs: number): boolean {
+  const leftDayKey = readBelgradeDayKey(leftTs);
+  const rightDayKey = readBelgradeDayKey(rightTs);
+  return leftDayKey !== '' && leftDayKey === rightDayKey;
 }
 
 export function filterRiderDashboardOrders<T extends {
@@ -819,7 +973,7 @@ export function filterRiderDashboardOrders<T extends {
     : orders.filter((order) => (
       String(order?.status || '').trim() === 'completed'
       && readOrderCourierPhone(order) === phone
-      && isSameIsoDay(readRiderOrderCompletedTimestamp(order), nowTs)
+      && isSameBelgradeDay(readRiderOrderCompletedTimestamp(order), nowTs)
     ));
   const activeOrders = filterRiderActiveOrders(orders, phone, nowIso);
 

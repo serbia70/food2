@@ -26,6 +26,7 @@ interface OrderSnapshot {
   status: string;
   remarksJson: string;
   courierPhone?: string;
+  shopSlug?: string;
 }
 
 function useTestEnv(t: TestContext): void {
@@ -93,6 +94,10 @@ function createRemarksJson(overrides: Partial<{
   currentExpiresAt: string;
   invalidatedRiderIds: string[];
   declinedRiderIds: string[];
+  acceptedAt: string;
+  pickedUpAt: string;
+  completedAt: string;
+  telegramMessageRef: { chatId: string; messageId: number } | null;
 }> = {}): string {
   return JSON.stringify(buildDispatchMetaRemarks('', {
     lastRiderDecision: null,
@@ -102,6 +107,10 @@ function createRemarksJson(overrides: Partial<{
     currentExpiresAt: overrides.currentExpiresAt || new Date(Date.now() + 5 * 60_000).toISOString(),
     invalidatedRiderIds: overrides.invalidatedRiderIds || [],
     lastInvalidationReason: null,
+    acceptedAt: overrides.acceptedAt || '',
+    pickedUpAt: overrides.pickedUpAt || '',
+    completedAt: overrides.completedAt || '',
+    telegramMessageRef: overrides.telegramMessageRef === undefined ? null : overrides.telegramMessageRef,
   }));
 }
 
@@ -112,6 +121,7 @@ function createOrderRow(snapshot: OrderSnapshot): Record<string, unknown> {
     status: snapshot.status,
     remarksJson: snapshot.remarksJson,
     courierPhone: snapshot.courierPhone ?? TEST_RIDER_PHONE,
+    shopSlug: snapshot.shopSlug ?? 'shop-1',
     shopName: 'Pizza One',
     shopAddress: 'Shop Street 1',
     shopMapUrl: 'https://maps.example.com/shop',
@@ -193,7 +203,7 @@ function createFetchHandler(
             name: TEST_RIDER_NAME,
             phone: TEST_RIDER_PHONE,
             telegramChatId: TEST_CHAT_ID,
-            status: 'online',
+            status: 'available',
           },
         ],
       });
@@ -240,12 +250,7 @@ test('stale picked_up callback 在 delivering 且当前骑手匹配时可成功�
   assert.ok(updateCall);
   assert.match(updateCall.body, /"expectedCurrentStatus":"delivering"/);
   assert.match(updateCall.body, /"status":"picked_up"/);
-  assert.ok(telegramSendCall);
-  assert.match(telegramSendCall.body, /"reply_markup":/);
-  assert.doesNotMatch(telegramSendCall.body, /"replyMarkup":/);
-  assert.match(telegramSendCall.body, /Pizza One/);
-  assert.match(telegramSendCall.body, /https:\/\/maps\.example\.com\/shop/);
-  assert.match(telegramSendCall.body, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=Test%20Address/);
+  assert.equal(telegramSendCall, undefined);
 });
 
 test('stale accept callback 仍返回 expired_callback', async (t) => {
@@ -325,7 +330,7 @@ test('配送阶段 admin orders 未授权时回退 rider orders 仍能推进 pic
             name: TEST_RIDER_NAME,
             phone: TEST_RIDER_PHONE,
             telegramChatId: TEST_CHAT_ID,
-            status: 'online',
+            status: 'available',
           },
         ],
       });
@@ -382,6 +387,110 @@ test('配送阶段 remarksJson 为空但订单仍属于当前骑手时可推进 
   assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
 });
 
+test('picked_up writes pickedUpAt and edits original telegram message instead of sending new one', async (t) => {
+  useTestEnv(t);
+  const acceptedAt = '2026-04-14T10:03:00.000Z';
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'delivering',
+    remarksJson: createRemarksJson({
+      acceptedAt,
+      telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+    }),
+  }));
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('picked_up', Date.now() - 1_000)));
+  const body = await readJson(response);
+  const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
+  assert.ok(updateCall);
+
+  const updatePayload = JSON.parse(updateCall.body) as { remarksJson?: string };
+  const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
+  assert.equal(nextMeta.acceptedAt, acceptedAt);
+  assert.match(nextMeta.pickedUpAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(nextMeta.completedAt, '');
+  assert.deepEqual(nextMeta.telegramMessageRef, { chatId: TEST_CHAT_ID, messageId: 7788 });
+
+  assert.equal(telegramCalls.length, 1);
+  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
+  assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
+  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
+  assert.match(telegramCalls[0]?.body || '', /接单时间：2026-04-14T10:03:00.000Z/);
+  assert.match(telegramCalls[0]?.body || '', /取餐时间：/);
+  assert.match(telegramCalls[0]?.body || '', /送达/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /已送达/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /"text":"Pizza One有新单/);
+});
+
+test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback 不回退 admin', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'delivering',
+    remarksJson: createRemarksJson({
+      acceptedAt: '2026-04-14T10:03:00.000Z',
+      telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+    }),
+    shopSlug: 'real-shop',
+  }));
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('picked_up', Date.now() - 1_000)));
+  const body = await readJson(response);
+  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
+  assert.ok(telegramCall);
+  assert.match(telegramCall.body, /"shopSlug":"real-shop"/);
+  assert.match(telegramCall.body, /real-shop/);
+  assert.doesNotMatch(telegramCall.body, /admin/);
+});
+
+ test('complete edits original telegram message to readonly delivered state without buttons', async (t) => {
+  useTestEnv(t);
+  const acceptedAt = '2026-04-14T10:03:00.000Z';
+  const pickedUpAt = '2026-04-14T10:19:00.000Z';
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'picked_up',
+    remarksJson: createRemarksJson({
+      acceptedAt,
+      pickedUpAt,
+      telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+    }),
+  }));
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('complete', Date.now() - 1_000)));
+  const body = await readJson(response);
+  const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'complete');
+  assert.ok(updateCall);
+
+  const updatePayload = JSON.parse(updateCall.body) as { remarksJson?: string };
+  const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
+  assert.equal(nextMeta.acceptedAt, acceptedAt);
+  assert.equal(nextMeta.pickedUpAt, pickedUpAt);
+  assert.match(nextMeta.completedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(nextMeta.telegramMessageRef, { chatId: TEST_CHAT_ID, messageId: 7788 });
+
+  assert.equal(telegramCalls.length, 1);
+  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
+  assert.match(telegramCalls[0]?.body || '', /状态：已送达/);
+  assert.match(telegramCalls[0]?.body || '', /接单时间：2026-04-14T10:03:00.000Z/);
+  assert.match(telegramCalls[0]?.body || '', /取餐时间：2026-04-14T10:19:00.000Z/);
+  assert.match(telegramCalls[0]?.body || '', /送达时间：/);
+  assert.match(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /"callback_data":/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /"text":"Pizza One有新单/);
+});
+
 test('配送阶段 admin orders 只返回 remarks_json 时仍能识别当前骑手并推进 picked_up', async (t) => {
   useTestEnv(t);
   const remarksJson = createRemarksJson();
@@ -396,7 +505,7 @@ test('配送阶段 admin orders 只返回 remarks_json 时仍能识别当前骑�
             name: TEST_RIDER_NAME,
             phone: TEST_RIDER_PHONE,
             telegramChatId: TEST_CHAT_ID,
-            status: 'online',
+            status: 'available',
           },
         ],
       });
@@ -446,7 +555,7 @@ test('配送阶段 admin orders 返回对象包装时仍能识别当前骑手并
             name: TEST_RIDER_NAME,
             phone: TEST_RIDER_PHONE,
             telegramChatId: TEST_CHAT_ID,
-            status: 'online',
+            status: 'available',
           },
         ],
       });
@@ -557,7 +666,7 @@ test('decline 通过共享 actionDecision 的单一路径写回 update_status re
             name: TEST_RIDER_NAME,
             phone: TEST_RIDER_PHONE,
             telegramChatId: TEST_CHAT_ID,
-            status: 'online',
+            status: 'available',
           },
         ],
       });

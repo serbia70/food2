@@ -56,6 +56,7 @@ interface TelegramDispatchAttempt {
   telegramChatIdBound: boolean;
   delivered: boolean;
   error?: string;
+  messageRef?: NonNullable<DispatchMeta['telegramMessageRef']>;
 }
 
 interface TelegramDispatchSummary {
@@ -64,6 +65,7 @@ interface TelegramDispatchSummary {
   deliveredCount: number;
   failedCount: number;
   skippedReason?: string;
+  telegramMessageRef?: NonNullable<DispatchMeta['telegramMessageRef']>;
   attempts: TelegramDispatchAttempt[];
 }
 
@@ -283,6 +285,54 @@ async function writeDispatchMetaRemarks({
   };
 }
 
+async function fetchLatestOrderRemarks({
+  request,
+  cookies,
+  orderId,
+}: {
+  request: Request;
+  cookies: Parameters<APIRoute['POST']>[0]['cookies'];
+  orderId: string;
+}) {
+  const orderRes = await proxyAdminRequest({
+    request,
+    cookies,
+    url: `${API_BASE_URL}/api/admin/orders`,
+    method: 'GET',
+  });
+  const orderText = await orderRes.text();
+
+  let orderPayload: Record<string, unknown> = {};
+  try {
+    orderPayload = JSON.parse(orderText) as Record<string, unknown>;
+  } catch {
+    orderPayload = {};
+  }
+
+  if (!orderRes.ok || orderPayload.success === false) {
+    return {
+      ok: false as const,
+      status: orderRes.status,
+      upstreamBody: orderText || JSON.stringify(orderPayload),
+    };
+  }
+
+  const order = extractDispatchOrder(orderPayload as DispatchProxyPayload, orderId);
+  if (!order) {
+    return {
+      ok: false as const,
+      status: orderRes.status || 502,
+      upstreamBody: orderText || JSON.stringify(orderPayload),
+    };
+  }
+
+  return {
+    ok: true as const,
+    order,
+    remarksJson: String(order.remarksJson || '').trim(),
+  };
+}
+
 async function notifyTelegramRecipients(
   request: Request,
   cookies: Parameters<APIRoute['POST']>[0]['cookies'],
@@ -402,7 +452,13 @@ async function notifyTelegramRecipients(
         }),
       });
       const responseText = await sendRes.text();
-      if (!sendRes.ok) {
+      let parsedResponse: Record<string, unknown> = {};
+      try {
+        parsedResponse = JSON.parse(responseText) as Record<string, unknown>;
+      } catch {
+        parsedResponse = {};
+      }
+      if (!sendRes.ok || parsedResponse.success === false || parsedResponse.ok === false) {
         return {
           riderId: String(rider.id || '').trim(),
           riderName: String(rider.name || '未命名骑手').trim(),
@@ -413,12 +469,20 @@ async function notifyTelegramRecipients(
         };
       }
 
+      const rawResult = parsedResponse.result;
+      const messageId = Number(
+        rawResult && typeof rawResult === 'object'
+          ? (rawResult as { message_id?: unknown }).message_id
+          : 0,
+      );
+
       return {
         riderId: String(rider.id || '').trim(),
         riderName: String(rider.name || '未命名骑手').trim(),
         riderPhone: riderPhone,
         telegramChatIdBound: true,
         delivered: true,
+        ...(messageId > 0 ? { messageRef: { chatId: riderChatId, messageId } } : {}),
       };
     } catch (error) {
       return {
@@ -439,11 +503,14 @@ async function notifyTelegramRecipients(
   const deliveredCount = mergedAttempts.filter((attempt) => attempt.delivered).length;
   const failedCount = mergedAttempts.filter((attempt) => !attempt.delivered).length;
 
+  const firstDeliveredMessageRef = mergedAttempts.find((attempt) => attempt.delivered && attempt.messageRef)?.messageRef;
+
   return {
     availableRiderCount,
     telegramBoundCount,
     deliveredCount,
     failedCount,
+    ...(firstDeliveredMessageRef ? { telegramMessageRef: firstDeliveredMessageRef } : {}),
     attempts: mergedAttempts,
   };
 }
@@ -734,11 +801,57 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
 
     const telegram_dispatch = await notifyTelegramRecipients(request, cookies, mergedOrder, riderFilter);
+
+    let warning: { code: string; upstream_status?: number; upstream_body?: string } | undefined;
+
+    if (action === 'publish' && telegram_dispatch.telegramMessageRef) {
+      const latestRemarksResult = await fetchLatestOrderRemarks({
+        request,
+        cookies,
+        orderId,
+      });
+
+      if (!latestRemarksResult.ok) {
+        warning = {
+          code: 'telegram_message_ref_persist_failed',
+          upstream_status: latestRemarksResult.status,
+          upstream_body: latestRemarksResult.upstreamBody,
+        };
+      } else {
+        const latestOrder = latestRemarksResult.order;
+        const nextMeta: DispatchMeta = {
+          ...readDispatchMetaFromRemarks(latestRemarksResult.remarksJson),
+          telegramMessageRef: telegram_dispatch.telegramMessageRef,
+        };
+        const remarksResult = await writeDispatchMetaRemarks({
+          request,
+          cookies,
+          orderId,
+          order: latestOrder,
+          nextMeta,
+        });
+        if (!remarksResult.ok) {
+          warning = {
+            code: 'telegram_message_ref_persist_failed',
+            upstream_status: remarksResult.status,
+            upstream_body: remarksResult.upstreamBody,
+          };
+        } else {
+          mergedOrder = {
+            ...mergedOrder,
+            ...latestOrder,
+            remarksJson: remarksResult.remarksJson,
+          };
+        }
+      }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       action,
       order: mergedOrder,
       telegram_dispatch,
+      ...(warning ? { warning } : {}),
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

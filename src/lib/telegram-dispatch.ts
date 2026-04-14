@@ -51,6 +51,33 @@ interface RiderPickedUpTelegramInput {
   completeCallbackData?: string;
 }
 
+interface RiderSingleMessageActionInput {
+  text: string;
+  callbackData: string;
+}
+
+interface RiderSingleMessageTelegramInput {
+  orderNo: string;
+  shopName: string;
+  address: string;
+  phone: string;
+  statusLabel: string;
+  acceptedAtLabel: string;
+  pickedUpAtLabel: string;
+  completedAtLabel: string;
+  shopMapUrl?: string;
+  deliveryMapUrl?: string;
+  primaryAction: RiderSingleMessageActionInput | null;
+  secondaryAction: RiderSingleMessageActionInput | null;
+}
+
+interface TelegramEditMessagePayloadInput {
+  chatId: string;
+  messageId: number;
+  text: string;
+  replyMarkup: TelegramReplyMarkup;
+}
+
 interface TelegramDeepLinkInput {
   baseUrl: string;
   restaurantId: string;
@@ -316,7 +343,6 @@ export function parseTelegramClaimCallback(
   payload: string,
   options?: {
     chatId?: string;
-    riderName?: string;
     riderPhone?: string;
     restaurantId?: string;
   },
@@ -336,7 +362,7 @@ export function parseTelegramClaimCallback(
 
     return {
       ...shortParsed,
-      riderName: shortParsed.riderName,
+      riderName: '',
       riderPhone: shortParsed.riderPhone,
       restaurantId: String(options?.restaurantId || '').trim(),
       telegramChatId: chatId,
@@ -411,27 +437,23 @@ function trimTelegramLinesToByteLimit(lines: string[], maxBytes: number): string
   return [...kept, suffix].join('\n');
 }
 
-function buildDeliveryProgressLines(input: {
-  heading: string;
-  etaLabel: string;
-  orderNo: string;
-  shopName: string;
-  address: string;
-  phone: string;
-  totalAmount: number;
-  pickupEtaMinutes: number;
-  shopMapUrl?: string;
-  deliveryMapUrl?: string;
-}): string[] {
+export function buildRiderSingleMessageTelegram(input: RiderSingleMessageTelegramInput): TelegramDispatchMessage {
   const lines = [
-    input.heading,
-    `订单号：${input.orderNo}`,
-    `店铺：${input.shopName}`,
-    `地址：${input.address}`,
-    `电话：${input.phone}`,
-    `金额：${input.totalAmount} RSD`,
-    `${input.etaLabel}${input.pickupEtaMinutes} 分钟${input.etaLabel === '预计还需 ' ? '送达' : '后可取'}`,
+    `#${input.orderNo} · ${input.shopName}`,
+    `状态：${input.statusLabel}`,
   ];
+
+  if (String(input.acceptedAtLabel || '').trim()) {
+    lines.push(`接单时间：${String(input.acceptedAtLabel).trim()}`);
+  }
+  if (String(input.pickedUpAtLabel || '').trim()) {
+    lines.push(`取餐时间：${String(input.pickedUpAtLabel).trim()}`);
+  }
+  if (String(input.completedAtLabel || '').trim()) {
+    lines.push(`送达时间：${String(input.completedAtLabel).trim()}`);
+  }
+
+  lines.push('', `地址：${input.address}`, `电话：${input.phone}`);
 
   const shopMapUrl = String(input.shopMapUrl || '').trim();
   if (shopMapUrl) {
@@ -443,7 +465,33 @@ function buildDeliveryProgressLines(input: {
     lines.push(`客户导航：${deliveryMapUrl}`);
   }
 
-  return lines;
+  const buttons = [input.primaryAction, input.secondaryAction]
+    .filter((item): item is RiderSingleMessageActionInput => !!item && !!String(item.callbackData || '').trim())
+    .map((item) => ({
+      text: String(item.text || '').trim(),
+      callback_data: String(item.callbackData).trim(),
+    }));
+
+  return {
+    text: lines.join('\n'),
+    replyMarkup: {
+      inline_keyboard: buttons.length > 0 ? [buttons] : [],
+    },
+  };
+}
+
+export function buildTelegramEditMessagePayload(input: TelegramEditMessagePayloadInput): {
+  chat_id: string;
+  message_id: number;
+  text: string;
+  reply_markup: TelegramReplyMarkup;
+} {
+  return {
+    chat_id: input.chatId,
+    message_id: input.messageId,
+    text: input.text,
+    reply_markup: input.replyMarkup,
+  };
 }
 
 export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrderTelegramInput): TelegramDispatchMessage {
@@ -488,46 +536,77 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
   };
 }
 
-export function buildRiderPickedUpTelegramMessage(input: RiderPickedUpTelegramInput): TelegramDispatchMessage {
+function appendLegacyRiderSummary(message: TelegramDispatchMessage, input: {
+  totalAmount: number;
+  pickupEtaMinutes: number;
+}): TelegramDispatchMessage {
+  const extraLines: string[] = [];
+  if (Number(input.totalAmount || 0) > 0) {
+    extraLines.push(`金额：${Number(input.totalAmount || 0)} RSD`);
+  }
+  if (Number(input.pickupEtaMinutes || 0) > 0) {
+    extraLines.push(`预计：${Number(input.pickupEtaMinutes || 0)} 分钟`);
+  }
+  if (extraLines.length === 0) return message;
+
+  const lines = String(message.text || '').split('\n');
+  const phoneIndex = lines.findIndex((line) => line.startsWith('电话：'));
+  const insertAt = phoneIndex >= 0 ? phoneIndex + 1 : lines.length;
+  lines.splice(insertAt, 0, ...extraLines);
   return {
-    text: buildDeliveryProgressLines({
-      heading: '骑手已接单',
-      etaLabel: '预计 ',
-      orderNo: input.orderNo,
-      shopName: input.shopName,
-      address: input.address,
-      phone: input.phone,
-      totalAmount: input.totalAmount,
-      pickupEtaMinutes: input.pickupEtaMinutes,
-      shopMapUrl: input.shopMapUrl,
-      deliveryMapUrl: input.deliveryMapUrl,
-    }).join('\n'),
-    replyMarkup: {
-      inline_keyboard: String(input.completeCallbackData || '').trim()
-        ? [[{ text: '已取餐', callback_data: String(input.completeCallbackData).trim() }]]
-        : [],
-    },
+    ...message,
+    text: lines.join('\n'),
   };
 }
 
+export function buildRiderAwaitingPickupTelegramMessage(input: RiderPickedUpTelegramInput): TelegramDispatchMessage {
+  return appendLegacyRiderSummary(buildRiderSingleMessageTelegram({
+    orderNo: input.orderNo,
+    shopName: input.shopName,
+    address: input.address,
+    phone: input.phone,
+    statusLabel: '待取餐',
+    acceptedAtLabel: '',
+    pickedUpAtLabel: '',
+    completedAtLabel: '',
+    shopMapUrl: input.shopMapUrl,
+    deliveryMapUrl: input.deliveryMapUrl,
+    primaryAction: String(input.completeCallbackData || '').trim()
+      ? { text: '取餐', callbackData: String(input.completeCallbackData).trim() }
+      : null,
+    secondaryAction: null,
+  }), {
+    totalAmount: input.totalAmount,
+    pickupEtaMinutes: input.pickupEtaMinutes,
+  });
+}
+
+export function buildRiderDeliveringTelegramMessage(input: RiderDeliveryCompleteTelegramInput): TelegramDispatchMessage {
+  return appendLegacyRiderSummary(buildRiderSingleMessageTelegram({
+    orderNo: input.orderNo,
+    shopName: input.shopName,
+    address: input.address,
+    phone: input.phone,
+    statusLabel: '配送中',
+    acceptedAtLabel: '',
+    pickedUpAtLabel: '',
+    completedAtLabel: '',
+    shopMapUrl: input.shopMapUrl,
+    deliveryMapUrl: input.deliveryMapUrl,
+    primaryAction: String(input.completeCallbackData || '').trim()
+      ? { text: '送达', callbackData: String(input.completeCallbackData).trim() }
+      : null,
+    secondaryAction: null,
+  }), {
+    totalAmount: input.totalAmount,
+    pickupEtaMinutes: input.pickupEtaMinutes,
+  });
+}
+
+export function buildRiderPickedUpTelegramMessage(input: RiderPickedUpTelegramInput): TelegramDispatchMessage {
+  return buildRiderAwaitingPickupTelegramMessage(input);
+}
+
 export function buildRiderDeliveryCompleteTelegramMessage(input: RiderDeliveryCompleteTelegramInput): TelegramDispatchMessage {
-  return {
-    text: buildDeliveryProgressLines({
-      heading: '骑手已取餐',
-      etaLabel: '预计还需 ',
-      orderNo: input.orderNo,
-      shopName: input.shopName,
-      address: input.address,
-      phone: input.phone,
-      totalAmount: input.totalAmount,
-      pickupEtaMinutes: input.pickupEtaMinutes,
-      shopMapUrl: input.shopMapUrl,
-      deliveryMapUrl: input.deliveryMapUrl,
-    }).join('\n'),
-    replyMarkup: {
-      inline_keyboard: String(input.completeCallbackData || '').trim()
-        ? [[{ text: '已送达', callback_data: String(input.completeCallbackData).trim() }]]
-        : [],
-    },
-  };
+  return buildRiderDeliveringTelegramMessage(input);
 }

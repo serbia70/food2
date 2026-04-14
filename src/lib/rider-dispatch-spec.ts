@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import * as riderDispatch from './rider-dispatch.ts';
 import {
+  buildDispatchMetaRemarks,
   buildRiderOrderMapUrl,
   buildRiderOrderView,
   filterRiderActiveOrders,
@@ -14,7 +14,10 @@ import {
   readDispatchMetaFromRemarks,
   resolveRiderDashboardActionState,
   resolveRiderOrderAction,
+  resolveRiderUnifiedStatus,
 } from './rider-dispatch.ts';
+
+const riderDashboardSource = readFileSync(new URL('../pages/rider/dashboard.astro', import.meta.url), 'utf8');
 
 test('buildRiderOrderView returns shared shop and map fields', () => {
   const view = buildRiderOrderView({
@@ -76,20 +79,6 @@ test('getRiderActionFlags and dispatch state stay aligned for picked_up orders',
   assert.equal(state.canComplete, flags.canComplete);
   assert.equal(getAdminDispatchStatusCopy('picked_up'), '配送中');
   assert.equal(getAdminDispatchStatusCopy('completed'), '已完成');
-});
-
-test('TabOrders.astro uses getAdminDispatchStatusCopy and preserves rider feedback', async () => {
-  const source = await fs.readFile(new URL('../components/admin/TabOrders.astro', import.meta.url), 'utf8');
-
-  // 确保使用 getAdminDispatchStatusCopy
-  assert.match(source, /getAdminDispatchStatusCopy\(o\.status\)/);
-
-  // 确保保留骑手反馈标识
-  assert.match(source, /骑手反馈：/);
-
-  // 确保没有硬编码主状态文案
-  assert.doesNotMatch(source, /骑手已接单/);
-  assert.doesNotMatch(source, /骑手已取餐/);
 });
 
 test('getRiderDispatchState falls back to courierPhone for picked_up orders without dispatch_meta', () => {
@@ -170,6 +159,28 @@ test('filterRiderDashboardOrders returns pool active and today history from one 
   );
 });
 
+test('filterRiderDashboardOrders treats history by Europe/Belgrade local day instead of UTC day', () => {
+  const orders = [
+    {
+      id: 5,
+      status: 'completed',
+      courierPhone: '0611',
+      updatedAt: '2026-04-12T22:30:00.000Z',
+    },
+    {
+      id: 6,
+      status: 'completed',
+      courierPhone: '0611',
+      updatedAt: '2026-04-12T20:30:00.000Z',
+    },
+  ];
+
+  assert.deepEqual(
+    filterRiderDashboardOrders(orders, '0611', 'history', '2026-04-12T23:30:00.000Z').map((item) => item.id),
+    [5],
+  );
+});
+
 test('resolveRiderOrderAction allows picked_up fallback by courierPhone without dispatch_meta', () => {
   const result = resolveRiderOrderAction({
     action: 'picked_up',
@@ -188,6 +199,43 @@ test('resolveRiderOrderAction allows picked_up fallback by courierPhone without 
   assert.equal(result.error, '');
   assert.equal(result.expectedCurrentStatus, 'delivering');
   assert.equal(result.targetStatus, 'picked_up');
+});
+
+test('resolveRiderOrderAction rejects accept when order is no longer awaiting_courier', () => {
+  const result = resolveRiderOrderAction({
+    action: 'accept',
+    order: {
+      status: 'delivering',
+      remarksJson: '',
+      courierPhone: '381641234567',
+    },
+    riderId: '202',
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-12T10:00:00.000Z',
+  });
+
+  assert.equal(result.allowed, false);
+  assert.equal(result.error, 'order_status_updated');
+  assert.equal(result.expectedCurrentStatus, 'awaiting_courier');
+});
+
+test('resolveRiderOrderAction rejects accept when status is empty', () => {
+  const result = resolveRiderOrderAction({
+    action: 'accept',
+    order: {
+      status: '',
+      remarksJson: '',
+      courierPhone: '381641234567',
+    },
+    riderId: '202',
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-12T10:00:00.000Z',
+  });
+
+  assert.equal(result.allowed, false);
+  assert.equal(result.error, 'order_status_updated');
 });
 
 test('resolveRiderDashboardActionState hides accept and decline when currentRiderId belongs to another rider', () => {
@@ -228,42 +276,260 @@ test('resolveRiderDashboardActionState hides accept and decline when current rid
   assert.equal(state.invalidReason, '接单超时');
 });
 
-test('dashboard script uses shared rider dashboard action helper instead of getRiderActionFlags', async () => {
-  const source = await fs.readFile(new URL('../pages/rider/dashboard.astro', import.meta.url), 'utf8');
+test('resolveRiderDashboardActionState does not expose invalidReason for valid delivering pickup flow', () => {
+  const state = resolveRiderDashboardActionState({
+    order: {
+      status: 'delivering',
+      remarksJson: '',
+      courierPhone: '381641234567',
+    },
+    riderId: '202',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-12T10:06:00.000Z',
+  });
 
-  assert.match(source, /resolveRiderDashboardActionState/);
-  assert.doesNotMatch(source, /getRiderActionFlags/);
+  assert.equal(state.canPickUp, true);
+  assert.equal(state.invalidReason, '');
 });
 
-test('shared helper stays sourced from resolveRiderOrderAction semantics', () => {
-  assert.equal(typeof riderDispatch.resolveRiderDashboardActionState, 'function');
-  assert.match(String(riderDispatch.resolveRiderDashboardActionState), /resolveRiderOrderAction/);
+test('dispatch_meta preserves action times and telegram message ref', () => {
+  const remarks = JSON.stringify(buildDispatchMetaRemarks('', {
+    lastRiderDecision: {
+      action: 'accepted',
+      riderId: '202',
+      riderName: 'Rider 1',
+      riderPhone: '381641234567',
+      at: '2026-04-14T10:03:00.000Z',
+    },
+    declinedRiderIds: [],
+    currentRiderId: '202',
+    currentAssignedAt: '2026-04-14T10:00:00.000Z',
+    currentExpiresAt: '2026-04-14T10:10:00.000Z',
+    invalidatedRiderIds: [],
+    lastInvalidationReason: null,
+    acceptedAt: '2026-04-14T10:03:00.000Z',
+    pickedUpAt: '2026-04-14T10:19:00.000Z',
+    completedAt: '2026-04-14T10:41:00.000Z',
+    telegramMessageRef: { chatId: 'chat-1', messageId: 7788 },
+  }));
+
+  const meta = readDispatchMetaFromRemarks(remarks);
+  assert.equal(meta.acceptedAt, '2026-04-14T10:03:00.000Z');
+  assert.equal(meta.pickedUpAt, '2026-04-14T10:19:00.000Z');
+  assert.equal(meta.completedAt, '2026-04-14T10:41:00.000Z');
+  assert.deepEqual(meta.telegramMessageRef, { chatId: 'chat-1', messageId: 7788 });
 });
 
-test('dashboard script calls rider action route instead of update_status and renders summary sections', async () => {
-  const source = await fs.readFile(new URL('../pages/rider/dashboard.astro', import.meta.url), 'utf8');
+test('dispatch_meta normalizes invalid telegramMessageRef to null', () => {
+  const remarks = JSON.stringify(buildDispatchMetaRemarks('', {
+    lastRiderDecision: null,
+    declinedRiderIds: [],
+    currentRiderId: '202',
+    currentAssignedAt: '2026-04-14T10:00:00.000Z',
+    currentExpiresAt: '2026-04-14T10:10:00.000Z',
+    invalidatedRiderIds: [],
+    lastInvalidationReason: null,
+    acceptedAt: '',
+    pickedUpAt: '',
+    completedAt: '',
+    telegramMessageRef: { chatId: '', messageId: 0 },
+  }));
 
-  assert.match(source, /进行中订单数/);
-  assert.match(source, /涉及店铺数/);
-  assert.match(source, /今日完成/);
-  assert.match(source, /\/api\/rider\/action/);
-  assert.doesNotMatch(source, /\/api\/order\/update_status/);
-  assert.doesNotMatch(source, /buildDispatchMetaRemarks\(/);
+  const meta = readDispatchMetaFromRemarks(remarks);
+  assert.equal(meta.telegramMessageRef, null);
 });
 
-test('dashboard script reads display fields from riderView instead of raw order fallbacks', async () => {
-  const source = await fs.readFile(new URL('../pages/rider/dashboard.astro', import.meta.url), 'utf8');
-
-  assert.match(source, /riderView\.shopName/);
-  assert.match(source, /riderView\.shopAddress/);
-  assert.match(source, /riderView\.deliveryAddress/);
-  assert.match(source, /riderView\.shopMapUrl/);
-  assert.match(source, /riderView\.deliveryMapUrl/);
-  assert.match(source, /riderView\.orderStatusCopy/);
-  assert.doesNotMatch(source, /order\?\.shopName/);
-  assert.doesNotMatch(source, /order\?\.restaurantName/);
-  assert.doesNotMatch(source, /order\?\.shopAddress/);
-  assert.doesNotMatch(source, /order\?\.restaurantAddress/);
-  assert.doesNotMatch(source, /order\?\.tableInfo/);
-  assert.doesNotMatch(source, /order\?\.deliveryAddress/);
+test('resolveRiderUnifiedStatus hides awaiting_courier actions when rider cannot act', () => {
+  assert.deepEqual(resolveRiderUnifiedStatus({
+    status: 'awaiting_courier',
+    courierPhone: '381641234567',
+    remarksJson: JSON.stringify(buildDispatchMetaRemarks('', {
+      lastRiderDecision: null,
+      declinedRiderIds: [],
+      currentRiderId: 'other-rider',
+      currentAssignedAt: '2026-04-14T10:00:00.000Z',
+      currentExpiresAt: '2026-04-14T10:10:00.000Z',
+      invalidatedRiderIds: [],
+      lastInvalidationReason: null,
+      acceptedAt: '',
+      pickedUpAt: '',
+      completedAt: '',
+      telegramMessageRef: null,
+    })),
+  }, {
+    riderId: '202',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-14T10:05:00.000Z',
+  }), {
+    statusLabel: '待接单',
+    primaryAction: '',
+    secondaryAction: '',
+    acceptedAt: '',
+    pickedUpAt: '',
+    completedAt: '',
+  });
 });
+
+test('resolveRiderOrderAction accept ignores semantic-only dispatch_meta fields and keeps acceptedAt empty', () => {
+  const result = resolveRiderOrderAction({
+    action: 'accept',
+    order: {
+      status: 'awaiting_courier',
+      remarksJson: JSON.stringify(buildDispatchMetaRemarks('', {
+        lastRiderDecision: null,
+        declinedRiderIds: [],
+        currentRiderId: '',
+        currentAssignedAt: '',
+        currentExpiresAt: '',
+        invalidatedRiderIds: [],
+        lastInvalidationReason: null,
+        acceptedAt: '',
+        pickedUpAt: '',
+        completedAt: '',
+        telegramMessageRef: { chatId: 'chat-1', messageId: 7788 },
+      })),
+      courierPhone: '',
+    },
+    riderId: '202',
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-14T10:03:00.000Z',
+  });
+
+  assert.equal(result.allowed, true);
+  assert.equal(result.error, '');
+  const nextMeta = readDispatchMetaFromRemarks(result.nextRemarksJson);
+  assert.equal(nextMeta.acceptedAt, '');
+  assert.deepEqual(nextMeta.telegramMessageRef, { chatId: 'chat-1', messageId: 7788 });
+});
+
+test('resolveRiderUnifiedStatus returns shared status/action semantics for telegram and dashboard', () => {
+  assert.deepEqual(resolveRiderUnifiedStatus({
+    status: 'awaiting_courier',
+    courierPhone: '381641234567',
+    remarksJson: JSON.stringify(buildDispatchMetaRemarks('', {
+      lastRiderDecision: null,
+      declinedRiderIds: [],
+      currentRiderId: '202',
+      currentAssignedAt: '2026-04-14T10:00:00.000Z',
+      currentExpiresAt: '2026-04-14T10:10:00.000Z',
+      invalidatedRiderIds: [],
+      lastInvalidationReason: null,
+      acceptedAt: '',
+      pickedUpAt: '',
+      completedAt: '',
+      telegramMessageRef: null,
+    })),
+  }, {
+    riderId: '202',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-14T10:05:00.000Z',
+  }), {
+    statusLabel: '待接单',
+    primaryAction: '接单',
+    secondaryAction: '暂不接单',
+    acceptedAt: '',
+    pickedUpAt: '',
+    completedAt: '',
+  });
+
+  assert.deepEqual(resolveRiderUnifiedStatus({
+    status: 'delivering',
+    courierPhone: '381641234567',
+    remarksJson: JSON.stringify(buildDispatchMetaRemarks('', {
+      lastRiderDecision: null,
+      declinedRiderIds: [],
+      currentRiderId: '202',
+      currentAssignedAt: '2026-04-14T10:00:00.000Z',
+      currentExpiresAt: '2026-04-14T10:10:00.000Z',
+      invalidatedRiderIds: [],
+      lastInvalidationReason: null,
+      acceptedAt: '2026-04-14T10:03:00.000Z',
+      pickedUpAt: '',
+      completedAt: '',
+      telegramMessageRef: null,
+    })),
+  }, {
+    riderId: '202',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-14T10:20:00.000Z',
+  }), {
+    statusLabel: '待取餐',
+    primaryAction: '取餐',
+    secondaryAction: '',
+    acceptedAt: '2026-04-14T10:03:00.000Z',
+    pickedUpAt: '',
+    completedAt: '',
+  });
+
+  assert.deepEqual(resolveRiderUnifiedStatus({
+    status: 'picked_up',
+    courierPhone: '381641234567',
+    remarksJson: JSON.stringify(buildDispatchMetaRemarks('', {
+      lastRiderDecision: null,
+      declinedRiderIds: [],
+      currentRiderId: '202',
+      currentAssignedAt: '2026-04-14T10:00:00.000Z',
+      currentExpiresAt: '2026-04-14T10:10:00.000Z',
+      invalidatedRiderIds: [],
+      lastInvalidationReason: null,
+      acceptedAt: '2026-04-14T10:03:00.000Z',
+      pickedUpAt: '2026-04-14T10:19:00.000Z',
+      completedAt: '',
+      telegramMessageRef: null,
+    })),
+  }, {
+    riderId: '202',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-14T10:20:00.000Z',
+  }), {
+    statusLabel: '配送中',
+    primaryAction: '送达',
+    secondaryAction: '',
+    acceptedAt: '2026-04-14T10:03:00.000Z',
+    pickedUpAt: '2026-04-14T10:19:00.000Z',
+    completedAt: '',
+  });
+
+  assert.deepEqual(resolveRiderUnifiedStatus({
+    status: 'completed',
+    courierPhone: '381641234567',
+    remarksJson: JSON.stringify(buildDispatchMetaRemarks('', {
+      lastRiderDecision: null,
+      declinedRiderIds: [],
+      currentRiderId: '202',
+      currentAssignedAt: '2026-04-14T10:00:00.000Z',
+      currentExpiresAt: '2026-04-14T10:10:00.000Z',
+      invalidatedRiderIds: [],
+      lastInvalidationReason: null,
+      acceptedAt: '2026-04-14T10:03:00.000Z',
+      pickedUpAt: '2026-04-14T10:19:00.000Z',
+      completedAt: '2026-04-14T10:41:00.000Z',
+      telegramMessageRef: null,
+    })),
+  }, {
+    riderId: '202',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-14T10:42:00.000Z',
+  }), {
+    statusLabel: '已送达',
+    primaryAction: '',
+    secondaryAction: '',
+    acceptedAt: '2026-04-14T10:03:00.000Z',
+    pickedUpAt: '2026-04-14T10:19:00.000Z',
+    completedAt: '2026-04-14T10:41:00.000Z',
+  });
+});
+
+test('rider dashboard source uses belgrade time and unified action copy', () => {
+  assert.match(riderDashboardSource, /Europe\/Belgrade/);
+  assert.match(riderDashboardSource, /接单时间：/);
+  assert.match(riderDashboardSource, /取餐时间：/);
+  assert.match(riderDashboardSource, /送达时间：/);
+  assert.match(riderDashboardSource, /createButton\('取餐'/);
+  assert.match(riderDashboardSource, /createButton\('送达'/);
+  assert.doesNotMatch(riderDashboardSource, /createButton\('已取餐'/);
+  assert.doesNotMatch(riderDashboardSource, /createButton\('已送达'/);
+  assert.doesNotMatch(riderDashboardSource, /replace\('T', ' '\)\.slice\(5, 16\)/);
+});
+

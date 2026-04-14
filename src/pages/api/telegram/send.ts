@@ -8,11 +8,16 @@ type TelegramSendBody = {
   shop_slug?: unknown;
   chatId?: unknown;
   chat_id?: unknown;
+  messageId?: unknown;
+  message_id?: unknown;
   text?: unknown;
   telegramBotToken?: unknown;
   telegram_bot_token?: unknown;
+  replyMarkup?: unknown;
   reply_markup?: unknown;
+  parseMode?: unknown;
   parse_mode?: unknown;
+  disableWebPagePreview?: unknown;
   disable_web_page_preview?: unknown;
 };
 
@@ -157,11 +162,21 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function postTelegramMessage(token: string, telegramPayload: Record<string, unknown>): Promise<Response> {
+function parseMessageId(raw: unknown): number {
+  const normalized = typeof raw === 'number' ? raw : Number.parseInt(String(raw || '').trim(), 10);
+  return Number.isInteger(normalized) && normalized > 0 ? normalized : 0;
+}
+
+async function postTelegramMessage(
+  token: string,
+  telegramPayload: Record<string, unknown>,
+  mode: 'send' | 'edit',
+): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort('telegram_request_timeout'), TELEGRAM_SEND_REQUEST_TIMEOUT_MS);
+  const methodName = mode === 'edit' ? 'editMessageText' : 'sendMessage';
   try {
-    return await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    return await fetch(`https://api.telegram.org/bot${token}/${methodName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(telegramPayload),
@@ -172,12 +187,16 @@ async function postTelegramMessage(token: string, telegramPayload: Record<string
   }
 }
 
-async function sendTelegramMessage(token: string, telegramPayload: Record<string, unknown>): Promise<Response> {
+async function sendTelegramMessage(
+  token: string,
+  telegramPayload: Record<string, unknown>,
+  mode: 'send' | 'edit',
+): Promise<Response> {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= TELEGRAM_SEND_MAX_ATTEMPTS; attempt += 1) {
     try {
-      return await postTelegramMessage(token, telegramPayload);
+      return await postTelegramMessage(token, telegramPayload, mode);
     } catch (error) {
       lastError = error;
       if (!shouldRetryTelegramSend(error) || attempt === TELEGRAM_SEND_MAX_ATTEMPTS) {
@@ -307,6 +326,7 @@ export const POST: APIRoute = async ({ request }) => {
   const body = await request.json().catch(() => ({})) as TelegramSendBody;
   const shopSlug = String(body.shopSlug || body.shop_slug || '').trim();
   const chatId = String(body.chatId || body.chat_id || '').trim();
+  const messageId = parseMessageId(body.messageId ?? body.message_id);
   const text = String(body.text || '').trim();
   const inlineTelegramBotToken = String(body.telegramBotToken || body.telegram_bot_token || '').trim();
 
@@ -345,20 +365,28 @@ export const POST: APIRoute = async ({ request }) => {
     chat_id: chatId,
     text,
   };
+  let mode: 'send' | 'edit' = 'send';
 
-  if (body.reply_markup && typeof body.reply_markup === 'object') {
-    telegramPayload.reply_markup = body.reply_markup;
+  if (messageId > 0) {
+    telegramPayload.message_id = messageId;
+    mode = 'edit';
   }
-  if (typeof body.parse_mode === 'string' && body.parse_mode.trim()) {
-    telegramPayload.parse_mode = body.parse_mode.trim();
+  const replyMarkup = body.replyMarkup ?? body.reply_markup;
+  if (replyMarkup && typeof replyMarkup === 'object' && !Array.isArray(replyMarkup)) {
+    telegramPayload.reply_markup = replyMarkup;
   }
-  if (typeof body.disable_web_page_preview === 'boolean') {
-    telegramPayload.disable_web_page_preview = body.disable_web_page_preview;
+  const parseMode = body.parseMode ?? body.parse_mode;
+  if (typeof parseMode === 'string' && parseMode.trim()) {
+    telegramPayload.parse_mode = parseMode.trim();
+  }
+  const disableWebPagePreview = body.disableWebPagePreview ?? body.disable_web_page_preview;
+  if (typeof disableWebPagePreview === 'boolean') {
+    telegramPayload.disable_web_page_preview = disableWebPagePreview;
   }
 
   let telegramRes: Response;
   try {
-    telegramRes = await sendTelegramMessage(token, telegramPayload);
+    telegramRes = await sendTelegramMessage(token, telegramPayload, mode);
   } catch (error) {
     return json({
       success: false,

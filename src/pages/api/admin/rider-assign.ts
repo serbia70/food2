@@ -7,7 +7,13 @@ import {
   readOnlineRiders,
   type AssignableRider,
 } from '../../../lib/rider-assignment.ts';
-import { buildRiderOrderView, filterAvailableRidersForOrder } from '../../../lib/rider-dispatch.ts';
+import {
+  buildDispatchMetaRemarks,
+  buildRiderOrderView,
+  filterAvailableRidersForOrder,
+  readDispatchMetaFromRemarks,
+  type DispatchMeta,
+} from '../../../lib/rider-dispatch.ts';
 import {
   buildAdminAssignedOrderTelegramMessage,
   buildTelegramShortClaimCallback,
@@ -133,8 +139,8 @@ function findOrderRow(payload: unknown, orderId: string): Record<string, unknown
     if (!row || typeof row !== 'object') return null;
     const data = row as Record<string, unknown>;
     const id = String(data.id || data.orderId || data.order_id || '').trim();
-    if (id && normalizedOrderId && id !== normalizedOrderId) return null;
-    return data;
+    if (normalizedOrderId) return id === normalizedOrderId ? data : null;
+    return id ? data : null;
   };
 
   if (Array.isArray(payload)) {
@@ -206,6 +212,8 @@ function readOrderSummaryFromRow(row: Record<string, unknown>, orderId: string):
 }
 
 async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies'], orderId: string): Promise<{
+  ok: boolean;
+  found: boolean;
   shopSlug: string;
   remarksJson: string;
   orderSummary: {
@@ -228,11 +236,13 @@ async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute[
     method: 'GET',
   });
   const text = await res.text();
-  if (!res.ok || !text) return { shopSlug: '', remarksJson: '', orderSummary: null };
+  if (!res.ok || !text) return { ok: false, found: false, shopSlug: '', remarksJson: '', orderSummary: null };
   const parsed = readJsonObject(text);
-  if (!parsed) return { shopSlug: '', remarksJson: '', orderSummary: null };
+  if (!parsed) return { ok: false, found: false, shopSlug: '', remarksJson: '', orderSummary: null };
   const row = findOrderRow(parsed, orderId);
   return {
+    ok: true,
+    found: Boolean(row),
     shopSlug: readOrderShopSlug(parsed, orderId),
     remarksJson: row && typeof row === 'object' ? String(row.remarksJson || '').trim() : '',
     orderSummary: row ? readOrderSummaryFromRow(row, orderId) : null,
@@ -262,6 +272,54 @@ async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRou
   return {
     success: true,
     riders: readOnlineRiders(parsed),
+  };
+}
+
+async function writeDispatchMetaRemarks({
+  request,
+  cookies,
+  orderId,
+  remarksJson,
+  nextMeta,
+}: {
+  request: Request;
+  cookies: Parameters<APIRoute['POST']>[0]['cookies'];
+  orderId: string;
+  remarksJson: string;
+  nextMeta: DispatchMeta;
+}) {
+  const nextRemarks = buildDispatchMetaRemarks(remarksJson, nextMeta);
+  const remarksRes = await proxyAdminRequest({
+    request,
+    cookies,
+    url: `${API_BASE_URL}/api/admin/orders/remarks`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderId,
+      remarks: nextRemarks,
+    }),
+  });
+  const remarksText = await remarksRes.text();
+
+  let remarksPayload: Record<string, unknown> = {};
+  try {
+    remarksPayload = JSON.parse(remarksText) as Record<string, unknown>;
+  } catch {
+    remarksPayload = {};
+  }
+
+  if (!remarksRes.ok || remarksPayload.success === false) {
+    return {
+      ok: false as const,
+      status: remarksRes.status,
+      upstreamBody: remarksText || JSON.stringify(remarksPayload),
+    };
+  }
+
+  return {
+    ok: true as const,
+    remarksJson: JSON.stringify(nextRemarks),
   };
 }
 
@@ -304,6 +362,7 @@ async function notifyAssignedRider({
     inlineKeyboardRows: number;
     inlineKeyboardButtons: number;
     callbackDataLength: number;
+    messageRef?: NonNullable<DispatchMeta['telegramMessageRef']>;
     upstreamHasReplyMarkup?: boolean;
     upstreamInlineKeyboardRows?: number;
     upstreamInlineKeyboardButtons?: number;
@@ -426,6 +485,14 @@ async function notifyAssignedRider({
         shopSlug,
       };
     }
+
+    const rawResult = parsedResponse?.result;
+    const messageId = Number(
+      rawResult && typeof rawResult === 'object'
+        ? (rawResult as { message_id?: unknown }).message_id
+        : 0,
+    );
+
     return {
       success: true,
       chatId,
@@ -435,6 +502,7 @@ async function notifyAssignedRider({
       inlineKeyboardRows,
       inlineKeyboardButtons,
       callbackDataLength: callbackData.length,
+      ...(messageId > 0 ? { messageRef: { chatId, messageId } } : {}),
       ...(typeof parsedResponse?.hasReplyMarkup === 'boolean' ? { upstreamHasReplyMarkup: parsedResponse.hasReplyMarkup } : {}),
       ...(Number.isFinite(Number(parsedResponse?.inlineKeyboardRows)) ? { upstreamInlineKeyboardRows: Number(parsedResponse?.inlineKeyboardRows) } : {}),
       ...(Number.isFinite(Number(parsedResponse?.inlineKeyboardButtons)) ? { upstreamInlineKeyboardButtons: Number(parsedResponse?.inlineKeyboardButtons) } : {}),
@@ -564,6 +632,38 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     inlineTelegramBotToken,
   });
 
+  let nextRemarksJson = fetchedOrderDetails.remarksJson;
+  let warning: { code: string; upstream_status?: number; upstream_body?: string } | undefined;
+  if (telegramNotification.success && telegramNotification.messageRef) {
+    const latestOrderDetails = await fetchOrderDetails(request, cookies, orderId);
+    if (!latestOrderDetails.ok || !latestOrderDetails.found) {
+      warning = {
+        code: 'telegram_message_ref_persist_failed',
+      };
+    } else {
+      const nextMeta: DispatchMeta = {
+        ...readDispatchMetaFromRemarks(latestOrderDetails.remarksJson),
+        telegramMessageRef: telegramNotification.messageRef,
+      };
+      const remarksResult = await writeDispatchMetaRemarks({
+        request,
+        cookies,
+        orderId,
+        remarksJson: latestOrderDetails.remarksJson,
+        nextMeta,
+      });
+      if (!remarksResult.ok) {
+        warning = {
+          code: 'telegram_message_ref_persist_failed',
+          upstream_status: remarksResult.status,
+          upstream_body: remarksResult.upstreamBody,
+        };
+      } else {
+        nextRemarksJson = remarksResult.remarksJson;
+      }
+    }
+  }
+
   return new Response(JSON.stringify({
     success: true,
     rider: {
@@ -571,6 +671,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       name: target.name,
       phone: target.phone,
     },
+    order: {
+      remarksJson: nextRemarksJson,
+    },
+    ...(warning ? { warning } : {}),
     ...(!telegramNotification.success ? { telegram_notification: telegramNotification } : {}),
   }), {
     status: 200,

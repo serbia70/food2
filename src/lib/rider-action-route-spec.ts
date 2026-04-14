@@ -5,6 +5,7 @@ import { readDispatchMetaFromRemarks, buildDispatchMetaRemarks } from './rider-d
 import { POST as riderActionPost } from '../pages/api/rider/action.ts';
 
 const TEST_API_BASE = 'https://api.example.com';
+const TEST_SECRET = 'test-secret';
 const TEST_ORDER_ID = 101;
 const TEST_RIDER_ID = 202;
 const TEST_RIDER_NAME = 'Rider 1';
@@ -22,17 +23,30 @@ interface OrderSnapshot {
   status: string;
   remarksJson: string;
   courierPhone?: string;
+  shopSlug?: string;
+}
+
+interface MockDateConstructor extends DateConstructor {
+  new (): Date;
+  now(): number;
 }
 
 function useTestEnv(t: TestContext): void {
   const originalApiUrl = process.env.PUBLIC_API_URL;
+  const originalCallbackSecret = process.env.TELEGRAM_CALLBACK_SECRET;
   process.env.PUBLIC_API_URL = TEST_API_BASE;
+  process.env.TELEGRAM_CALLBACK_SECRET = TEST_SECRET;
 
   t.after(() => {
     if (typeof originalApiUrl === 'string') {
       process.env.PUBLIC_API_URL = originalApiUrl;
     } else {
       delete process.env.PUBLIC_API_URL;
+    }
+    if (typeof originalCallbackSecret === 'string') {
+      process.env.TELEGRAM_CALLBACK_SECRET = originalCallbackSecret;
+    } else {
+      delete process.env.TELEGRAM_CALLBACK_SECRET;
     }
   });
 }
@@ -72,6 +86,10 @@ function createRemarksJson(overrides: Partial<{
   currentExpiresAt: string;
   invalidatedRiderIds: string[];
   declinedRiderIds: string[];
+  acceptedAt: string;
+  pickedUpAt: string;
+  completedAt: string;
+  telegramMessageRef: { chatId: string; messageId: number } | null;
 }> = {}): string {
   return JSON.stringify(buildDispatchMetaRemarks('', {
     lastRiderDecision: null,
@@ -81,6 +99,10 @@ function createRemarksJson(overrides: Partial<{
     currentExpiresAt: overrides.currentExpiresAt || new Date(Date.now() + 5 * 60_000).toISOString(),
     invalidatedRiderIds: overrides.invalidatedRiderIds || [],
     lastInvalidationReason: null,
+    acceptedAt: overrides.acceptedAt || '',
+    pickedUpAt: overrides.pickedUpAt || '',
+    completedAt: overrides.completedAt || '',
+    telegramMessageRef: overrides.telegramMessageRef === undefined ? null : overrides.telegramMessageRef,
   }));
 }
 
@@ -91,6 +113,10 @@ function createOrderRow(snapshot: OrderSnapshot): Record<string, unknown> {
     status: snapshot.status,
     remarksJson: snapshot.remarksJson,
     courierPhone: snapshot.courierPhone ?? TEST_RIDER_PHONE,
+    shopName: 'Pizza One',
+    deliveryAddress: 'Test Address 1',
+    userPhone: '38160111222',
+    shopSlug: snapshot.shopSlug ?? 'real-shop',
   };
 }
 
@@ -103,6 +129,28 @@ function createActionRequest(body: Record<string, unknown>): Request {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+  });
+}
+
+function useMockNowIso(t: TestContext, iso: string): void {
+  const fixedTime = new Date(iso).getTime();
+  const OriginalDate = Date;
+  const MockDate = class extends OriginalDate {
+    constructor(value?: string | number | Date) {
+      super(value ?? fixedTime);
+    }
+
+    static now(): number {
+      return fixedTime;
+    }
+  } as MockDateConstructor;
+
+  MockDate.parse = OriginalDate.parse;
+  MockDate.UTC = OriginalDate.UTC;
+  globalThis.Date = MockDate;
+
+  t.after(() => {
+    globalThis.Date = OriginalDate;
   });
 }
 
@@ -130,6 +178,10 @@ function createFetchHandler(
         options?.updateStatusBody ?? { success: options?.updateStatusOk !== false },
         options?.updateStatusStatus ?? (options?.updateStatusOk === false ? 409 : 200),
       );
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -192,11 +244,106 @@ test('accept 主链路先写 admin remarks 再 update_status', async (t) => {
   assert.equal(updatePayload.status, 'delivering');
 });
 
-test('complete 主链路从 picked_up 推进到 completed', async (t) => {
+test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达按钮', async (t) => {
   useTestEnv(t);
+  const acceptedAt = '2026-04-14T10:03:00.000Z';
+  const fixedNowIso = '2026-04-14T10:25:30.000Z';
+  useMockNowIso(t, fixedNowIso);
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'delivering',
+    remarksJson: createRemarksJson({
+      acceptedAt,
+      telegramMessageRef: { chatId: '123456789', messageId: 7788 },
+    }),
+  }));
+
+  const response = await riderActionPost({
+    request: createActionRequest({
+      action: 'picked_up',
+      orderId: String(TEST_ORDER_ID),
+      riderId: String(TEST_RIDER_ID),
+      riderName: TEST_RIDER_NAME,
+      riderPhone: TEST_RIDER_PHONE,
+    }),
+  } as never);
+  const body = await readJson(response);
+  const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
+  assert.ok(updateCall);
+
+  const updatePayload = JSON.parse(updateCall.body) as { remarksJson?: string };
+  const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
+  assert.equal(nextMeta.acceptedAt, acceptedAt);
+  assert.equal(nextMeta.pickedUpAt, fixedNowIso);
+  assert.equal(nextMeta.completedAt, '');
+  assert.deepEqual(nextMeta.telegramMessageRef, { chatId: '123456789', messageId: 7788 });
+
+  assert.equal(telegramCalls.length, 1);
+  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
+  assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
+  assert.match(telegramCalls[0]?.body || '', /"shopSlug":"real-shop"/);
+  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
+  assert.match(telegramCalls[0]?.body || '', /接单时间：2026-04-14T10:03:00.000Z/);
+  assert.match(telegramCalls[0]?.body || '', /取餐时间：2026-04-14T10:25:30.000Z/);
+  assert.match(telegramCalls[0]?.body || '', /送达/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /已送达/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+});
+
+test('picked_up 缺少订单 shopSlug 时使用请求体回退 shop slug 保留送达按钮', async (t) => {
+  useTestEnv(t);
+  const acceptedAt = '2026-04-14T10:03:00.000Z';
+  const fixedNowIso = '2026-04-14T10:40:00.000Z';
+  useMockNowIso(t, fixedNowIso);
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'delivering',
+    remarksJson: createRemarksJson({
+      acceptedAt,
+      telegramMessageRef: { chatId: '123456789', messageId: 7788 },
+    }),
+    shopSlug: '',
+  }));
+
+  const response = await riderActionPost({
+    request: createActionRequest({
+      action: 'picked_up',
+      orderId: String(TEST_ORDER_ID),
+      riderId: String(TEST_RIDER_ID),
+      riderName: TEST_RIDER_NAME,
+      riderPhone: TEST_RIDER_PHONE,
+      shopSlug: 'dashboard-shop',
+    }),
+  } as never);
+  const body = await readJson(response);
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
+  assert.equal(telegramCalls.length, 1);
+  assert.match(telegramCalls[0]?.body || '', /"shopSlug":"dashboard-shop"/);
+  assert.match(telegramCalls[0]?.body || '', /取餐时间：2026-04-14T10:40:00.000Z/);
+  assert.match(telegramCalls[0]?.body || '', /送达/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+});
+
+test('complete 写入 completedAt 并同步编辑 telegram 原消息为只读送达态', async (t) => {
+  useTestEnv(t);
+  const acceptedAt = '2026-04-14T10:03:00.000Z';
+  const pickedUpAt = '2026-04-14T10:19:00.000Z';
+  const fixedNowIso = '2026-04-14T10:55:00.000Z';
+  useMockNowIso(t, fixedNowIso);
   const calls = useMockFetch(t, createFetchHandler({
     status: 'picked_up',
-    remarksJson: createRemarksJson(),
+    remarksJson: createRemarksJson({
+      acceptedAt,
+      pickedUpAt,
+      telegramMessageRef: { chatId: '123456789', messageId: 7788 },
+    }),
   }));
 
   const response = await riderActionPost({
@@ -210,13 +357,29 @@ test('complete 主链路从 picked_up 推进到 completed', async (t) => {
   } as never);
   const body = await readJson(response);
   const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.action, 'complete');
   assert.ok(updateCall);
-  assert.match(updateCall.body, /"expectedCurrentStatus":"picked_up"/);
-  assert.match(updateCall.body, /"status":"completed"/);
+
+  const updatePayload = JSON.parse(updateCall.body) as { remarksJson?: string };
+  const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
+  assert.equal(nextMeta.acceptedAt, acceptedAt);
+  assert.equal(nextMeta.pickedUpAt, pickedUpAt);
+  assert.equal(nextMeta.completedAt, fixedNowIso);
+  assert.deepEqual(nextMeta.telegramMessageRef, { chatId: '123456789', messageId: 7788 });
+
+  assert.equal(telegramCalls.length, 1);
+  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
+  assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
+  assert.match(telegramCalls[0]?.body || '', /状态：已送达/);
+  assert.match(telegramCalls[0]?.body || '', /接单时间：2026-04-14T10:03:00.000Z/);
+  assert.match(telegramCalls[0]?.body || '', /取餐时间：2026-04-14T10:19:00.000Z/);
+  assert.match(telegramCalls[0]?.body || '', /送达时间：2026-04-14T10:55:00.000Z/);
+  assert.match(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /"callback_data":/);
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
 });
 

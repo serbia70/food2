@@ -138,7 +138,23 @@ import Layout from '../../layouts/Layout.astro';
 
   <script>
     import { getRiderTelegramBindingCopy, isValidRiderSession, normalizeRiderSession } from '../../lib/rider-session';
-    import { filterRiderDashboardOrders, getRiderStatusHintCopy, resolveRiderDashboardActionState } from '../../lib/rider-dispatch.ts';
+    import { filterRiderDashboardOrders, getRiderStatusHintCopy, resolveRiderUnifiedStatus } from '../../lib/rider-dispatch.ts';
+
+    const BELGRADE_TIME_ZONE = 'Europe/Belgrade';
+    const belgradeDateTimeFormatter = new Intl.DateTimeFormat('sr-RS', {
+      timeZone: BELGRADE_TIME_ZONE,
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    const belgradeTimeFormatter = new Intl.DateTimeFormat('sr-RS', {
+      timeZone: BELGRADE_TIME_ZONE,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
 
     let rider = null;
     let currentTab = 'pool';
@@ -477,8 +493,9 @@ import Layout from '../../layouts/Layout.astro';
       badge.textContent = String(status || 'offline').toUpperCase();
     }
 
-    async function submitRiderAction(action, orderId) {
+    async function submitRiderAction(action, orderId, shopSlug = '') {
       if (!rider) return false;
+      const normalizedShopSlug = String(shopSlug || '').trim();
       const res = await fetch('/api/rider/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -488,6 +505,7 @@ import Layout from '../../layouts/Layout.astro';
           riderId: rider.id,
           riderName: rider.name,
           riderPhone: rider.phone,
+          ...(normalizedShopSlug ? { shopSlug: normalizedShopSlug } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -590,6 +608,22 @@ import Layout from '../../layouts/Layout.astro';
       return button;
     }
 
+    function formatBelgradeTime(value, includeDate = false) {
+      const iso = String(value || '').trim();
+      if (!iso) return '';
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return '';
+      return (includeDate ? belgradeDateTimeFormatter : belgradeTimeFormatter)
+        .format(date)
+        .replace(',', '');
+    }
+
+    function createActionTimeRow(label, value) {
+      const formattedValue = formatBelgradeTime(value);
+      if (!formattedValue) return null;
+      return createInfoRow('⏱️', createTextNode(`${label}${formattedValue}`, 'text'));
+    }
+
     function renderOrders() {
       const container = document.getElementById('order-list');
       if (!container) return;
@@ -631,12 +665,15 @@ import Layout from '../../layouts/Layout.astro';
         const customerPhone = String(order?.userPhone || '').trim();
         const totalAmount = Number(riderView.totalAmount || 0) || 0;
         const pickupEtaMinutes = Number(riderView.pickupEtaMinutes || 0) || 0;
-        const actionState = resolveRiderDashboardActionState({
-          order,
+        const unifiedStatus = resolveRiderUnifiedStatus(order, {
           riderId: rider?.id,
           riderPhone: rider?.phone,
         });
-        const canAccept = rider?.status === 'available' && actionState.canAccept;
+        const orderShopSlug = String(order?.shopSlug || order?.shopId || '').trim();
+        const canAccept = rider?.status === 'available' && unifiedStatus.primaryAction === '接单';
+        const canDecline = unifiedStatus.secondaryAction === '暂不接单';
+        const canPickUp = unifiedStatus.primaryAction === '取餐';
+        const canComplete = unifiedStatus.primaryAction === '送达';
         const items = parseItems(order?.itemsJson);
 
         const card = document.createElement('div');
@@ -661,11 +698,11 @@ import Layout from '../../layouts/Layout.astro';
         orderNo.textContent = `#${String(order?.orderNo || order?.id || '').slice(-6)}`;
         const orderTime = document.createElement('div');
         orderTime.className = 'order-time';
-        orderTime.textContent = String(order?.createdAt || '').replace('T', ' ').slice(5, 16);
+        orderTime.textContent = formatBelgradeTime(order?.createdAt, true);
         left.append(orderNo, orderTime);
         const status = document.createElement('span');
         status.className = 'status-pill';
-        status.textContent = orderStatusCopy;
+        status.textContent = unifiedStatus.statusLabel || orderStatusCopy;
         header.append(left, status);
         card.appendChild(header);
 
@@ -673,6 +710,12 @@ import Layout from '../../layouts/Layout.astro';
         if (shopAddress) card.appendChild(createInfoRow('📦', createTextNode(shopAddress, 'text')));
         if (deliveryAddress) card.appendChild(createInfoRow('📍', createTextNode(deliveryAddress, 'text address')));
         if (customerPhone) card.appendChild(createInfoRow('📞', createLinkNode(customerPhone, `tel:${customerPhone}`, 'text phone')));
+        const acceptedAtRow = createActionTimeRow('接单时间：', unifiedStatus.acceptedAt);
+        if (acceptedAtRow) card.appendChild(acceptedAtRow);
+        const pickedUpAtRow = createActionTimeRow('取餐时间：', unifiedStatus.pickedUpAt);
+        if (pickedUpAtRow) card.appendChild(pickedUpAtRow);
+        const completedAtRow = createActionTimeRow('送达时间：', unifiedStatus.completedAt);
+        if (completedAtRow) card.appendChild(completedAtRow);
 
         const itemsBox = document.createElement('div');
         itemsBox.className = 'items-box';
@@ -724,25 +767,25 @@ import Layout from '../../layouts/Layout.astro';
 
         if (currentTab === 'pool') {
           actionWrap.appendChild(createButton(
-            canAccept ? '接单配送' : '当前不可接单',
+            '接单',
             'btn-action btn-primary',
-            () => window.takeOrder(order.id),
+            () => window.takeOrder(order.id, orderShopSlug),
             !canAccept,
           ));
           actionWrap.appendChild(createButton(
             '暂不接单',
             'btn-action btn-secondary',
-            () => window.declineOrder(order.id),
-            !actionState.canDecline,
+            () => window.declineOrder(order.id, orderShopSlug),
+            !canDecline,
           ));
         }
 
-        if (currentTab === 'active' && actionState.canPickUp) {
-          actionWrap.appendChild(createButton('已取餐', 'btn-action btn-complete', () => window.pickUpOrder(order.id)));
+        if (currentTab === 'active' && canPickUp) {
+          actionWrap.appendChild(createButton('取餐', 'btn-action btn-complete', () => window.pickUpOrder(order.id, orderShopSlug)));
         }
 
-        if (currentTab === 'active' && actionState.canComplete) {
-          actionWrap.appendChild(createButton('已送达', 'btn-action btn-complete', () => window.completeOrder(order.id)));
+        if (currentTab === 'active' && canComplete) {
+          actionWrap.appendChild(createButton('送达', 'btn-action btn-complete', () => window.completeOrder(order.id, orderShopSlug)));
         }
 
         if (actionWrap.childNodes.length > 0) card.appendChild(actionWrap);
@@ -794,24 +837,24 @@ import Layout from '../../layouts/Layout.astro';
       if (event?.target instanceof HTMLElement) event.target.blur();
     };
 
-    window.takeOrder = async function(id) {
+    window.takeOrder = async function(id, shopSlug = '') {
       if (!confirm('确认接这单并开始配送？')) return;
-      await submitRiderAction('accept', id);
+      await submitRiderAction('accept', id, shopSlug);
     };
 
-    window.declineOrder = async function(id) {
+    window.declineOrder = async function(id, shopSlug = '') {
       if (!confirm('确认暂不接这单？')) return;
-      await submitRiderAction('decline', id);
+      await submitRiderAction('decline', id, shopSlug);
     };
 
-    window.pickUpOrder = async function(id) {
+    window.pickUpOrder = async function(id, shopSlug = '') {
       if (!confirm('确认已取餐，开始配送？')) return;
-      await submitRiderAction('picked_up', id);
+      await submitRiderAction('picked_up', id, shopSlug);
     };
 
-    window.completeOrder = async function(id) {
+    window.completeOrder = async function(id, shopSlug = '') {
       if (!confirm('确认已送达并收款？')) return;
-      await submitRiderAction('complete', id);
+      await submitRiderAction('complete', id, shopSlug);
     };
 
     init();

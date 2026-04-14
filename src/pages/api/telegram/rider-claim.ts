@@ -122,7 +122,7 @@ async function editDeliveryProgressMessage(
   });
   const realShopSlug = readOrderShopSlug(order, callback.restaurantId);
 
-  const completeCallbackData = unifiedStatus.primaryAction === '送达' && realShopSlug
+  const primaryCallbackData = unifiedStatus.primaryAction && realShopSlug
     ? buildTelegramShortClaimCallback({
         orderId: Number(callback.orderId),
         riderId: Number(callback.riderId),
@@ -130,7 +130,7 @@ async function editDeliveryProgressMessage(
         riderPhone,
         restaurantId: realShopSlug,
         telegramChatId: fallbackChatId,
-        action: 'complete',
+        action: unifiedStatus.primaryAction === '送达' ? 'complete' : 'picked_up',
       })
     : '';
 
@@ -145,8 +145,8 @@ async function editDeliveryProgressMessage(
     completedAtLabel: unifiedStatus.completedAt,
     shopMapUrl: orderView.shopMapUrl,
     deliveryMapUrl: orderView.deliveryMapUrl,
-    primaryAction: unifiedStatus.primaryAction && completeCallbackData
-      ? { text: unifiedStatus.primaryAction, callbackData: completeCallbackData }
+    primaryAction: unifiedStatus.primaryAction && primaryCallbackData
+      ? { text: unifiedStatus.primaryAction, callbackData: primaryCallbackData }
       : null,
     secondaryAction: null,
   });

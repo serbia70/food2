@@ -249,7 +249,9 @@ test('accept 主链路先写 admin remarks 再 update_status，并把 Telegram �
   assert.equal(telegramCalls[0]?.url, 'https://example.com/api/telegram/send');
   assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
   assert.match(telegramCalls[0]?.body || '', /状态：待取餐/);
-  assert.match(telegramCalls[0]?.body || '', /取餐/);
+  assert.match(telegramCalls[0]?.body || '', /"text":"取餐"/);
+  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /送达/);
 });
 

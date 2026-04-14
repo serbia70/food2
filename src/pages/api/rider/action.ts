@@ -72,7 +72,7 @@ async function syncTelegramRiderMessage(
     riderPhone,
   });
   const shopSlug = readOrderShopSlug(order) || readTelegramSendShopSlug(fallbackShopSlug);
-  const completeCallbackData = unifiedStatus.primaryAction === '送达' && shopSlug
+  const primaryCallbackData = unifiedStatus.primaryAction && shopSlug
     ? buildTelegramShortClaimCallback({
         orderId: Number(orderId),
         riderId: Number(riderId),
@@ -80,7 +80,7 @@ async function syncTelegramRiderMessage(
         riderPhone,
         restaurantId: shopSlug,
         telegramChatId: messageRef.chatId,
-        action: 'complete',
+        action: unifiedStatus.primaryAction === '送达' ? 'complete' : 'picked_up',
       })
     : '';
 
@@ -95,8 +95,8 @@ async function syncTelegramRiderMessage(
     completedAtLabel: unifiedStatus.completedAt,
     shopMapUrl: orderView.shopMapUrl,
     deliveryMapUrl: orderView.deliveryMapUrl,
-    primaryAction: unifiedStatus.primaryAction && completeCallbackData
-      ? { text: unifiedStatus.primaryAction, callbackData: completeCallbackData }
+    primaryAction: unifiedStatus.primaryAction && primaryCallbackData
+      ? { text: unifiedStatus.primaryAction, callbackData: primaryCallbackData }
       : null,
     secondaryAction: null,
   });

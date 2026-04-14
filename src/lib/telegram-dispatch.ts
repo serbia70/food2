@@ -362,7 +362,7 @@ export function parseTelegramClaimCallback(
 
     return {
       ...shortParsed,
-      riderName: '',
+      riderName: String(shortParsed.riderName || '').trim(),
       riderPhone: shortParsed.riderPhone,
       restaurantId: String(options?.restaurantId || '').trim(),
       telegramChatId: chatId,

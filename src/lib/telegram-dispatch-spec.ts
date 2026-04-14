@@ -183,7 +183,7 @@ test('buildTelegramShortClaimCallback round-trip parses short callback', (t) => 
   assert.equal(parsed.orderId, 101);
   assert.equal(parsed.riderId, 202);
   assert.equal(parsed.telegramChatId, TEST_CHAT_ID);
-  assert.equal(parsed.riderName, '');
+  assert.equal(parsed.riderName, 'Rider_1');
   assert.equal(parsed.riderPhone, '381641234567');
   assert.equal(parsed.restaurantId, 'shop-1');
 });

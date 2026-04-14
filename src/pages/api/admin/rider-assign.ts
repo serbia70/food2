@@ -447,7 +447,7 @@ async function notifyAssignedRider({
       : '';
 
     const sendTelegram = async (payload: Record<string, unknown>) => {
-      const response = await fetch(`${API_BASE_URL}/api/telegram/send`, {
+      const response = await fetch(new URL('/api/telegram/send', request.url), {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),

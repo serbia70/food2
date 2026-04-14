@@ -151,7 +151,7 @@ async function editDeliveryProgressMessage(
     secondaryAction: null,
   });
 
-  await fetch(`${readInternalApiBaseUrl()}/api/telegram/send`, {
+  await fetch(new URL('/api/telegram/send', request.url), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

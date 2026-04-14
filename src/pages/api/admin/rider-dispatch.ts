@@ -439,7 +439,7 @@ async function notifyTelegramRecipients(
       const sendRes = await proxyAdminRequest({
         request,
         cookies,
-        url: `${API_BASE_URL}/api/telegram/send`,
+        url: new URL('/api/telegram/send', request.url).toString(),
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

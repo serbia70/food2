@@ -119,6 +119,7 @@ test('publish dispatch telegram includes shared shopName and explicit shopMapUrl
   const body = JSON.parse(await response.text()) as { success?: boolean };
   const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
   assert.ok(telegramCall);
+  assert.equal(telegramCall.url, 'https://example.com/api/telegram/send');
   const telegramBody = JSON.parse(telegramCall.body) as { text?: string };
 
   assert.equal(response.status, 200);
@@ -289,7 +290,7 @@ test('manual assign 仅 remarks 回写失败时仍返回 success 和 warning', a
   useTestEnv(t);
   let remarksWriteCount = 0;
 
-  useMockFetch(t, async (request) => {
+  const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/admin/riders') {
@@ -360,7 +361,10 @@ test('manual assign 仅 remarks 回写失败时仍返回 success 和 warning', a
     warning?: { code?: string; upstream_status?: number; upstream_body?: string };
     order?: { remarksJson?: string };
   };
+  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
 
+  assert.ok(telegramCall);
+  assert.equal(telegramCall.url, 'https://example.com/api/telegram/send');
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(remarksWriteCount, 1);
@@ -377,7 +381,7 @@ test('manual assign latest remarks 重读失败时不得覆盖 remarks 且返回
   let orderReadCount = 0;
   let remarksWriteCount = 0;
 
-  useMockFetch(t, async (request) => {
+  const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/admin/riders') {
@@ -455,7 +459,10 @@ test('manual assign latest remarks 重读失败时不得覆盖 remarks 且返回
     warning?: { code?: string; upstream_status?: number; upstream_body?: string };
     order?: { remarksJson?: string };
   };
+  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
 
+  assert.ok(telegramCall);
+  assert.equal(telegramCall.url, 'https://example.com/api/telegram/send');
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(orderReadCount, 2);

@@ -626,9 +626,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   const bodyOrderSummary = readOrderSummary(body, orderId);
   const notifyShopSlug = normalizeNotifyShopSlug(providedShopSlug) || fetchedOrderDetails.shopSlug;
-  const orderSummary = fetchedOrderDetails.orderSummary && bodyOrderSummary.orderNo === orderId
-    ? fetchedOrderDetails.orderSummary
-    : bodyOrderSummary;
+  const orderSummary = fetchedOrderDetails.orderSummary ?? bodyOrderSummary;
   const telegramNotification = await notifyAssignedRider({
     request,
     rider: target,

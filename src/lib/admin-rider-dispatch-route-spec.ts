@@ -442,6 +442,88 @@ test('manual assign telegram uses restaurantName from fetched order row when sho
   assert.equal(String(deliveryButton?.url || ''), 'https://www.google.com/maps/search/?api=1&query=ruma1');
 });
 
+test('manual assign still uses fetched shop data when orderNo differs from internal orderId', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/admin/riders') {
+      return jsonResponse({
+        riders: [
+          { id: '202', name: 'Rider 1', phone: '381641234567', telegramChatId: 'chat-1', status: 'available' },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders' && request.method === 'GET') {
+      return jsonResponse({
+        success: true,
+        orders: [
+          {
+            id: '916',
+            orderNo: '260415016',
+            remarksJson: JSON.stringify(['dispatch_meta:{"currentRiderId":"202","telegramMessageRef":null}']),
+            shopSlug: 'shop-a',
+            restaurantName: 'Ruma Sushi',
+            restaurantAddress: 'Bulevar 1',
+            tableInfo: '张三, 0613083888, ruma1 [货到付款/Cash] (备注:不要辣)',
+            totalAmount: 611,
+            userPhone: '0613083888',
+            status: 'awaiting_courier',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders/916/status') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true, message_id: 7792 });
+    }
+
+    if (url.pathname === '/api/admin/orders/remarks') {
+      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const request = new Request('https://example.com/api/admin/rider-assign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'manual_assign',
+      orderId: '916',
+      riderId: '202',
+      shopSlug: 'shop-a',
+      pickupEtaMinutes: 10,
+      orderSummary: {
+        orderNo: '260415016',
+        deliveryAddress: 'hui, 0613083888, ruma1 [货到付款/Cash] (备注:)',
+        userPhone: '0613083888',
+        totalAmount: 611,
+        items: [{ name: 'Fileti ribe u ljutom ulju (Shuizhu)', quantity: 1 }],
+      },
+    }),
+  });
+
+  const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
+  const body = JSON.parse(await response.text()) as { success?: boolean };
+  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
+  const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { text?: string; reply_markup?: { inline_keyboard?: Array<Array<{ text?: string; url?: string }>> } };
+  const buttons = telegramBody.reply_markup?.inline_keyboard?.flat() || [];
+  const pickupButton = buttons.find((button) => button.text === '取餐导航');
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.match(String(telegramBody.text || ''), /订单号：260415016/);
+  assert.match(String(telegramBody.text || ''), /店铺：Ruma Sushi/);
+  assert.doesNotMatch(String(telegramBody.text || ''), /店铺：店铺/);
+  assert.equal(String(pickupButton?.url || ''), 'https://www.google.com/maps/search/?api=1&query=Bulevar%201');
+});
+
 test('publish dispatch telegramMessageRef 回写前会重读最新 remarks 并保留并发新增内容', async (t) => {
   useTestEnv(t);
   const latestConcurrentRemarks = JSON.stringify([

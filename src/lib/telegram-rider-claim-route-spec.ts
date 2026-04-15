@@ -872,6 +872,60 @@ test('accept 成功时即使 list_available 不再返回当前骑手，也必须
   assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
 });
 
+test('accept 成功时订单只有 restaurantId 也必须编辑出取餐按钮', async (t) => {
+  useTestEnv(t);
+  const existingRemarksJson = createRemarksJson({
+    telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+  });
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({ riders: [] });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse([
+        {
+          ...createOrderRow({
+            status: 'awaiting_courier',
+            remarksJson: existingRemarksJson,
+            shopSlug: '',
+          }),
+          shopSlug: '',
+          restaurantId: 103,
+        },
+      ]);
+    }
+
+    if (url.pathname === '/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('accept', Date.now() + 60_000)));
+  const body = await readJson(response);
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(telegramCalls.length, 1);
+  assert.match(telegramCalls[0]?.body || '', /"shopSlug":"103"/);
+  assert.match(telegramCalls[0]?.body || '', /"text":"取餐"/);
+  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+});
+
 test('accept 成功时写回 dispatch_meta 保留当前骑手位，并把 Telegram 原消息切到待取餐', async (t) => {
   useTestEnv(t);
   const currentAssignedAt = new Date(Date.now() - 60_000).toISOString();

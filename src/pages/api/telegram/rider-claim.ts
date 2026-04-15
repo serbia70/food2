@@ -43,6 +43,8 @@ function readOrderShopSlug(order: Record<string, unknown>, fallback?: unknown): 
     || readTelegramSendShopSlug(order.restaurantSlug)
     || readTelegramSendShopSlug(order.shop_slug)
     || readTelegramSendShopSlug(order.restaurant_slug)
+    || readTelegramSendShopSlug(order.restaurantId)
+    || readTelegramSendShopSlug(order.shopId)
     || readTelegramSendShopSlug(fallback);
 }
 

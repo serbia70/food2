@@ -364,8 +364,9 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
       }))
     : actionDecision.nextRemarksJson;
 
+  const numericOrderId = Number(callback.orderId);
   const updateStatusPayload: Record<string, unknown> = {
-    id: callback.orderId,
+    id: Number.isInteger(numericOrderId) && numericOrderId > 0 ? numericOrderId : callback.orderId,
     expectedCurrentStatus: actionDecision.expectedCurrentStatus,
     status: actionDecision.targetStatus,
   };

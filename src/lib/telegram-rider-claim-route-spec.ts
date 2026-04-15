@@ -410,7 +410,8 @@ test('picked_up writes pickedUpAt and edits original telegram message instead of
   assert.equal(body.action, 'picked_up');
   assert.ok(updateCall);
 
-  const updatePayload = JSON.parse(updateCall.body) as { remarksJson?: string };
+  const updatePayload = JSON.parse(updateCall.body) as { id?: unknown; remarksJson?: string };
+  assert.equal(updatePayload.id, TEST_ORDER_ID);
   const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
   assert.equal(nextMeta.acceptedAt, acceptedAt);
   assert.match(nextMeta.pickedUpAt, /^\d{4}-\d{2}-\d{2}T/);

@@ -286,7 +286,8 @@ test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达�
   assert.equal(body.action, 'picked_up');
   assert.ok(updateCall);
 
-  const updatePayload = JSON.parse(updateCall.body) as { remarksJson?: string };
+  const updatePayload = JSON.parse(updateCall.body) as { id?: unknown; remarksJson?: string };
+  assert.equal(updatePayload.id, TEST_ORDER_ID);
   const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
   assert.equal(nextMeta.acceptedAt, acceptedAt);
   assert.equal(nextMeta.pickedUpAt, fixedNowIso);

@@ -192,8 +192,9 @@ export const POST: APIRoute = async ({ request }) => {
       }))
     : actionDecision.nextRemarksJson;
 
+  const numericOrderId = Number(orderId);
   const payload: Record<string, unknown> = {
-    id: orderId,
+    id: Number.isInteger(numericOrderId) && numericOrderId > 0 ? numericOrderId : orderId,
     expectedCurrentStatus: actionDecision.expectedCurrentStatus,
     status: actionDecision.targetStatus,
   };

@@ -429,6 +429,70 @@ test('picked_up writes pickedUpAt and edits original telegram message instead of
   assert.doesNotMatch(telegramCalls[0]?.body || '', /"text":"Pizza One有新单/);
 });
 
+test('picked_up 更新成功后即使二次读取订单失败也必须编辑原消息', async (t) => {
+  useTestEnv(t);
+  const acceptedAt = '2026-04-14T10:03:00.000Z';
+  let adminOrdersReads = 0;
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({
+        riders: [
+          {
+            id: TEST_RIDER_ID,
+            name: TEST_RIDER_NAME,
+            phone: TEST_RIDER_PHONE,
+            telegramChatId: TEST_CHAT_ID,
+            status: 'available',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      adminOrdersReads += 1;
+      if (adminOrdersReads === 1) {
+        return jsonResponse([createOrderRow({
+          status: 'delivering',
+          remarksJson: createRemarksJson({
+            acceptedAt,
+            telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+          }),
+          shopSlug: 'real-shop',
+        })]);
+      }
+      return jsonResponse([], 200);
+    }
+
+    if (url.pathname === '/api/rider/orders') {
+      return jsonResponse({ success: true, orders: [] });
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('picked_up', Date.now() - 1_000)));
+  const body = await readJson(response);
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
+  assert.equal(telegramCalls.length, 1);
+  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
+  assert.match(telegramCalls[0]?.body || '', /"text":"送达"/);
+  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
+});
+
 test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback 不回退 admin', async (t) => {
   useTestEnv(t);
   const calls = useMockFetch(t, createFetchHandler({

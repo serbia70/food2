@@ -7,7 +7,6 @@ import {
   buildUpstreamFailureResponse,
   readJsonObject,
   readOrderDetail,
-  readOrderDispatchSnapshot,
   writeOrderDispatchRemarks,
 } from '../../../lib/rider-route-shared.ts';
 import { buildRiderSingleMessageTelegram, buildTelegramEditMessagePayload, buildTelegramShortClaimCallback, parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
@@ -98,12 +97,13 @@ async function editDeliveryProgressMessage(
   fallbackChatId: string,
   remarksJson: string,
   targetStatus: 'delivering' | 'picked_up' | 'completed',
+  fallbackOrder?: Record<string, unknown> | null,
 ): Promise<void> {
   const meta = readDispatchMetaFromRemarks(remarksJson);
   const messageRef = meta.telegramMessageRef;
   if (!messageRef) return;
 
-  const order = await readOrderDetail(request, readInternalApiBaseUrl(), String(callback.orderId || '').trim(), riderPhone);
+  const order = fallbackOrder || await readOrderDetail(request, readInternalApiBaseUrl(), String(callback.orderId || '').trim(), riderPhone);
   if (!order) return;
 
   const orderView = buildRiderOrderView({
@@ -253,8 +253,9 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   const orderIdText = String(callback.orderId || '').trim();
   const riderIdText = String(callback.riderId || '').trim();
   const nowIso = new Date().toISOString();
-  const orderSnapshot = await readOrderDispatchSnapshot(request, readInternalApiBaseUrl(), orderIdText, resolvedPhone);
-  const currentMeta = readDispatchMetaFromRemarks(orderSnapshot.remarksJson);
+  const progressStage = resolveTelegramClaimStage(callback.action);
+  const orderDetailForProgress = await readOrderDetail(request, readInternalApiBaseUrl(), orderIdText, resolvedPhone);
+  const currentMeta = readDispatchMetaFromRemarks(String(orderDetailForProgress?.remarksJson || orderDetailForProgress?.remarks_json || ''));
   const nextActionTimes = {
     acceptedAt: currentMeta.acceptedAt,
     pickedUpAt: callback.action === 'picked_up' ? nowIso : currentMeta.pickedUpAt,
@@ -263,9 +264,9 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   const actionDecision = resolveRiderOrderAction({
     action: callback.action,
     order: {
-      status: orderSnapshot.status || 'awaiting_courier',
-      remarksJson: orderSnapshot.remarksJson,
-      courierPhone: orderSnapshot.courierPhone || resolvedPhone,
+      status: String(orderDetailForProgress?.status || '').trim() || 'awaiting_courier',
+      remarksJson: String(orderDetailForProgress?.remarksJson || orderDetailForProgress?.remarks_json || '').trim(),
+      courierPhone: String(orderDetailForProgress?.courierPhone || orderDetailForProgress?.courier_phone || '').trim() || resolvedPhone,
     },
     riderId: riderIdText,
     riderName: resolvedName,
@@ -273,7 +274,6 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
     nowIso,
   });
   const isDeclineAction = callback.action === 'decline';
-  const progressStage = resolveTelegramClaimStage(callback.action);
 
   if (!actionDecision.allowed) {
     const body: Record<string, unknown> = { success: false, error: actionDecision.error };
@@ -358,7 +358,7 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
     : await writeOrderDispatchRemarks(request, readInternalApiBaseUrl(), orderIdText, actionDecision.nextRemarksJson);
 
   const nextRemarksJson = callback.action === 'picked_up' || callback.action === 'complete'
-    ? JSON.stringify(buildDispatchMetaRemarks(orderSnapshot.remarksJson, {
+    ? JSON.stringify(buildDispatchMetaRemarks(String(orderDetailForProgress?.remarksJson || orderDetailForProgress?.remarks_json || ''), {
         ...currentMeta,
         acceptedAt: nextActionTimes.acceptedAt,
         pickedUpAt: nextActionTimes.pickedUpAt,
@@ -409,6 +409,7 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
         actionDecision.targetStatus === 'completed'
           ? 'completed'
           : (actionDecision.targetStatus === 'picked_up' ? 'picked_up' : 'delivering'),
+        orderDetailForProgress,
       );
     } catch {
       // 不阻断接单成功回包

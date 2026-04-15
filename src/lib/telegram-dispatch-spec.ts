@@ -412,6 +412,93 @@ test('telegram send route 在前端取不到 token 时回退后端 telegram/send
   assert.equal(calls.some((call) => call.url.includes('api.telegram.org')), false);
 });
 
+test('telegram send route 在数字 shopSlug 场景跳过 /info 并继续走全局 token 解析', async (t) => {
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/master/init') {
+      return jsonResponse({ telegram_bot_token: 'bot-token-1' });
+    }
+
+    if (url.hostname === 'api.telegram.org') {
+      return jsonResponse({ ok: true, result: { message_id: 9902 } });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await sendTelegramRoute({
+    request: new Request('https://example.com/api/telegram/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopSlug: '103',
+        chat_id: TEST_CHAT_ID,
+        message_id: 7788,
+        text: 'edited text',
+        reply_markup: { inline_keyboard: [[{ text: '送达', callback_data: 'cb-complete' }]] },
+      }),
+    }),
+  } as Parameters<typeof sendTelegramRoute>[0]);
+
+  const body = await readJson(response);
+  const telegramCall = calls.find((call) => call.url.includes('/editMessageText'));
+
+  assert.equal(response.status, 200);
+  assert.ok(telegramCall);
+  assert.match(telegramCall?.body || '', /"message_id":7788/);
+  assert.match(telegramCall?.body || '', /"reply_markup":/);
+  assert.equal((body.result as { message_id?: unknown })?.message_id, 9902);
+  assert.equal(calls.some((call) => call.url === 'https://food2api.serbia70.com/103/info'), false);
+});
+
+test('telegram send route 在数字 shopSlug 且前端取不到 token 时回退后端但不透传数字 shopSlug', async (t) => {
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/master/init') {
+      return jsonResponse({ success: false, error: 'unauthorized' }, 401);
+    }
+
+    if (url.pathname === '/api/home') {
+      return jsonResponse({ success: true, settings: {} });
+    }
+
+    if (url.pathname === '/api/telegram/send' && url.hostname === 'food2api.serbia70.com') {
+      return jsonResponse({
+        success: true,
+        ok: true,
+        result: { message_id: 7788 },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await sendTelegramRoute({
+    request: new Request('https://example.com/api/telegram/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopSlug: '103',
+        chat_id: TEST_CHAT_ID,
+        message_id: 7788,
+        text: 'edited text',
+        reply_markup: { inline_keyboard: [[{ text: '送达', callback_data: 'cb-complete' }]] },
+      }),
+    }),
+  } as Parameters<typeof sendTelegramRoute>[0]);
+
+  const body = await readJson(response);
+  const backendCall = calls.find((call) => call.url === 'https://food2api.serbia70.com/api/telegram/send');
+
+  assert.equal(response.status, 200);
+  assert.ok(backendCall);
+  assert.doesNotMatch(backendCall?.body || '', /"shopSlug":"103"/);
+  assert.match(backendCall?.body || '', /"message_id":7788/);
+  assert.equal((body.result as { message_id?: unknown })?.message_id, 7788);
+});
+
 test('buildRiderAwaitingPickupTelegramMessage uses awaiting-pickup semantics', () => {
   const message = buildRiderAwaitingPickupTelegramMessage({
     orderNo: 'A476',

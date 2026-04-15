@@ -240,7 +240,8 @@ async function loadTelegramBotToken(request: Request, shopSlug: string, inlineTo
   }
 
   const normalizedShopSlug = String(shopSlug || '').trim();
-  if (normalizedShopSlug) {
+  const shouldSkipShopInfoLookup = /^\d+$/.test(normalizedShopSlug);
+  if (normalizedShopSlug && !shouldSkipShopInfoLookup) {
     diagnostics.shopInfo.requested = true;
     const shopRes = await fetch(`${API_BASE_URL}/${encodeURIComponent(normalizedShopSlug)}/info`);
     if (!shopRes.ok) throw new Error(`shop_info_http_${shopRes.status}`);
@@ -362,6 +363,7 @@ export const POST: APIRoute = async ({ request }) => {
   const messageId = parseMessageId(body.messageId ?? body.message_id);
   const text = String(body.text || '').trim();
   const inlineTelegramBotToken = String(body.telegramBotToken || body.telegram_bot_token || '').trim();
+  const numericShopSlug = /^\d+$/.test(shopSlug);
 
   if (!chatId || !text) {
     return json({ success: false, error: 'invalid_send_request' }, 400);
@@ -410,7 +412,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   if (!token) {
     return proxyTelegramSendToBackend(request, {
-      ...(shopSlug ? { shopSlug } : {}),
+      ...(!numericShopSlug && shopSlug ? { shopSlug } : {}),
       ...telegramPayload,
     });
   }

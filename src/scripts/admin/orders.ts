@@ -126,7 +126,7 @@ function normalizeAdminOrdersPayload(data: unknown): AdminOrderRow[] {
     return {
       ...source,
       id: source.id,
-      orderNo: source.orderNo ?? source.id,
+      orderNo: source.orderNo ?? source.order_no ?? source.id,
       orderType: source.orderType ?? (tableInfo ? 'dine_in' : ''),
       status: source.status ?? (tableInfo ? 'pending' : ''),
       totalAmount: source.totalAmount ?? 0,

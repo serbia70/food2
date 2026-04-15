@@ -499,6 +499,37 @@ test('telegram send route 在数字 shopSlug 且前端取不到 token 时回退�
   assert.equal((body.result as { message_id?: unknown })?.message_id, 7788);
 });
 
+test('buildAdminAssignedOrderTelegramMessage outputs bilingual item lines with qty and price', async () => {
+  const { buildAdminAssignedOrderTelegramMessage } = await import('./telegram-dispatch.ts');
+
+  const message = buildAdminAssignedOrderTelegramMessage({
+    orderNo: '260415010',
+    shopName: '店铺A / Restoran A',
+    address: 'Kralja Petra 10',
+    totalAmount: 1200,
+    phone: '381600000000',
+    pickupEtaMinutes: 15,
+    scheduledFor: '',
+    itemSummary: [
+      '土豆牛肉饼 / Pljeskavica x2 · 600 RSD',
+      '可乐 / Coca-Cola x1 · 200 RSD',
+    ],
+    shopMapUrl: 'https://maps.example.com/shop',
+    deliveryMapUrl: 'https://maps.example.com/customer',
+    claimCallbackData: 'cb-accept',
+    declineCallbackData: 'cb-decline',
+  });
+
+  assert.match(message.text, /你有新的指派订单 \/ Nova dodeljena porudžbina/);
+  assert.match(message.text, /菜品\/Stavke：/);
+  assert.match(message.text, /• 土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
+  assert.match(message.text, /• 可乐 \/ Coca-Cola x1 · 200 RSD/);
+  assert.deepEqual(message.replyMarkup.inline_keyboard, [[
+    { text: '接单', callback_data: 'cb-accept' },
+    { text: '暂不接单', callback_data: 'cb-decline' },
+  ]]);
+});
+
 test('buildRiderAwaitingPickupTelegramMessage uses awaiting-pickup semantics', () => {
   const message = buildRiderAwaitingPickupTelegramMessage({
     orderNo: 'A476',

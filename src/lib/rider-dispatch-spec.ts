@@ -54,8 +54,30 @@ test('buildRiderOrderMapUrl strips cash and remark suffixes from fallback addres
   const url = buildRiderOrderMapUrl('', 'hui, 0613083888, ruma1 [货到付款/Cash] (备注:不要辣)');
 
   assert.match(url, /google\.com\/maps\/search/);
-  assert.match(url, /hui%2C%200613083888%2C%20ruma1/);
-  assert.doesNotMatch(url, /%E8%B4%A7%E5%88%B0%E4%BB%98%E6%AC%BE|Cash|%E5%A4%87%E6%B3%A8|remark/i);
+  assert.match(url, /query=ruma1/);
+  assert.doesNotMatch(url, /hui|0613083888|%E8%B4%A7%E5%88%B0%E4%BB%98%E6%AC%BE|Cash|%E5%A4%87%E6%B3%A8|remark/i);
+});
+
+test('buildRiderOrderMapUrl strips name and phone prefixes and keeps only delivery address', () => {
+  const url = buildRiderOrderMapUrl('', '张三, 0613083888, ruma1 [货到付款/Cash] (备注:不要辣)');
+
+  assert.match(url, /google\.com\/maps\/search/);
+  assert.match(url, /query=ruma1/);
+  assert.doesNotMatch(url, /张三|0613083888|Cash|%E5%A4%87%E6%B3%A8/);
+});
+
+test('buildRiderOrderView falls back to restaurantAddress for pickup navigation when shopMapUrl is missing', () => {
+  const view = buildRiderOrderView({
+    shopName: 'Pizza One',
+    restaurantAddress: 'Bulevar 1',
+    shopMapUrl: '',
+    tableInfo: '张三, 0613083888, ruma1 [货到付款/Cash] (备注:不要辣)',
+  });
+
+  assert.match(view.shopMapUrl, /google\.com\/maps\/search/);
+  assert.match(view.shopMapUrl, /Bulevar%201/);
+  assert.match(view.deliveryMapUrl, /query=ruma1/);
+  assert.doesNotMatch(view.deliveryMapUrl, /张三|0613083888|Cash|%E5%A4%87%E6%B3%A8/);
 });
 
 test('buildRiderOrderView preserves explicit shopMapUrl instead of fallback map search', () => {

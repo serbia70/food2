@@ -382,7 +382,8 @@ test('manual assign telegram uses restaurantName from fetched order row when sho
             remarksJson: JSON.stringify(['dispatch_meta:{"currentRiderId":"202","telegramMessageRef":null}']),
             shopSlug: 'shop-a',
             restaurantName: 'Ruma Sushi',
-            tableInfo: 'Address',
+            restaurantAddress: 'Bulevar 1',
+            tableInfo: '张三, 0613083888, ruma1 [货到付款/Cash] (备注:不要辣)',
             totalAmount: 100,
             userPhone: '381600000000',
             status: 'awaiting_courier',
@@ -428,12 +429,17 @@ test('manual assign telegram uses restaurantName from fetched order row when sho
   const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as { success?: boolean };
   const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
-  const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { text?: string };
+  const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { text?: string; reply_markup?: { inline_keyboard?: Array<Array<{ text?: string; url?: string }>> } };
+  const buttons = telegramBody.reply_markup?.inline_keyboard?.flat() || [];
+  const pickupButton = buttons.find((button) => button.text === '取餐导航');
+  const deliveryButton = buttons.find((button) => button.text === '送餐导航');
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.match(String(telegramBody.text || ''), /店铺：Ruma Sushi/);
   assert.doesNotMatch(String(telegramBody.text || ''), /店铺：店铺/);
+  assert.equal(String(pickupButton?.url || ''), 'https://www.google.com/maps/search/?api=1&query=Bulevar%201');
+  assert.equal(String(deliveryButton?.url || ''), 'https://www.google.com/maps/search/?api=1&query=ruma1');
 });
 
 test('publish dispatch telegramMessageRef 回写前会重读最新 remarks 并保留并发新增内容', async (t) => {

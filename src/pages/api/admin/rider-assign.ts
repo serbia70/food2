@@ -36,6 +36,8 @@ type OrderSummaryInput = {
   restaurant_name?: unknown;
   shopAddress?: unknown;
   shop_address?: unknown;
+  restaurantAddress?: unknown;
+  restaurant_address?: unknown;
   shopMapUrl?: unknown;
   shop_map_url?: unknown;
   tableInfo?: unknown;
@@ -105,6 +107,7 @@ function readOrderSummary(body: Record<string, unknown>, orderId: string): {
     shopName: String(raw.shopName ?? raw.shop_name ?? '').trim(),
     restaurantName: String(raw.restaurantName ?? raw.restaurant_name ?? '').trim(),
     shopAddress: String(raw.shopAddress ?? raw.shop_address ?? '').trim(),
+    restaurantAddress: String(raw.restaurantAddress ?? raw.restaurant_address ?? '').trim(),
     shopMapUrl: String(raw.shopMapUrl ?? raw.shop_map_url ?? '').trim(),
     tableInfo: String(raw.tableInfo ?? raw.table_info ?? '').trim(),
     deliveryAddress: String(raw.deliveryAddress ?? raw.delivery_address ?? '').trim(),

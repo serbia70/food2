@@ -471,9 +471,11 @@ async function notifyTelegramRecipients(
 
       const rawResult = parsedResponse.result;
       const messageId = Number(
-        rawResult && typeof rawResult === 'object'
+        (rawResult && typeof rawResult === 'object'
           ? (rawResult as { message_id?: unknown }).message_id
-          : 0,
+          : undefined)
+        ?? parsedResponse.message_id
+        ?? 0,
       );
 
       return {

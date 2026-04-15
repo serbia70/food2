@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
+import { buildForwardHeaders } from '../../../lib/rider-route-shared.ts';
 
 export const prerender = false;
 
@@ -15,7 +16,10 @@ export async function forwardOrderUpdateStatus(request: Request, routeId?: strin
   }
   const res = await fetch(`${API_BASE_URL}/api/order/update_status/${encodeURIComponent(id)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildForwardHeaders(request),
+    },
     body,
   });
   return new Response(await res.text(), {

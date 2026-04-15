@@ -285,7 +285,10 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   if (isDeclineAction) {
     const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status/${encodeURIComponent(orderIdText)}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildForwardHeaders(request),
+      },
       body: JSON.stringify({
         id: callback.orderId,
         expectedCurrentStatus: actionDecision.expectedCurrentStatus,
@@ -376,7 +379,10 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
 
   const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status/${encodeURIComponent(String(callback.orderId || '').trim())}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildForwardHeaders(request),
+    },
     body: JSON.stringify(updateStatusPayload),
   });
 

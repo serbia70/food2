@@ -114,10 +114,18 @@ export function getCustomerDeliveryStatusCopy(status: string | null | undefined)
   }
 }
 
+function sanitizeMapQueryAddress(value: string | null | undefined): string {
+  return String(value || '')
+    .trim()
+    .replace(/\s*\[货到付款\/Cash\].*$/u, '')
+    .replace(/\s*\(备注:.*$/u, '')
+    .trim();
+}
+
 export function buildRiderOrderMapUrl(rawUrl: string | null | undefined, fallbackAddress: string | null | undefined): string {
   const direct = String(rawUrl || '').trim();
   if (direct) return direct;
-  const address = String(fallbackAddress || '').trim();
+  const address = sanitizeMapQueryAddress(fallbackAddress);
   return address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : '';
 }
 

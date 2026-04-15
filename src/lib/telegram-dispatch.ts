@@ -108,6 +108,26 @@ function formatTelegramBelgradeTime(value: string): string {
   }).format(new Date(ms));
 }
 
+function appendTelegramNavigationButtons(rows: TelegramInlineKeyboardButton[][], input: {
+  shopMapUrl?: string;
+  deliveryMapUrl?: string;
+}): TelegramInlineKeyboardButton[][] {
+  const navigationRow: TelegramInlineKeyboardButton[] = [];
+  const shopMapUrl = String(input.shopMapUrl || '').trim();
+  const deliveryMapUrl = String(input.deliveryMapUrl || '').trim();
+
+  if (shopMapUrl) {
+    navigationRow.push({ text: '取餐导航', url: shopMapUrl });
+  }
+  if (deliveryMapUrl) {
+    navigationRow.push({ text: '送餐导航', url: deliveryMapUrl });
+  }
+  if (navigationRow.length > 0) {
+    rows.push(navigationRow);
+  }
+  return rows;
+}
+
 interface TelegramClaimCallbackInput {
   orderId: number;
   riderId: number;
@@ -481,27 +501,24 @@ export function buildRiderSingleMessageTelegram(input: RiderSingleMessageTelegra
 
   lines.push('', `地址：${input.address}`, `电话：${input.phone}`);
 
-  const shopMapUrl = String(input.shopMapUrl || '').trim();
-  if (shopMapUrl) {
-    lines.push(`店铺地图：${shopMapUrl}`);
-  }
-
-  const deliveryMapUrl = String(input.deliveryMapUrl || '').trim();
-  if (deliveryMapUrl) {
-    lines.push(`客户导航：${deliveryMapUrl}`);
-  }
-
-  const buttons = [input.primaryAction, input.secondaryAction]
+  const actionRow = [input.primaryAction, input.secondaryAction]
     .filter((item): item is RiderSingleMessageActionInput => !!item && !!String(item.callbackData || '').trim())
     .map((item) => ({
       text: String(item.text || '').trim(),
       callback_data: String(item.callbackData).trim(),
     }));
+  const inlineKeyboard = appendTelegramNavigationButtons(
+    actionRow.length > 0 ? [actionRow] : [],
+    {
+      shopMapUrl: input.shopMapUrl,
+      deliveryMapUrl: input.deliveryMapUrl,
+    },
+  );
 
   return {
     text: lines.join('\n'),
     replyMarkup: {
-      inline_keyboard: buttons.length > 0 ? [buttons] : [],
+      inline_keyboard: inlineKeyboard,
     },
   };
 }
@@ -541,16 +558,6 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
     lines.push('菜品：', ...itemLines);
   }
 
-  const shopMapUrl = String(input.shopMapUrl || '').trim();
-  if (shopMapUrl) {
-    lines.push(`店铺地图：${shopMapUrl}`);
-  }
-
-  const deliveryMapUrl = String(input.deliveryMapUrl || '').trim();
-  if (deliveryMapUrl) {
-    lines.push(`客户导航：${deliveryMapUrl}`);
-  }
-
   const primaryButtons: TelegramInlineKeyboardButton[] = [];
   if (String(input.claimCallbackData || '').trim()) {
     primaryButtons.push({ text: '接单', callback_data: String(input.claimCallbackData).trim() });
@@ -559,10 +566,18 @@ export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrder
     primaryButtons.push({ text: '暂不接单', callback_data: String(input.declineCallbackData).trim() });
   }
 
+  const inlineKeyboard = appendTelegramNavigationButtons(
+    primaryButtons.length > 0 ? [primaryButtons] : [],
+    {
+      shopMapUrl: input.shopMapUrl,
+      deliveryMapUrl: input.deliveryMapUrl,
+    },
+  );
+
   return {
     text: trimTelegramLinesToByteLimit(lines, TELEGRAM_ADMIN_ASSIGNED_TEXT_MAX_BYTES),
     replyMarkup: {
-      inline_keyboard: primaryButtons.length > 0 ? [primaryButtons] : [],
+      inline_keyboard: inlineKeyboard,
     },
   };
 }

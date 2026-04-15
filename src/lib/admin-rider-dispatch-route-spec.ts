@@ -360,6 +360,82 @@ test('manual assign accepts top-level telegram message_id when persisting telegr
   assert.ok(remarksCalls.length >= 1);
 });
 
+test('manual assign telegram uses restaurantName from fetched order row when shopName is missing', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/admin/riders') {
+      return jsonResponse({
+        riders: [
+          { id: '202', name: 'Rider 1', phone: '381641234567', telegramChatId: 'chat-1', status: 'available' },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders' && request.method === 'GET') {
+      return jsonResponse({
+        success: true,
+        orders: [
+          {
+            id: '909',
+            remarksJson: JSON.stringify(['dispatch_meta:{"currentRiderId":"202","telegramMessageRef":null}']),
+            shopSlug: 'shop-a',
+            restaurantName: 'Ruma Sushi',
+            tableInfo: 'Address',
+            totalAmount: 100,
+            userPhone: '381600000000',
+            status: 'awaiting_courier',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders/909/status') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true, message_id: 7791 });
+    }
+
+    if (url.pathname === '/api/admin/orders/remarks') {
+      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const request = new Request('https://example.com/api/admin/rider-assign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'manual_assign',
+      orderId: '909',
+      riderId: '202',
+      shopSlug: 'shop-a',
+      pickupEtaMinutes: 12,
+      orderSummary: {
+        orderNo: '909',
+        deliveryAddress: 'Address',
+        userPhone: '381600000000',
+        totalAmount: 100,
+        items: [{ name: 'Burger', quantity: 1 }],
+      },
+    }),
+  });
+
+  const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
+  const body = JSON.parse(await response.text()) as { success?: boolean };
+  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
+  const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { text?: string };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.match(String(telegramBody.text || ''), /店铺：Ruma Sushi/);
+  assert.doesNotMatch(String(telegramBody.text || ''), /店铺：店铺/);
+});
+
 test('publish dispatch telegramMessageRef 回写前会重读最新 remarks 并保留并发新增内容', async (t) => {
   useTestEnv(t);
   const latestConcurrentRemarks = JSON.stringify([

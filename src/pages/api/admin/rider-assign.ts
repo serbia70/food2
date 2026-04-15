@@ -32,6 +32,8 @@ type OrderSummaryInput = {
   order_no?: unknown;
   shopName?: unknown;
   shop_name?: unknown;
+  restaurantName?: unknown;
+  restaurant_name?: unknown;
   shopAddress?: unknown;
   shop_address?: unknown;
   shopMapUrl?: unknown;
@@ -101,6 +103,7 @@ function readOrderSummary(body: Record<string, unknown>, orderId: string): {
 
   const orderView = buildRiderOrderView({
     shopName: String(raw.shopName ?? raw.shop_name ?? '').trim(),
+    restaurantName: String(raw.restaurantName ?? raw.restaurant_name ?? '').trim(),
     shopAddress: String(raw.shopAddress ?? raw.shop_address ?? '').trim(),
     shopMapUrl: String(raw.shopMapUrl ?? raw.shop_map_url ?? '').trim(),
     tableInfo: String(raw.tableInfo ?? raw.table_info ?? '').trim(),

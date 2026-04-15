@@ -50,6 +50,14 @@ test('buildRiderOrderMapUrl prefers direct link and falls back to address search
   assert.equal(buildRiderOrderMapUrl('', ''), '');
 });
 
+test('buildRiderOrderMapUrl strips cash and remark suffixes from fallback address search', () => {
+  const url = buildRiderOrderMapUrl('', 'hui, 0613083888, ruma1 [货到付款/Cash] (备注:不要辣)');
+
+  assert.match(url, /google\.com\/maps\/search/);
+  assert.match(url, /hui%2C%200613083888%2C%20ruma1/);
+  assert.doesNotMatch(url, /%E8%B4%A7%E5%88%B0%E4%BB%98%E6%AC%BE|Cash|%E5%A4%87%E6%B3%A8|remark/i);
+});
+
 test('buildRiderOrderView preserves explicit shopMapUrl instead of fallback map search', () => {
   const view = buildRiderOrderView({
     shopName: 'Pizza One',

@@ -527,7 +527,7 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   assert.doesNotMatch(telegramCall.body, /admin/);
 });
 
- test('complete edits original telegram message to readonly delivered state without buttons', async (t) => {
+ test('complete edits original telegram message to readonly delivered state without action buttons', async (t) => {
   useTestEnv(t);
   const acceptedAt = '2026-04-14T10:03:00.000Z';
   const pickedUpAt = '2026-04-14T10:19:00.000Z';
@@ -567,8 +567,10 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   assert.match(telegramCalls[0]?.body || '', /菜品：/);
   assert.match(telegramCalls[0]?.body || '', /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
   assert.match(telegramCalls[0]?.body || '', /可乐 \/ Coca-Cola x1 · 200 RSD/);
-  assert.match(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /"callback_data":/);
+  assert.match(telegramCalls[0]?.body || '', /取餐导航/);
+  assert.match(telegramCalls[0]?.body || '', /送餐导航/);
+  assert.match(telegramCalls[0]?.body || '', /"inline_keyboard":\[\[/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /Nova dodeljena porudžbina|Stavke/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /"text":"Pizza One有新单/);
 });

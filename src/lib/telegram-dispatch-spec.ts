@@ -358,6 +358,60 @@ test('telegram send route 忽略数组 replyMarkup 与空 parseMode', async (t) 
   assert.equal((body.result as { message_id?: unknown })?.message_id, 9901);
 });
 
+test('telegram send route 在前端取不到 token 时回退后端 telegram/send 并保留 message_id', async (t) => {
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/shop-1/info') {
+      return jsonResponse({ success: true, settings: {} });
+    }
+
+    if (url.pathname === '/api/master/init') {
+      return jsonResponse({ success: false, error: 'unauthorized' }, 401);
+    }
+
+    if (url.pathname === '/api/home') {
+      return jsonResponse({ success: true, settings: {} });
+    }
+
+    if (url.pathname === '/api/telegram/send' && url.hostname === 'food2api.serbia70.com') {
+      return jsonResponse({
+        success: true,
+        ok: true,
+        result: { message_id: 7788 },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await sendTelegramRoute({
+    request: new Request('https://example.com/api/telegram/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopSlug: 'shop-1',
+        chat_id: TEST_CHAT_ID,
+        message_id: 7788,
+        text: 'edited text',
+        reply_markup: { inline_keyboard: [] },
+      }),
+    }),
+  } as Parameters<typeof sendTelegramRoute>[0]);
+
+  const body = await readJson(response);
+  const backendCall = calls.find((call) => call.url === 'https://food2api.serbia70.com/api/telegram/send');
+
+  assert.equal(response.status, 200);
+  assert.ok(backendCall);
+  assert.match(backendCall?.body || '', /"shopSlug":"shop-1"/);
+  assert.match(backendCall?.body || '', /"chat_id":"123456789"/);
+  assert.match(backendCall?.body || '', /"message_id":7788/);
+  assert.match(backendCall?.body || '', /"reply_markup":\{"inline_keyboard":\[\]\}/);
+  assert.equal((body.result as { message_id?: unknown })?.message_id, 7788);
+  assert.equal(calls.some((call) => call.url.includes('api.telegram.org')), false);
+});
+
 test('buildRiderAwaitingPickupTelegramMessage uses awaiting-pickup semantics', () => {
   const message = buildRiderAwaitingPickupTelegramMessage({
     orderNo: 'A476',

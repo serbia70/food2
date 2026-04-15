@@ -167,6 +167,14 @@ function parseMessageId(raw: unknown): number {
   return Number.isInteger(normalized) && normalized > 0 ? normalized : 0;
 }
 
+function parseJsonResponse(text: string): Record<string, unknown> {
+  try {
+    return asRecord(JSON.parse(text));
+  } catch {
+    return {};
+  }
+}
+
 async function postTelegramMessage(
   token: string,
   telegramPayload: Record<string, unknown>,
@@ -322,6 +330,31 @@ async function loadTelegramBotToken(request: Request, shopSlug: string, inlineTo
   };
 }
 
+async function proxyTelegramSendToBackend(request: Request, payload: Record<string, unknown>): Promise<Response> {
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${API_BASE_URL}/api/telegram/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    return json({
+      success: false,
+      error: 'telegram_send_failed',
+      backend_proxy: true,
+      ...describeFetchError(error),
+    }, 502);
+  }
+
+  const text = await upstream.text();
+  const parsed = parseJsonResponse(text);
+  return json({
+    ...(parsed && Object.keys(parsed).length > 0 ? parsed : { success: upstream.ok }),
+    ...(parsed.backend_proxy === undefined ? { backend_proxy: true } : {}),
+  }, upstream.status);
+}
+
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.json().catch(() => ({})) as TelegramSendBody;
   const shopSlug = String(body.shopSlug || body.shop_slug || '').trim();
@@ -352,15 +385,6 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ success: false, error: message }, 502);
   }
 
-  if (!token) {
-    return json({
-      success: false,
-      error: 'telegram_bot_token_not_configured',
-      tokenSource,
-      diagnostics,
-    }, 400);
-  }
-
   const telegramPayload: Record<string, unknown> = {
     chat_id: chatId,
     text,
@@ -384,6 +408,13 @@ export const POST: APIRoute = async ({ request }) => {
     telegramPayload.disable_web_page_preview = disableWebPagePreview;
   }
 
+  if (!token) {
+    return proxyTelegramSendToBackend(request, {
+      ...(shopSlug ? { shopSlug } : {}),
+      ...telegramPayload,
+    });
+  }
+
   let telegramRes: Response;
   try {
     telegramRes = await sendTelegramMessage(token, telegramPayload, mode);
@@ -396,12 +427,7 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const responseText = await telegramRes.text();
-  let parsed: Record<string, unknown> = {};
-  try {
-    parsed = asRecord(JSON.parse(responseText));
-  } catch {
-    parsed = {};
-  }
+  const parsed = parseJsonResponse(responseText);
 
   if (!telegramRes.ok || parsed.ok === false) {
     return json({

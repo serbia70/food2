@@ -14,13 +14,20 @@ export async function forwardOrderUpdateStatus(request: Request, routeId?: strin
       headers: { 'Content-Type': 'application/json' },
     });
   }
+
+  const normalizedPayload = body ? { ...payload } : {} as Record<string, unknown>;
+  const numericId = Number(id);
+  if (Number.isInteger(numericId) && numericId > 0) {
+    normalizedPayload.id = numericId;
+  }
+
   const res = await fetch(`${API_BASE_URL}/api/order/update_status/${encodeURIComponent(id)}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...buildForwardHeaders(request),
     },
-    body,
+    body: JSON.stringify(normalizedPayload),
   });
   return new Response(await res.text(), {
     status: res.status,

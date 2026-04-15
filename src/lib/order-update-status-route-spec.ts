@@ -80,3 +80,25 @@ test('forwardOrderUpdateStatus forwards cookie and authorization headers to upst
   assert.equal(calls[0]?.headers.get('cookie'), 'admin_session=abc123');
   assert.equal(calls[0]?.headers.get('authorization'), 'Bearer rider-token');
 });
+
+test('forwardOrderUpdateStatus coerces numeric string id in body before forwarding', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async () => jsonResponse({ success: true }));
+
+  const response = await forwardOrderUpdateStatus(new Request('https://example.com/api/order/update_status', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      id: '101',
+      expectedCurrentStatus: 'delivering',
+      status: 'picked_up',
+    }),
+  }));
+
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  const forwarded = JSON.parse(String(calls[0]?.body || '{}')) as { id?: unknown };
+  assert.equal(forwarded.id, 101);
+});

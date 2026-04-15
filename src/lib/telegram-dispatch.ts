@@ -65,6 +65,7 @@ interface RiderSingleMessageTelegramInput {
   acceptedAtLabel: string;
   pickedUpAtLabel: string;
   completedAtLabel: string;
+  itemSummary?: string[];
   shopMapUrl?: string;
   deliveryMapUrl?: string;
   primaryAction: RiderSingleMessageActionInput | null;
@@ -86,6 +87,26 @@ interface TelegramDeepLinkInput {
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { readTelegramCallbackSecret } from './telegram-secrets.ts';
+
+function formatTelegramItemSummary(items: string[]): string[] {
+  return items
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .map((item) => `• ${item}`);
+}
+
+function formatTelegramBelgradeTime(value: string): string {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return raw;
+  return new Intl.DateTimeFormat('sr-RS', {
+    timeZone: 'Europe/Belgrade',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(ms));
+}
 
 interface TelegramClaimCallbackInput {
   orderId: number;
@@ -444,13 +465,18 @@ export function buildRiderSingleMessageTelegram(input: RiderSingleMessageTelegra
   ];
 
   if (String(input.acceptedAtLabel || '').trim()) {
-    lines.push(`接单时间：${String(input.acceptedAtLabel).trim()}`);
+    lines.push(`接单时间：${formatTelegramBelgradeTime(String(input.acceptedAtLabel).trim())}`);
   }
   if (String(input.pickedUpAtLabel || '').trim()) {
-    lines.push(`取餐时间：${String(input.pickedUpAtLabel).trim()}`);
+    lines.push(`取餐时间：${formatTelegramBelgradeTime(String(input.pickedUpAtLabel).trim())}`);
   }
   if (String(input.completedAtLabel || '').trim()) {
-    lines.push(`送达时间：${String(input.completedAtLabel).trim()}`);
+    lines.push(`送达时间：${formatTelegramBelgradeTime(String(input.completedAtLabel).trim())}`);
+  }
+
+  const itemLines = formatTelegramItemSummary(input.itemSummary || []);
+  if (itemLines.length > 0) {
+    lines.push('菜品：', ...itemLines);
   }
 
   lines.push('', `地址：${input.address}`, `电话：${input.phone}`);
@@ -495,37 +521,34 @@ export function buildTelegramEditMessagePayload(input: TelegramEditMessagePayloa
 }
 
 export function buildAdminAssignedOrderTelegramMessage(input: AdminAssignedOrderTelegramInput): TelegramDispatchMessage {
-  const itemLines = input.itemSummary
-    .map((item) => String(item || '').trim())
-    .filter(Boolean)
-    .map((item) => `• ${item}`);
+  const itemLines = formatTelegramItemSummary(input.itemSummary);
 
   const lines = [
-    '你有新的指派订单 / Nova dodeljena porudžbina',
-    `订单号 / Broj porudžbine：${input.orderNo}`,
-    `店铺 / Lokal：${String(input.shopName || '').trim() || '店铺 / Lokal'}`,
-    `地址 / Adresa：${input.address}`,
-    `电话 / Telefon：${input.phone}`,
-    `金额 / Iznos：${input.totalAmount} RSD`,
-    `预计取餐 / Preuzimanje za：${input.pickupEtaMinutes} 分钟/min`,
+    '你有新的指派订单',
+    `订单号：${input.orderNo}`,
+    `店铺：${String(input.shopName || '').trim() || '店铺'}`,
+    `地址：${input.address}`,
+    `电话：${input.phone}`,
+    `金额：${input.totalAmount} RSD`,
+    `预计 ${input.pickupEtaMinutes} 分钟后可取`,
   ];
 
   if (String(input.scheduledFor || '').trim()) {
-    lines.push(`预约送达 / Zakazano：${String(input.scheduledFor).trim()}`);
+    lines.push(`预约送达：${String(input.scheduledFor).trim()}`);
   }
 
   if (itemLines.length > 0) {
-    lines.push('菜品/Stavke：', ...itemLines);
+    lines.push('菜品：', ...itemLines);
   }
 
   const shopMapUrl = String(input.shopMapUrl || '').trim();
   if (shopMapUrl) {
-    lines.push(`店铺地图 / Mapa lokala：${shopMapUrl}`);
+    lines.push(`店铺地图：${shopMapUrl}`);
   }
 
   const deliveryMapUrl = String(input.deliveryMapUrl || '').trim();
   if (deliveryMapUrl) {
-    lines.push(`客户导航 / Navigacija：${deliveryMapUrl}`);
+    lines.push(`客户导航：${deliveryMapUrl}`);
   }
 
   const primaryButtons: TelegramInlineKeyboardButton[] = [];

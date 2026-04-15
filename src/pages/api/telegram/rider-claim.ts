@@ -7,6 +7,7 @@ import {
   buildUpstreamFailureResponse,
   readJsonObject,
   readOrderDetail,
+  readTelegramItemSummaryFromOrder,
   writeOrderDispatchRemarks,
 } from '../../../lib/rider-route-shared.ts';
 import { buildRiderSingleMessageTelegram, buildTelegramEditMessagePayload, buildTelegramShortClaimCallback, parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
@@ -145,6 +146,7 @@ async function editDeliveryProgressMessage(
     acceptedAtLabel: unifiedStatus.acceptedAt,
     pickedUpAtLabel: unifiedStatus.pickedUpAt,
     completedAtLabel: unifiedStatus.completedAt,
+    itemSummary: readTelegramItemSummaryFromOrder(order),
     shopMapUrl: orderView.shopMapUrl,
     deliveryMapUrl: orderView.deliveryMapUrl,
     primaryAction: unifiedStatus.primaryAction && primaryCallbackData

@@ -17,6 +17,7 @@ import {
   buildUpstreamFailureResponse,
   readOrderDetail,
   readOrderDispatchSnapshot,
+  readTelegramItemSummaryFromOrder,
   writeOrderDispatchRemarks,
 } from '../../../lib/rider-route-shared.ts';
 
@@ -93,6 +94,7 @@ async function syncTelegramRiderMessage(
     acceptedAtLabel: unifiedStatus.acceptedAt,
     pickedUpAtLabel: unifiedStatus.pickedUpAt,
     completedAtLabel: unifiedStatus.completedAt,
+    itemSummary: readTelegramItemSummaryFromOrder(order),
     shopMapUrl: orderView.shopMapUrl,
     deliveryMapUrl: orderView.deliveryMapUrl,
     primaryAction: unifiedStatus.primaryAction && primaryCallbackData

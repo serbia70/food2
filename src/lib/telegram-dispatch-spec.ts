@@ -261,6 +261,28 @@ test('buildRiderSingleMessageTelegram 输出短动作文案与时间', () => {
   ]]);
 });
 
+test('buildRiderSingleMessageTelegram formats ISO timestamps as Belgrade HH:mm', () => {
+  const message = buildRiderSingleMessageTelegram({
+    orderNo: 'A477',
+    shopName: '店铺B',
+    address: 'Test Address',
+    phone: '381600000001',
+    statusLabel: '已送达',
+    acceptedAtLabel: '2026-04-15T13:36:36.723Z',
+    pickedUpAtLabel: '2026-04-15T13:46:36.723Z',
+    completedAtLabel: '2026-04-15T13:50:40.560Z',
+    shopMapUrl: '',
+    deliveryMapUrl: '',
+    primaryAction: null,
+    secondaryAction: null,
+  });
+
+  assert.match(message.text, /接单时间：15:36/);
+  assert.match(message.text, /取餐时间：15:46/);
+  assert.match(message.text, /送达时间：15:50/);
+  assert.doesNotMatch(message.text, /T13:36:36\.723Z|T13:46:36\.723Z|T13:50:40\.560Z/);
+});
+
 test('buildTelegramEditMessagePayload 输出正确 payload', () => {
   const payload = buildTelegramEditMessagePayload({
     chatId: 'chat-1',
@@ -499,12 +521,12 @@ test('telegram send route 在数字 shopSlug 且前端取不到 token 时回退�
   assert.equal((body.result as { message_id?: unknown })?.message_id, 7788);
 });
 
-test('buildAdminAssignedOrderTelegramMessage outputs bilingual item lines with qty and price', async () => {
+test('buildAdminAssignedOrderTelegramMessage only keeps bilingual item lines and other labels stay Chinese', async () => {
   const { buildAdminAssignedOrderTelegramMessage } = await import('./telegram-dispatch.ts');
 
   const message = buildAdminAssignedOrderTelegramMessage({
     orderNo: '260415010',
-    shopName: '店铺A / Restoran A',
+    shopName: '店铺A',
     address: 'Kralja Petra 10',
     totalAmount: 1200,
     phone: '381600000000',
@@ -520,10 +542,17 @@ test('buildAdminAssignedOrderTelegramMessage outputs bilingual item lines with q
     declineCallbackData: 'cb-decline',
   });
 
-  assert.match(message.text, /你有新的指派订单 \/ Nova dodeljena porudžbina/);
-  assert.match(message.text, /菜品\/Stavke：/);
+  assert.match(message.text, /^你有新的指派订单/m);
+  assert.match(message.text, /^订单号：260415010/m);
+  assert.match(message.text, /^店铺：店铺A/m);
+  assert.match(message.text, /^地址：Kralja Petra 10/m);
+  assert.match(message.text, /^电话：381600000000/m);
+  assert.match(message.text, /^金额：1200 RSD/m);
+  assert.match(message.text, /^预计 15 分钟后可取/m);
+  assert.match(message.text, /^菜品：/m);
   assert.match(message.text, /• 土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
   assert.match(message.text, /• 可乐 \/ Coca-Cola x1 · 200 RSD/);
+  assert.doesNotMatch(message.text, /Nova dodeljena porudžbina|Broj porudžbine|Lokal|Adresa|Telefon|Iznos|Preuzimanje za|Stavke|Mapa lokala|Navigacija/);
   assert.deepEqual(message.replyMarkup.inline_keyboard, [[
     { text: '接单', callback_data: 'cb-accept' },
     { text: '暂不接单', callback_data: 'cb-decline' },

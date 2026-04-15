@@ -28,6 +28,7 @@ interface OrderSnapshot {
   remarksJson: string;
   courierPhone?: string;
   shopSlug?: string;
+  itemsJson?: string;
 }
 
 function useTestEnv(t: TestContext): void {
@@ -131,6 +132,10 @@ function createOrderRow(snapshot: OrderSnapshot): Record<string, unknown> {
     userPhone: '381600000000',
     totalAmount: 1500,
     pickupEtaMinutes: 20,
+    itemsJson: snapshot.itemsJson ?? JSON.stringify([
+      { name: '土豆牛肉饼', subName: 'Pljeskavica', quantity: 2, price: 600 },
+      { name: '可乐', subName: 'Coca-Cola', quantity: 1, price: 200 },
+    ]),
   };
 }
 
@@ -422,10 +427,15 @@ test('picked_up writes pickedUpAt and edits original telegram message instead of
   assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
   assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
   assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：2026-04-14T10:03:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：/);
+  assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
+  assert.match(telegramCalls[0]?.body || '', /取餐时间：\d{2}:\d{2}/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
+  assert.match(telegramCalls[0]?.body || '', /菜品：/);
+  assert.match(telegramCalls[0]?.body || '', /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
+  assert.match(telegramCalls[0]?.body || '', /可乐 \/ Coca-Cola x1 · 200 RSD/);
   assert.match(telegramCalls[0]?.body || '', /送达/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /已送达/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /Nova dodeljena porudžbina|Stavke/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /"text":"Pizza One有新单/);
 });
 
@@ -550,11 +560,16 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   assert.equal(telegramCalls.length, 1);
   assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
   assert.match(telegramCalls[0]?.body || '', /状态：已送达/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：2026-04-14T10:03:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：2026-04-14T10:19:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /送达时间：/);
+  assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
+  assert.match(telegramCalls[0]?.body || '', /取餐时间：12:19/);
+  assert.match(telegramCalls[0]?.body || '', /送达时间：\d{2}:\d{2}/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /送达时间：\d{4}-\d{2}-\d{2}T/);
+  assert.match(telegramCalls[0]?.body || '', /菜品：/);
+  assert.match(telegramCalls[0]?.body || '', /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
+  assert.match(telegramCalls[0]?.body || '', /可乐 \/ Coca-Cola x1 · 200 RSD/);
   assert.match(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /"callback_data":/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /Nova dodeljena porudžbina|Stavke/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /"text":"Pizza One有新单/);
 });
 

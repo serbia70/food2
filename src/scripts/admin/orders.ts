@@ -45,6 +45,23 @@ type AdminOrderRow = {
   courierPhone?: string;
   createdAt?: string;
   isDeleted?: string | number;
+  shopName?: string;
+  restaurantName?: string;
+  shopAddress?: string;
+  restaurantAddress?: string;
+  shopMapUrl?: string;
+  deliveryMapUrl?: string;
+  shopSlug?: string;
+};
+
+type AssignOrderSummary = {
+  orderNo: string;
+  shopName: string;
+  deliveryAddress: string;
+  userPhone: string;
+  totalAmount: number;
+  scheduledFor: string;
+  items: unknown[];
 };
 
 const ASSIGN_RIDER_REQUEST_TIMEOUT_MS = 15000;
@@ -150,6 +167,36 @@ function normalizeAdminOrdersPayload(data: unknown): AdminOrderRow[] {
   });
 }
 
+function readAssignOrderSummary(hidden: HTMLElement | null): AssignOrderSummary {
+  const dataset = hidden?.dataset || {};
+  return {
+    orderNo: String(dataset.orderNo || dataset.orderId || dataset.oid || '').trim(),
+    shopName: String(dataset.shopName || dataset.restaurantName || '').trim(),
+    deliveryAddress: String(dataset.table || '').trim(),
+    userPhone: String(dataset.userPhone || '').trim(),
+    totalAmount: Number(dataset.total || 0) || 0,
+    scheduledFor: String(dataset.scheduledFor || '').trim(),
+    items: parseAdminOrderItems(dataset.items),
+  };
+}
+
+function readHiddenAssignOrderSummary(orderId: string): AssignOrderSummary {
+  if (typeof document === 'undefined') {
+    return {
+      orderNo: orderId,
+      shopName: '',
+      deliveryAddress: '',
+      userPhone: '',
+      totalAmount: 0,
+      scheduledFor: '',
+      items: [],
+    };
+  }
+  const hidden = document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null
+    || document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null;
+  return readAssignOrderSummary(hidden);
+}
+
 function replaceHiddenOrderData(rows: AdminOrderRow[]) {
   if (typeof document === 'undefined') return;
 
@@ -168,6 +215,9 @@ function replaceHiddenOrderData(rows: AdminOrderRow[]) {
     riderRemindCount: toDatasetValue(row.riderRemindCount),
     courierName: toDatasetValue(row.courierName),
     courierPhone: toDatasetValue(row.courierPhone),
+    shopName: toDatasetValue(row.shopName),
+    restaurantName: toDatasetValue(row.restaurantName),
+    shopSlug: toDatasetValue(row.shopSlug),
   }));
 
   const existing = document.querySelectorAll('.hidden-data') as ArrayLike<{ dataset?: Record<string, string> }>;
@@ -327,7 +377,7 @@ export async function loadOrders() {
   renderAdminOrderList(rows);
 }
 
-export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number; riderTelegramChatId?: string; telegramBotToken?: string } = {}) {
+export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number; riderTelegramChatId?: string; telegramBotToken?: string; orderSummary?: AssignOrderSummary } = {}) {
   window.__adminAssignInFlight = true;
   window.__adminPendingOrderRefresh = false;
 
@@ -335,6 +385,7 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
   let flushedDeferredRefresh = false;
   let assignError: Error | null = null;
   const controller = new AbortController();
+  const orderSummary = input.orderSummary ?? readHiddenAssignOrderSummary(orderId);
   try {
     const timeoutId = setTimeout(() => controller.abort('request timeout'), ASSIGN_RIDER_REQUEST_TIMEOUT_MS);
     res = await fetch('/api/admin/rider-assign', {
@@ -348,6 +399,7 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
         pickupEtaMinutes: Number(input.pickupEtaMinutes || 0),
         riderTelegramChatId: String(input.riderTelegramChatId || '').trim(),
         telegramBotToken: String(input.telegramBotToken || '').trim(),
+        orderSummary,
       }),
       signal: controller.signal,
     }).finally(() => clearTimeout(timeoutId));

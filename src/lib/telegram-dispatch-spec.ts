@@ -601,7 +601,7 @@ test('buildRiderDeliveringTelegramMessage uses delivering semantics', () => {
     completeCallbackData: 'cb-complete',
   });
 
-  assert.match(message.text, /状态：配送中/);
+  assert.match(message.text, /状态：已取餐/);
   assert.match(message.text, /金额：1200 RSD/);
   assert.match(message.text, /预计：15 分钟/);
   assert.equal(message.replyMarkup.inline_keyboard[0]?.[0]?.text, '送达');

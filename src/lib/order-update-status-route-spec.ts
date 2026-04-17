@@ -272,6 +272,84 @@ test('forwardOrderUpdateStatus reads latest remarksJson for real admin picked_up
   assert.match(telegramCall?.body || '', new RegExp(completeCallback.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
+test('forwardOrderUpdateStatus keeps complete button when order only exposes shop slug inside tableInfo', async (t) => {
+  useTestEnv(t);
+  const remarksJson = JSON.stringify(buildDispatchMetaRemarks('', {
+    lastRiderDecision: { action: 'accepted', riderId: '202', riderName: '骑手888', riderPhone: '0613083888', at: '2026-04-17T10:03:00.000Z' },
+    declinedRiderIds: [],
+    currentRiderId: '202',
+    currentAssignedAt: '2026-04-17T10:00:00.000Z',
+    currentExpiresAt: '2026-04-17T10:10:00.000Z',
+    invalidatedRiderIds: [],
+    lastInvalidationReason: null,
+    acceptedAt: '2026-04-17T10:03:00.000Z',
+    pickedUpAt: '2026-04-17T10:20:00.000Z',
+    completedAt: '',
+    telegramMessageRef: { chatId: '123456789', messageId: 7788 },
+  }));
+  const completeCallback = buildTelegramShortClaimCallback({
+    orderId: 101,
+    riderId: 202,
+    riderName: '骑手888',
+    riderPhone: '0613083888',
+    restaurantId: 'ruma1',
+    telegramChatId: '123456789',
+    action: 'complete',
+  });
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/order/update_status/101') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse([
+        {
+          id: 101,
+          orderNo: 'A101',
+          status: 'picked_up',
+          remarksJson,
+          courierPhone: '0613083888',
+          courierName: '骑手888',
+          shopName: '店铺A',
+          tableInfo: 'hui, 0613083888, ruma1 [货到付款/Cash] (备注:)',
+          userPhone: '0613083888',
+          itemsJson: JSON.stringify([{ name: 'Turbot na pari', subName: '清蒸多宝鱼', quantity: 1 }]),
+        },
+      ]);
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await forwardOrderUpdateStatus(new Request('https://example.com/api/order/update_status', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      cookie: 'admin_token=abc123',
+    },
+    body: JSON.stringify({
+      id: '101',
+      expectedCurrentStatus: 'delivering',
+      status: 'picked_up',
+      courierName: '骑手888',
+      courierPhone: '0613083888',
+    }),
+  }));
+
+  assert.equal(response.status, 200);
+  const telegramCall = calls.find((call) => call.url === 'https://example.com/api/telegram/send');
+  assert.ok(telegramCall, 'telegram picked_up message should keep complete button');
+  assert.match(telegramCall?.body || '', /"shopSlug":"ruma1"/);
+  assert.match(telegramCall?.body || '', /"text":"送达"/);
+  assert.match(telegramCall?.body || '', new RegExp(completeCallback.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
 test('forwardOrderUpdateStatus edits telegram message after admin marks completed', async (t) => {
   useTestEnv(t);
   const remarksJson = JSON.stringify(buildDispatchMetaRemarks('', {

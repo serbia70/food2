@@ -20,6 +20,18 @@ function readTelegramSendShopSlug(value: unknown): string {
   return /^[a-z0-9][a-z0-9-]*$/i.test(slug) ? slug : '';
 }
 
+function readShopSlugFromTableInfo(value: unknown): string {
+  const raw = String(value || '')
+    .trim()
+    .replace(/\s*\[货到付款\/Cash\].*$/u, '')
+    .replace(/\s*\(备注:.*$/u, '')
+    .trim();
+  if (!raw) return '';
+
+  const parts = raw.split(',').map((item) => item.trim()).filter(Boolean);
+  return readTelegramSendShopSlug(parts[2] || '');
+}
+
 function readOrderShopSlug(order: Record<string, unknown>, fallback?: unknown): string {
   return readTelegramSendShopSlug(order.shopSlug)
     || readTelegramSendShopSlug(order.slug)
@@ -28,6 +40,7 @@ function readOrderShopSlug(order: Record<string, unknown>, fallback?: unknown): 
     || readTelegramSendShopSlug(order.restaurant_slug)
     || readTelegramSendShopSlug(order.restaurantId)
     || readTelegramSendShopSlug(order.shopId)
+    || readShopSlugFromTableInfo(order.tableInfo)
     || readTelegramSendShopSlug(fallback);
 }
 

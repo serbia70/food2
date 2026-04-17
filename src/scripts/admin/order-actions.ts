@@ -98,8 +98,7 @@ registerAdminGlobal('mark-picked-up', async (el: HTMLElement) => {
   if (!orderId) return;
   if (!confirm('确认已取餐，开始配送？')) return;
 
-  const hidden = document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null
-    || document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null;
+  const { hidden, shopSlug } = readAssignContext(orderId);
 
   try {
     const res = await fetch('/api/order/update_status', {
@@ -111,6 +110,7 @@ registerAdminGlobal('mark-picked-up', async (el: HTMLElement) => {
         status: 'picked_up',
         courierName: String(hidden?.dataset?.courierName || '').trim(),
         courierPhone: String(hidden?.dataset?.courierPhone || '').trim(),
+        shopSlug,
       }),
     });
     const data = await res.json();
@@ -130,8 +130,7 @@ registerAdminGlobal('mark-delivered', async (el: HTMLElement) => {
   if (!orderId) return;
   if (!confirm('确认已送达并收款？')) return;
 
-  const hidden = document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null
-    || document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null;
+  const { hidden, shopSlug } = readAssignContext(orderId);
 
   try {
     const res = await fetch('/api/order/update_status', {
@@ -143,6 +142,7 @@ registerAdminGlobal('mark-delivered', async (el: HTMLElement) => {
         status: 'completed',
         courierName: String(hidden?.dataset?.courierName || '').trim(),
         courierPhone: String(hidden?.dataset?.courierPhone || '').trim(),
+        shopSlug,
       }),
     });
     const data = await res.json();

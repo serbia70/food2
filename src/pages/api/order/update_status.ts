@@ -86,10 +86,10 @@ async function syncTelegramRiderMessageForStatusUpdate(
     riderId,
     riderPhone,
   });
-  const primaryCallbackData = unifiedStatus.primaryAction && shopSlug && riderId && riderName && riderPhone
+  const primaryCallbackData = unifiedStatus.primaryAction && shopSlug && riderName && riderPhone
     ? buildTelegramShortClaimCallback({
         orderId: Number(orderId),
-        riderId: Number(riderId),
+        riderId: Number(riderId || 0),
         riderName,
         riderPhone,
         restaurantId: shopSlug,

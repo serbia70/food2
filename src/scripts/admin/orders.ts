@@ -14,7 +14,7 @@ import {
   parseAdminOrderItems,
   parseDBDateMs,
 } from '../../lib/admin-dashboard-utils.ts';
-import { getAdminHandler } from './globals.ts';
+import { getAdminHandler, getAdminRuntimeState } from './globals.ts';
 
 type TelegramNotificationDiagnostics = {
   success?: boolean;
@@ -57,6 +57,8 @@ type AdminOrderRow = {
 type AssignOrderSummary = {
   orderNo: string;
   shopName: string;
+  shopAddress?: string;
+  shopMapUrl?: string;
   deliveryAddress: string;
   userPhone: string;
   totalAmount: number;
@@ -167,11 +169,60 @@ function normalizeAdminOrdersPayload(data: unknown): AdminOrderRow[] {
   });
 }
 
+function readAssignRuntime(): {
+  shopName: string;
+  shopAddress: string;
+  shopMapUrl: string;
+} {
+  const runtime = getAdminRuntimeState() as {
+    shop?: {
+      name?: string;
+      address?: string;
+      zone?: string;
+      mapUrl?: string;
+      map_url?: string;
+      contact?: { mapUrl?: string; map_url?: string };
+    };
+    currentSettings?: {
+      address?: string;
+      mapUrl?: string;
+      map_url?: string;
+      contact?: {
+        address?: string;
+        mapUrl?: string;
+        map_url?: string;
+      };
+    };
+  };
+  const shop = runtime.shop;
+  const settings = runtime.currentSettings;
+  return {
+    shopName: String(shop?.name || '').trim(),
+    shopAddress: String(settings?.contact?.address || settings?.address || shop?.address || shop?.zone || '').trim(),
+    shopMapUrl: String(
+      settings?.contact?.mapUrl
+      || settings?.contact?.map_url
+      || settings?.mapUrl
+      || settings?.map_url
+      || shop?.contact?.mapUrl
+      || shop?.contact?.map_url
+      || shop?.mapUrl
+      || shop?.map_url
+      || ''
+    ).trim(),
+  };
+}
+
 function readAssignOrderSummary(hidden: HTMLElement | null): AssignOrderSummary {
   const dataset = hidden?.dataset || {};
+  const runtime = typeof window === 'undefined'
+    ? { shopName: '', shopAddress: '', shopMapUrl: '' }
+    : readAssignRuntime();
   return {
     orderNo: String(dataset.orderNo || dataset.orderId || dataset.oid || '').trim(),
-    shopName: String(dataset.shopName || dataset.restaurantName || '').trim(),
+    shopName: String(dataset.shopName || dataset.restaurantName || runtime.shopName || '').trim(),
+    shopAddress: String(dataset.shopAddress || dataset.restaurantAddress || runtime.shopAddress || '').trim(),
+    shopMapUrl: String(dataset.shopMapUrl || runtime.shopMapUrl || '').trim(),
     deliveryAddress: String(dataset.table || '').trim(),
     userPhone: String(dataset.userPhone || '').trim(),
     totalAmount: Number(dataset.total || 0) || 0,
@@ -185,6 +236,8 @@ function readHiddenAssignOrderSummary(orderId: string): AssignOrderSummary {
     return {
       orderNo: orderId,
       shopName: '',
+      shopAddress: '',
+      shopMapUrl: '',
       deliveryAddress: '',
       userPhone: '',
       totalAmount: 0,

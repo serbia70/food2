@@ -13,6 +13,7 @@ import {
 import {
   buildRiderProgressUpdate,
   buildRiderTelegramProgressSyncPayload,
+  readTelegramSendShopSlug,
 } from '../../../lib/rider-progress-shared.ts';
 import { matchesShortTelegramClaimChatId, parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
 import { pickNextAvailableRider, readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
@@ -411,6 +412,7 @@ export async function handleTelegramProgressActionTransition({
   const progressStage = resolveTelegramClaimStage(String(callback.action || '').trim() as TelegramClaimAction);
   if (upstream.ok && progressStage) {
     try {
+      const fallbackShopSlug = readTelegramSendShopSlug(callback.restaurantId);
       const syncPayload = orderDetailForProgress
         ? buildRiderTelegramProgressSyncPayload({
             order: orderDetailForProgress,
@@ -422,7 +424,7 @@ export async function handleTelegramProgressActionTransition({
             targetStatus: actionDecision.targetStatus === 'completed'
               ? 'completed'
               : (actionDecision.targetStatus === 'picked_up' ? 'picked_up' : 'delivering'),
-            fallbackShopSlug: callback.restaurantId,
+            fallbackShopSlug,
           })
         : null;
       if (syncPayload) {

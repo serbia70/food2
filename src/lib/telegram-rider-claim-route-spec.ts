@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { readDispatchMetaFromRemarks } from './rider-dispatch.ts';
+import { buildTelegramShortClaimCallback } from './telegram-dispatch.ts';
 import {
   createCallback,
   createFetchHandler,
@@ -1321,6 +1322,89 @@ test('accept 成功时 admin orders 未授权且回退 rider orders 仍保留取
   assert.equal(JSON.stringify(inlineKeyboard).includes('送餐导航'), true);
   assert.equal(JSON.stringify(inlineKeyboard).includes('https://maps.example.com/shop-a'), true);
   assert.equal(JSON.stringify(inlineKeyboard).includes('取餐'), true);
+});
+
+test('accept with admin restaurantId still keeps pickup action by resolving real shop slug from order detail', async (t) => {
+  useTestEnv(t);
+  const existingRemarksJson = createRemarksJson({
+    telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+  });
+  const adminCallback = buildTelegramShortClaimCallback({
+    orderId: TEST_ORDER_ID,
+    riderId: TEST_RIDER_ID,
+    riderName: TEST_RIDER_NAME,
+    riderPhone: TEST_RIDER_PHONE,
+    restaurantId: 'admin',
+    telegramChatId: TEST_CHAT_ID,
+    action: 'accept',
+    expiresAt: Date.now() + 60_000,
+  });
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'awaiting_courier',
+    remarksJson: existingRemarksJson,
+    shopSlug: 'real-shop',
+  }));
+
+  const response = await handleTelegramRiderClaim(createRequest(adminCallback));
+  const body = await readJson(response);
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(telegramCalls.length, 1);
+  const telegramPayload = readCallJson(telegramCalls[0]);
+  const buttons = readTelegramInlineKeyboard(telegramCalls[0]).flat();
+  const pickupButton = buttons.find((button) => {
+    const candidate = button as { text?: unknown; callback_data?: unknown };
+    return candidate.text === '取餐' && typeof candidate.callback_data === 'string';
+  });
+  const completeButton = buttons.find((button) => {
+    const candidate = button as { text?: unknown };
+    return candidate.text === '送达';
+  });
+  assert.equal(telegramPayload.shopSlug, 'real-shop');
+  assert.equal(typeof pickupButton, 'object');
+  assert.equal(completeButton, undefined);
+});
+
+test('picked_up with admin restaurantId still keeps complete action by resolving real shop slug from order detail', async (t) => {
+  useTestEnv(t);
+  const acceptedAt = '2026-04-14T10:03:00.000Z';
+  const adminCallback = buildTelegramShortClaimCallback({
+    orderId: TEST_ORDER_ID,
+    riderId: TEST_RIDER_ID,
+    riderName: TEST_RIDER_NAME,
+    riderPhone: TEST_RIDER_PHONE,
+    restaurantId: 'admin',
+    telegramChatId: TEST_CHAT_ID,
+    action: 'picked_up',
+    expiresAt: Date.now() - 1_000,
+  });
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'delivering',
+    remarksJson: createRemarksJson({
+      acceptedAt,
+      telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+    }),
+    shopSlug: 'real-shop',
+  }));
+
+  const response = await handleTelegramRiderClaim(createRequest(adminCallback));
+  const body = await readJson(response);
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
+  assert.equal(telegramCalls.length, 1);
+  const telegramPayload = readCallJson(telegramCalls[0]);
+  const buttons = readTelegramInlineKeyboard(telegramCalls[0]).flat();
+  const completeButton = buttons.find((button) => {
+    const candidate = button as { text?: unknown; callback_data?: unknown };
+    return candidate.text === '送达' && typeof candidate.callback_data === 'string';
+  });
+  assert.equal(telegramPayload.shopSlug, 'real-shop');
+  assert.equal(typeof completeButton, 'object');
 });
 
 test('accept update_status 调用会透传 cookie 和 authorization 头', async (t) => {

@@ -298,7 +298,7 @@ test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达�
   assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
   assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
   assert.match(telegramCalls[0]?.body || '', /"shopSlug":"real-shop"/);
-  assert.match(telegramCalls[0]?.body || '', /状态：已取餐/);
+  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
   assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
   assert.match(telegramCalls[0]?.body || '', /取餐时间：12:25/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);

@@ -426,7 +426,7 @@ test('picked_up writes pickedUpAt and edits original telegram message instead of
   assert.equal(telegramCalls.length, 1);
   assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
   assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
-  assert.match(telegramCalls[0]?.body || '', /状态：已取餐/);
+  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
   assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
   assert.match(telegramCalls[0]?.body || '', /取餐时间：\d{2}:\d{2}/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
@@ -498,7 +498,7 @@ test('picked_up 更新成功后即使二次读取订单失败也必须编辑原�
   assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /状态：已取餐/);
+  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
   assert.match(telegramCalls[0]?.body || '', /"text":"送达"/);
   assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
 });

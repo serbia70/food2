@@ -37,7 +37,7 @@ test('buildRiderOrderView returns shared shop and map fields', () => {
   assert.match(view.shopMapUrl, /google\.com\/maps\/search/);
   assert.equal(view.deliveryAddress, 'Kralja Petra 10');
   assert.match(view.deliveryMapUrl, /google\.com\/maps\/search/);
-  assert.equal(view.orderStatusCopy, '待取餐');
+  assert.equal(view.orderStatusCopy, '配送中');
   assert.equal(view.totalAmount, 2300);
   assert.equal(view.pickupEtaMinutes, 18);
   assert.equal(view.courierPhone, '0611');
@@ -107,8 +107,8 @@ test('getRiderActionFlags and dispatch state stay aligned for picked_up orders',
     canComplete: true,
   });
   assert.equal(state.canComplete, flags.canComplete);
-  assert.equal(getAdminDispatchStatusCopy('picked_up'), '已取餐');
-  assert.equal(getAdminDispatchStatusCopy('completed'), '已送达');
+  assert.equal(getAdminDispatchStatusCopy('picked_up'), '配送中');
+  assert.equal(getAdminDispatchStatusCopy('completed'), '已完成');
 });
 
 test('getRiderDispatchState falls back to courierPhone for picked_up orders without dispatch_meta', () => {
@@ -513,7 +513,7 @@ test('resolveRiderUnifiedStatus returns shared status/action semantics for teleg
     riderPhone: '381641234567',
     nowIso: '2026-04-14T10:20:00.000Z',
   }), {
-    statusLabel: '已取餐',
+    statusLabel: '配送中',
     primaryAction: '送达',
     secondaryAction: '',
     acceptedAt: '2026-04-14T10:03:00.000Z',

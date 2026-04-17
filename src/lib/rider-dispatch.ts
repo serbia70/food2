@@ -70,13 +70,12 @@ export function isAwaitingCourierOrder(order: { status?: string | null }): boole
 export function getAdminDispatchStatusCopy(status: string | null | undefined): string {
   switch (String(status || '')) {
     case 'awaiting_courier':
-      return '待接单';
+      return '待骑手接单';
     case 'delivering':
-      return '待取餐';
     case 'picked_up':
-      return '已取餐';
+      return '配送中';
     case 'completed':
-      return '已送达';
+      return '已完成';
     case 'cancelled':
       return '已取消';
     case 'confirmed':
@@ -168,7 +167,7 @@ export function buildRiderOrderView(order: {
     shopMapUrl: buildRiderOrderMapUrl(order?.shopMapUrl, shopAddress),
     deliveryAddress,
     deliveryMapUrl: buildRiderOrderMapUrl(order?.deliveryMapUrl, deliveryAddress),
-    orderStatusCopy: getAdminDispatchStatusCopy(status),
+    orderStatusCopy: getAdminDispatchStatusCopy(status === 'picked_up' ? 'delivering' : status),
     courierName: String(order?.courierName || '').trim(),
     courierPhone: String(order?.courierPhone || order?.courier_phone || '').trim(),
     totalAmount: Number(order?.totalAmount || 0) || 0,
@@ -527,7 +526,7 @@ export function resolveRiderUnifiedStatus(input: {
 
   if (status === 'picked_up') {
     return {
-      statusLabel: '已取餐',
+      statusLabel: '配送中',
       primaryAction: state.canComplete ? '送达' : '',
       secondaryAction: '',
       acceptedAt: meta.acceptedAt,

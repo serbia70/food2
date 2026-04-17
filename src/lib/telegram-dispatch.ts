@@ -633,7 +633,7 @@ export function buildRiderDeliveringTelegramMessage(input: RiderDeliveryComplete
     shopName: input.shopName,
     address: input.address,
     phone: input.phone,
-    statusLabel: '已取餐',
+    statusLabel: '配送中',
     acceptedAtLabel: '',
     pickedUpAtLabel: '',
     completedAtLabel: '',

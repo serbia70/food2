@@ -1,8 +1,5 @@
 # 堂食订阅到期与余额分离 Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是堂食订阅与余额分离时的实施步骤，文中的 `历史红灯预期：` 属于当时的测试红灯预期，不应再被直接视作当前实现状态。
-> 若继续处理堂食订阅、提醒或续期语义，请先以当前 helper、页面和最新业务口径为准。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将堂食订阅从钱包余额中拆分出来，统一 admin/master 的到期展示、提醒和续期操作，并保留现有余额只用于预订/外卖。
@@ -129,7 +126,7 @@ test('legacy expire_date still works as fallback', () => {
 
 Run: `node --test src/lib/dine-in-billing.test.ts`
 
-历史红灯预期： because the helper does not exist yet.
+Expected: FAIL because the helper does not exist yet.
 
 - [ ] **Step 3: Implement the minimal helper**
 
@@ -174,7 +171,7 @@ Extend `src/lib/master-shop-view.test.ts` with cases that assert:
 
 Run: `node --test src/lib/master-shop-view.test.ts`
 
-历史红灯预期： because the new fields are not wired through yet.
+Expected: FAIL because the new fields are not wired through yet.
 
 - [ ] **Step 3: Implement the view model update**
 

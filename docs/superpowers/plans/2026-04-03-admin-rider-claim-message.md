@@ -1,7 +1,5 @@
 # Admin Rider Claim Message Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是 admin 指派后给骑手发接单消息的早期实施步骤；文中的 `历史红灯预期：` 只代表当时的接线阶段，不应直接当作当前代码状态。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让 admin 指派骑手后，骑手在 Telegram 私聊里直接看到订单摘要和“立即接单”按钮，点击后订单进入 `delivering`，admin 明确看到骑手已接单。
@@ -116,7 +114,7 @@ test('manual_assign sends order summary and claim button to selected rider', asy
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/api/admin-rider-assign.test.ts"`
-历史红灯预期：，因为当前消息只有 `订单已指派给你：...`，没有订单摘要和 `reply_markup`。
+Expected: FAIL，因为当前消息只有 `订单已指派给你：...`，没有订单摘要和 `reply_markup`。
 
 - [ ] **Step 3: Write minimal implementation**
 

@@ -1,7 +1,5 @@
 # Reservation Submit And Admin Nav Alignment Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是预约提交与 admin 导航顺序对齐时的实施步骤；文中的 `历史红灯预期：` 只代表当时推进顺序，不应直接当作当前实现状态。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让预约功能在前台显示、前台提交、后台入口三处都统一按 master 设置生效，并把后台导航顺序调整为“订单 → 预约 → 历史”。
@@ -148,7 +146,7 @@ Run:
 ```bash
 node --test "src/pages/api/reservation.test.ts"
 ```
-历史红灯预期：，因为当前 `src/pages/api/reservation.ts` 只直接转发到 upstream，没有先按 master 设置判定是否允许预约。
+Expected: FAIL，因为当前 `src/pages/api/reservation.ts` 只直接转发到 upstream，没有先按 master 设置判定是否允许预约。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -299,7 +297,7 @@ Run:
 ```bash
 node --test "src/pages/master/dine-in-panel-routing.test.ts"
 ```
-历史红灯预期：，因为当前 `AdminTabs.astro` 顺序仍是“订单 → 历史 → 预约”。
+Expected: FAIL，因为当前 `AdminTabs.astro` 顺序仍是“订单 → 历史 → 预约”。
 
 - [ ] **Step 3: Write minimal implementation**
 

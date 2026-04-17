@@ -1,7 +1,5 @@
 # 自动续派与改派失效 Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是自动续派与改派失效语义收口时的实施步骤；文中的 `历史红灯预期：` 只代表当时阶段，不应直接当作当前实现状态。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让骑手拒单、超时、admin 改派都收口到“当前轮唯一有效骑手”的统一模型，旧骑手显示已改派/接单超时且无法再接单。
@@ -106,7 +104,7 @@ test('filterAvailableRidersForOrder excludes invalidated riders from current ord
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-历史红灯预期：，提示 `getRiderDispatchState` 未定义或 `DispatchMeta` 断言不满足。
+Expected: FAIL，提示 `getRiderDispatchState` 未定义或 `DispatchMeta` 断言不满足。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -227,7 +225,7 @@ test('pickNextAvailableRider skips invalidated riders and current rider', () => 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/config.test.ts src/lib/rider-assignment.test.ts`
-历史红灯预期：，提示新配置字段不存在，或 `excludedRiderIds` 参数未生效。
+Expected: FAIL，提示新配置字段不存在，或 `excludedRiderIds` 参数未生效。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -372,7 +370,7 @@ test('POST rider-claim decline immediately republishes order to next rider', asy
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
-历史红灯预期：，提示当前 callback 仍然允许旧骑手接单，或拒单后未触发续派。
+Expected: FAIL，提示当前 callback 仍然允许旧骑手接单，或拒单后未触发续派。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -551,7 +549,7 @@ test('POST rider-dispatch republish_on_timeout picks next rider and preserves aw
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/admin-rider-dispatch-route-spec.ts`
-历史红灯预期：，提示 publish 未写当前轮 meta，或超时续派动作不存在。
+Expected: FAIL，提示 publish 未写当前轮 meta，或超时续派动作不存在。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -677,7 +675,7 @@ test('rider dashboard source renders invalidated dispatch state with disabled ac
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/tests/pages/rider-dashboard-canonical.test.ts`
-历史红灯预期：，说明页面还未使用共享失效 helper，也没有禁用态展示。
+Expected: FAIL，说明页面还未使用共享失效 helper，也没有禁用态展示。
 
 - [ ] **Step 3: Write minimal implementation**
 

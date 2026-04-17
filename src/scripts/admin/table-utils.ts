@@ -1,7 +1,6 @@
 
 import { matchesTableRef, parseTableRef } from '../../lib/admin-table-ref';
 import { isActiveDineInOrder } from '../../lib/admin-dashboard-utils.ts';
-import { buildAdminTableOrderSummaryShared, parseOrderItemsShared } from '../../lib/order-items-shared.ts';
 
 export function getOrdersForTable(tableNum: string) {
   const targetRef = parseTableRef(String(tableNum || ""));
@@ -23,7 +22,11 @@ export function getOrdersForTable(tableNum: string) {
     if (!isActiveDineInOrder({ orderType: 'dine_in', status })) return;
     const tableInfo = el.dataset.table || "";
     if (matchesTableRef(targetRef, tableInfo, maxConfiguredTable)) {
-      const items = parseOrderItemsShared(el.dataset.items || '[]');
+      let items: any[] = [];
+      try {
+        const parsed = JSON.parse(el.dataset.items || "[]");
+        items = Array.isArray(parsed) ? parsed.filter(i => i) : Object.values(parsed).filter(i => i);
+      } catch (e) {}
       let remarks: string[] = [];
       try {
         const r = JSON.parse(el.dataset.remarks || "[]");
@@ -37,7 +40,7 @@ export function getOrdersForTable(tableNum: string) {
       }
       tableOrders.push({
         id: el.dataset.oid, orderNo: el.dataset.orderNo, amount: el.dataset.total,
-        items, remarks, time, summary: buildAdminTableOrderSummaryShared(el.dataset.items || '[]'),
+        items, remarks, time, summary: items.map((i: any) => `${i.name} x${i.quantity}`).join(", "),
         element: el
       });
     }

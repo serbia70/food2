@@ -5,7 +5,6 @@ import {
   isAwaitingCourierOrder,
   readDispatchMetaFromRemarks,
 } from '../../lib/rider-dispatch.ts';
-import { parseAdminOrderItems } from '../../lib/admin-dashboard-utils.ts';
 
 const { orders, useSimpleHallLabel = false } = Astro.props;
 const sortedOrders = [...orders].sort((a: any, b: any) => Number(b.id || 0) - Number(a.id || 0));
@@ -91,7 +90,11 @@ function formatTableLabel(tableInfo: any) {
       const isCancelled = o.status === 'cancelled';
       const dispatchMeta = readDispatchMetaFromRemarks(o.remarksJson);
       const lastRiderDecision = dispatchMeta.lastRiderDecision;
-      const items = parseAdminOrderItems(o.itemsJson);
+      let items: any[] = [];
+      try {
+        const parsed = JSON.parse(o.itemsJson || '{}');
+        items = Object.values(parsed).filter((i: any) => i != null);
+      } catch {}
 
       return (
         <div class={`order-card ${isNewest ? 'new-order-highlight' : ''}`} data-order-time={oTime} data-oid={o.id} style={isCancelled ? 'opacity:0.6; filter:grayscale(0.8); background:#f5f5f5;' : ''}>

@@ -1,7 +1,5 @@
 # Rider Delivery Status Closed-Loop Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是把 `picked_up` 收入口径与多端闭环时的实施步骤；文中的红灯预期和旧测试文件名只代表当时阶段，不应直接当作当前实现状态。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 为 admin、rider web、Telegram、买家侧建立稳定统一的配送闭环，新增真实状态 `picked_up`，并让多端共用同一条状态推进链。
@@ -14,7 +12,7 @@
 
 ## File Map
 
-- Modify: `D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\order_status_flow_test．go（历史文件名）`
+- Modify: `D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\order_status_flow_test.go`
   - 为后端状态推进与非法跳转补红灯。
 - Modify: `D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\mobile.go`
   - 扩公开订单状态更新入口，支持 `picked_up` 并拒绝非法跃迁。
@@ -52,7 +50,7 @@
 ### Task 1: 扩后端真实状态链到 picked_up
 
 **Files:**
-- Modify: `D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\order_status_flow_test．go（历史文件名）`
+- Modify: `D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\order_status_flow_test.go`
 - Modify: `D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\mobile.go`
 - Modify: `D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\order.go`
 
@@ -123,7 +121,7 @@ func TestOrderUpdateStatusRejectsPickedUpWithoutDelivering(t *testing.T) {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd /d D:\ai\food\.worktrees\260311\foos2Go && go test ./internal/handlers -run "TestOrderUpdateStatus(SupportsPickedUpTransition|RejectsPickedUpWithoutDelivering)"`
-历史红灯预期：，当前还不支持 `picked_up` 或未拒绝非法跳转。
+Expected: FAIL，当前还不支持 `picked_up` 或未拒绝非法跳转。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -173,7 +171,7 @@ Expected: PASS。
 - [ ] **Step 5: Commit**
 
 ```bash
-git add D:/ai/food/.worktrees/260311/foos2Go/internal/handlers/order_status_flow_test．go（历史文件名） D:/ai/food/.worktrees/260311/foos2Go/internal/handlers/mobile.go D:/ai/food/.worktrees/260311/foos2Go/internal/handlers/order.go
+git add D:/ai/food/.worktrees/260311/foos2Go/internal/handlers/order_status_flow_test.go D:/ai/food/.worktrees/260311/foos2Go/internal/handlers/mobile.go D:/ai/food/.worktrees/260311/foos2Go/internal/handlers/order.go
 git commit -m "feat: add picked up delivery status"
 ```
 
@@ -214,7 +212,7 @@ test('delivery status helpers cover delivering, picked_up and completed consiste
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-历史红灯预期：，缺少 `picked_up` 文案 / tone / 动作规则。
+Expected: FAIL，缺少 `picked_up` 文案 / tone / 动作规则。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -338,7 +336,7 @@ test('POST rider-claim sends picked_up follow-up message after accept succeeds',
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-dispatch-spec.ts src/lib/telegram-rider-claim-route-spec.ts`
-历史红灯预期：，缺少 `buildRiderPickedUpTelegramMessage` 或 accept 后未发送“已取餐”阶段消息。
+Expected: FAIL，缺少 `buildRiderPickedUpTelegramMessage` 或 accept 后未发送“已取餐”阶段消息。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -420,7 +418,7 @@ test('rider dashboard source includes picked_up stage and delivery progress acti
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/tests/pages/rider-dashboard-canonical.test.ts`
-历史红灯预期：，当前没有 `picked_up` 阶段与 `pickUpOrder`。
+Expected: FAIL，当前没有 `picked_up` 阶段与 `pickUpOrder`。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -498,7 +496,7 @@ test('admin delivery card source covers delivering, picked_up and decline feedba
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/tests/pages/admin/tab-tables-rider-status-copy.test.ts`
-历史红灯预期：，当前没有 `picked_up` 文案和 admin 推进按钮。
+Expected: FAIL，当前没有 `picked_up` 文案和 admin 推进按钮。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -540,7 +538,7 @@ git commit -m "feat: add admin delivery progress actions"
 **Files:**
 - Modify: `D:\ai\food\.worktrees\260311\food2astro\src\components\UserCenterPanel.tsx`
 - Test: `D:\ai\food\.worktrees\260311\food2astro\src\components\UserCenterPanel.test.tsx`
-- Verify: `D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\order_status_flow_test．go（历史文件名）`
+- Verify: `D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\order_status_flow_test.go`
 - Verify: `D:\ai\food\.worktrees\260311\food2astro\src\tests\pages\api\telegram-rider-claim.test.ts`
 - Verify: `D:\ai\food\.worktrees\260311\food2astro\src\tests\pages\rider-dashboard-canonical.test.ts`
 - Verify: `D:\ai\food\.worktrees\260311\food2astro\src\tests\pages\admin\tab-tables-rider-status-copy.test.ts`
@@ -558,7 +556,7 @@ test('user center delivery copy distinguishes delivering and picked_up', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm exec node --test src/components/UserCenterPanel.test.tsx`
-历史红灯预期：，当前缺少 `picked_up` 文案。
+Expected: FAIL，当前缺少 `picked_up` 文案。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -585,7 +583,7 @@ Expected: 全部 PASS。
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/components/UserCenterPanel.tsx src/components/UserCenterPanel.test.tsx D:/ai/food/.worktrees/260311/foos2Go/internal/handlers/order_status_flow_test．go（历史文件名） src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts src/lib/telegram-dispatch.ts src/lib/telegram-dispatch-spec.ts src/pages/api/telegram/rider-claim.ts src/lib/telegram-rider-claim-route-spec.ts src/pages/rider/dashboard.astro src/tests/pages/rider-dashboard-canonical.test.ts src/components/admin/TabTables.astro src/tests/pages/admin/tab-tables-rider-status-copy.test.ts
+git add src/components/UserCenterPanel.tsx src/components/UserCenterPanel.test.tsx D:/ai/food/.worktrees/260311/foos2Go/internal/handlers/order_status_flow_test.go src/lib/rider-dispatch.ts src/lib/rider-dispatch-spec.ts src/lib/telegram-dispatch.ts src/lib/telegram-dispatch-spec.ts src/pages/api/telegram/rider-claim.ts src/lib/telegram-rider-claim-route-spec.ts src/pages/rider/dashboard.astro src/tests/pages/rider-dashboard-canonical.test.ts src/components/admin/TabTables.astro src/tests/pages/admin/tab-tables-rider-status-copy.test.ts
 
 git commit -m "feat: close rider delivery status loop"
 ```

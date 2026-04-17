@@ -1,7 +1,5 @@
 # 菜单分类滚动联动 Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是菜单分类滚动联动收口时的实施步骤；文中的 `历史红灯预期：` 只代表当时接线阶段，不应直接当作当前实现状态。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让菜单页左侧分类高亮随中间菜单滚动自动同步，并把中间悬浮分类条上移，避免遮住当前分类下的第一排菜品。
@@ -109,7 +107,7 @@ Run:
 node --test src/pages/menu-list-promotions.test.ts
 ```
 
-历史红灯预期：，因为当前 `Sidebar` 仍用本地 `useState`，店铺页还没有共享活动分类接线，`MenuList` 也还没有统一偏移常量和滚动同步逻辑。
+Expected: FAIL，因为当前 `Sidebar` 仍用本地 `useState`，店铺页还没有共享活动分类接线，`MenuList` 也还没有统一偏移常量和滚动同步逻辑。
 
 - [ ] **Step 6: 提交 Task 1**
 

@@ -1,8 +1,5 @@
 # Admin 顶部状态卡片移除与堂食订阅信息下移 Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是 admin 顶部状态卡片移除与堂食订阅信息下移时的实施步骤，文中的 `历史红灯预期：` 属于当时的红灯预期，不应再直接当作当前实现状态。
-> 若继续处理 admin 顶部区块或 TabRenew 堂食订阅信息，请先以当前页面、组件与真实测试为准。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 删除 `/admin/[slug]` 顶部 5 个状态卡片及其容器，并把堂食订阅提醒移动到费用 / 续费区域展示。
@@ -53,7 +50,7 @@ Run:
 ```bash
 node --test "src/pages/master/dine-in-panel-routing.test.ts"
 ```
-历史红灯预期：，因为当前 admin 页面源码里仍然包含这 5 个标题。
+Expected: FAIL，因为当前 admin 页面源码里仍然包含这 5 个标题。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -122,7 +119,7 @@ Run:
 ```bash
 node --test "src/pages/master/dine-in-panel-routing.test.ts"
 ```
-历史红灯预期：，因为当前 `TabRenew` 还没有接收这些 props，也没有渲染堂食订阅区块。
+Expected: FAIL，因为当前 `TabRenew` 还没有接收这些 props，也没有渲染堂食订阅区块。
 
 - [ ] **Step 3: Write minimal implementation**
 

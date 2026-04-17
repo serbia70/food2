@@ -1,8 +1,5 @@
 # 预订 / 外卖技术服务费拆分 Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是预订/外卖技术服务费拆分时的实施步骤，文中的 `历史红灯预期：` 属于当时的阶段性红灯预期，不应再被直接当作当前实现状态。
-> 若继续处理收费计划模型、payload 或 admin 展示，请先以当前 helper、视图模型和真实页面代码为准。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 把预订和外卖拆成两条独立收费计划，支持全局默认 + 店铺覆盖，保留 0 免费和旧字段回退，并删除 admin 里的旧月扣费文案。
@@ -128,7 +125,7 @@ test('percentage and per_order still format correctly', () => {
 
 Run: `node --test src/lib/order-channel-fees-view.test.ts src/lib/master-settings-view.test.ts src/lib/master-commission-view.test.ts`
 
-历史红灯预期：，因为 helper / 新字段还没接好，`0` 也还没按“免费”处理。
+Expected: FAIL，因为 helper / 新字段还没接好，`0` 也还没按“免费”处理。
 
 - [ ] **Step 3: 实现最小代码让测试变绿**
 
@@ -198,7 +195,7 @@ test('settings payload keeps new plan fields and legacy aliases together', () =>
 
 Run: `node --test src/lib/master-pricing-settings-payload.test.ts`
 
-历史红灯预期：，因为 serializer 还不存在。
+Expected: FAIL，因为 serializer 还不存在。
 
 - [ ] **Step 3: 实现最小代码让测试变绿**
 
@@ -282,7 +279,7 @@ test('reset only rewrites fee values and keeps enabled flags', () => {
 
 Run: `node --test src/lib/master-shop-edit-payload.test.ts`
 
-历史红灯预期：，因为店铺编辑 serializer / reset helper 还没接好。
+Expected: FAIL，因为店铺编辑 serializer / reset helper 还没接好。
 
 - [ ] **Step 3: 实现最小代码让测试变绿**
 
@@ -341,7 +338,7 @@ git commit -m "feat(master): add split fee overrides to shop editor"
 
 Run: `node --test src/lib/master-shop-view.test.ts`
 
-历史红灯预期：，因为 view model 还只认旧的单一提成字段。
+Expected: FAIL，因为 view model 还只认旧的单一提成字段。
 
 - [ ] **Step 3: 实现最小的 view model 更新**
 
@@ -414,7 +411,7 @@ test('admin view shows current values and no monthly charge copy', () => {
 
 Run: `node --test src/lib/admin-order-channel-billing-view.test.ts`
 
-历史红灯预期：，因为 admin view helper 还不存在。
+Expected: FAIL，因为 admin view helper 还不存在。
 
 - [ ] **Step 3: 实现最小代码让测试变绿**
 

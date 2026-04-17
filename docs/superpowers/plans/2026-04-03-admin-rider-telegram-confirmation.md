@@ -1,9 +1,5 @@
 # Admin Rider Telegram Confirmation Implementation Plan
 
-> 状态说明（已过期）：本计划围绕 `rider-telegram-test` / 单骑手测试消息展开；当前生产树里这条运行时测试链已不存在，不应继续照此落实现代代码。
-> 如需继续处理 dispatch / Telegram / rider/admin 同步，请改看 `docs/superpowers/specs/2026-04-15-dispatch-telegram-rider-admin-cleanup-design.md`。
-> 文中的 `历史红灯预期：` 仅代表当时新增测试入口阶段的预期，不应直接当作当前实现状态。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 为 admin 增加单骑手 Telegram 测试按钮，补齐派单/提醒失败透出，并让 admin 明确看到骑手已通过 Telegram 或骑手端确认接单。
@@ -122,7 +118,7 @@ test('POST rider-telegram-test rejects empty rider chat id', async () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/pages/api/admin/rider-telegram-test.test.ts"`
-历史红灯预期： with module-not-found or missing `POST` behavior.
+Expected: FAIL with module-not-found or missing `POST` behavior.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -261,7 +257,7 @@ test('clicking rider telegram test action sends request and shows success toast'
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/scripts/admin/settings-ui.test.ts"`
-历史红灯预期： because driver rows do not render any `test-rider-telegram` button.
+Expected: FAIL because driver rows do not render any `test-rider-telegram` button.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -352,7 +348,7 @@ test('master dispatch actions source surfaces telegram_dispatch failure details 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/master/master-dispatch-ui.test.ts"`
-历史红灯预期： because `masterDispatchRepublish` currently ignores `telegram_dispatch.failedCount`.
+Expected: FAIL because `masterDispatchRepublish` currently ignores `telegram_dispatch.failedCount`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -420,7 +416,7 @@ test('admin delivery cards label awaiting_courier as waiting rider confirmation'
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test "D:/ai/food/.worktrees/260311/food2astro/src/tests/pages/admin/admin-order-status-copy.test.ts"`
-历史红灯预期： because current copy is `待骑手接单` / `派送中`.
+Expected: FAIL because current copy is `待骑手接单` / `派送中`.
 
 - [ ] **Step 3: Write minimal implementation**
 

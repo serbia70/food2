@@ -1,5 +1,4 @@
 import { getCustomerOrderStatusCopy, getCustomerDeliveryStatusCopy, isCustomerDeliveryCompleteStatus } from './rider-dispatch';
-import { parseOrderItemsShared } from './order-items-shared.ts';
 
 export function buildOrderDetailState(order: Record<string, any>) {
 	const orderNo = String(order?.orderNo || order?.id || '-');
@@ -12,10 +11,14 @@ export function buildOrderDetailState(order: Record<string, any>) {
 		? getCustomerDeliveryStatusCopy(status)
 		: getCustomerOrderStatusCopy(status);
 
-	const parsedItems = parseOrderItemsShared(order?.itemsJson);
-	const items = parsedItems.length > 0
-		? parsedItems.map((item: any) => `${item.name}${item.quantity ? ` x${item.quantity}` : ''}`)
-		: ['商品解析失败'];
+	let items: string[] = [];
+	try {
+		const parsed = typeof order?.itemsJson === 'string' ? JSON.parse(order.itemsJson) : order?.itemsJson;
+		const arr = Array.isArray(parsed) ? parsed : Object.values(parsed || {});
+		items = arr.map((item: any) => `${item.name}${item.quantity ? ` x${item.quantity}` : ''}`);
+	} catch {
+		items = ['商品解析失败'];
+	}
 
 	return {
 		orderNo,

@@ -1,5 +1,3 @@
-import { parseOrderItemsShared } from './order-items-shared.ts';
-
 export interface RiderRouteOrderSnapshot {
   status: string;
   remarksJson: string;
@@ -8,7 +6,20 @@ export interface RiderRouteOrderSnapshot {
 
 export function readTelegramItemSummaryFromOrder(order: Record<string, unknown> | null | undefined): string[] {
   const raw = order?.itemsJson ?? order?.items_json ?? order?.items;
-  const list = parseOrderItemsShared(raw);
+  if (!raw) return [];
+
+  let items: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      items = JSON.parse(raw) as unknown;
+    } catch {
+      return [];
+    }
+  }
+
+  const list = Array.isArray(items)
+    ? items
+    : (items && typeof items === 'object' ? Object.values(items as Record<string, unknown>) : []);
 
   return list
     .map((item) => {
@@ -84,80 +95,6 @@ export function buildForwardHeaders(request: Request): Record<string, string> {
   if (cookie) headers.cookie = cookie;
   if (authorization) headers.authorization = authorization;
   return headers;
-}
-
-export async function sendTelegramMessage({
-  request,
-  payload,
-}: {
-  request: Request;
-  payload: Record<string, unknown>;
-}): Promise<
-  | {
-    ok: true;
-    responseText: string;
-    parsedResponse: Record<string, unknown> | null;
-  }
-  | {
-    ok: false;
-    status: number;
-    error: string;
-    responseText: string;
-    parsedResponse: Record<string, unknown> | null;
-  }
-> {
-  const sendTelegram = async (body: Record<string, unknown>) => {
-    const response = await fetch(new URL('/api/telegram/send', request.url), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...buildForwardHeaders(request),
-      },
-      body: JSON.stringify(body),
-    });
-    const responseText = await response.text();
-    return {
-      response,
-      responseText,
-      parsedResponse: readJsonObject(responseText),
-    };
-  };
-
-  const normalizedPayload = {
-    ...payload,
-    ...(payload.replyMarkup !== undefined && payload.reply_markup === undefined
-      ? { reply_markup: payload.replyMarkup }
-      : {}),
-  };
-
-  let { response, responseText, parsedResponse } = await sendTelegram(normalizedPayload);
-  const hasReplyMarkup = Object.prototype.hasOwnProperty.call(normalizedPayload, 'reply_markup')
-    || Object.prototype.hasOwnProperty.call(normalizedPayload, 'replyMarkup');
-  const shouldRetryWithoutReplyMarkup = !response.ok
-    && response.headers.get('content-type')?.includes('text/html')
-    && responseText.includes('502')
-    && hasReplyMarkup;
-
-  if (shouldRetryWithoutReplyMarkup) {
-    const { reply_markup: _replyMarkup, replyMarkup: _legacyReplyMarkup, ...retryPayload } = normalizedPayload;
-    ({ response, responseText, parsedResponse } = await sendTelegram(retryPayload));
-  }
-
-  if (!response.ok || parsedResponse?.success === false || parsedResponse?.ok === false) {
-    return {
-      ok: false,
-      status: response.status,
-      error: responseText.trim() || `telegram_send_http_${response.status}`,
-      responseText,
-      parsedResponse,
-    };
-  }
-
-  return {
-    ok: true,
-    responseText,
-    parsedResponse,
-  };
 }
 
 async function readOrderDetailFromRiderOrders(

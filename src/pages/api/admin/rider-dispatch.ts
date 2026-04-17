@@ -1,16 +1,9 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL, DISPATCH_AUTO_REASSIGN_MINUTES, SITE_BASE_URL } from '../../../config.ts';
 import { buildAdminAuthHeader, proxyAdminRequest } from '../../../lib/admin-api-route.ts';
-import { buildOrderItemTextLinesShared } from '../../../lib/order-items-shared.ts';
-import { buildRiderOrderView, readDispatchMetaFromRemarks } from '../../../lib/rider-dispatch.ts';
+import { buildDispatchMetaRemarks, buildRiderOrderView, readDispatchMetaFromRemarks, type DispatchMeta } from '../../../lib/rider-dispatch.ts';
 import { readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
 import { buildTelegramClaimCallback, buildTelegramDeepLink, buildTelegramDispatchMessage } from '../../../lib/telegram-dispatch.ts';
-import {
-  fetchAdminOrderDetails,
-  persistTelegramMessageRef,
-  sendTelegramDispatchMessage,
-  writeDispatchMetaRemarks,
-} from '../../../lib/admin-telegram-dispatch.ts';
 
 export const prerender = false;
 
@@ -19,9 +12,7 @@ interface DispatchOrderSnapshot {
   shopSlug?: string | null;
   shopId?: number | string | null;
   shopName?: string | null;
-  restaurantName?: string | null;
   shopAddress?: string | null;
-  restaurantAddress?: string | null;
   shopMapUrl?: string | null;
   tableInfo?: string | null;
   deliveryAddress?: string | null;
@@ -29,9 +20,6 @@ interface DispatchOrderSnapshot {
   totalAmount?: number | string | null;
   pickupEtaMinutes?: number | string | null;
   userPhone?: string | null;
-  items?: unknown;
-  itemsJson?: unknown;
-  items_json?: unknown;
   status?: string | null;
   pickupReadyAt?: string | null;
   riderBroadcastedAt?: string | null;
@@ -47,6 +35,19 @@ interface TelegramRiderRow {
   telegramChatId?: string | null;
 }
 
+interface DispatchProxyPayload {
+  success?: boolean;
+  order?: DispatchOrderSnapshot;
+  orders?: DispatchOrderSnapshot[];
+  data?: {
+    order?: DispatchOrderSnapshot;
+    orders?: DispatchOrderSnapshot[];
+  } | DispatchOrderSnapshot;
+}
+
+function isDispatchOrderSnapshot(value: unknown): value is DispatchOrderSnapshot {
+  return !!value && typeof value === 'object' && 'id' in value;
+}
 
 interface TelegramDispatchAttempt {
   riderId: string;
@@ -68,36 +69,27 @@ interface TelegramDispatchSummary {
   attempts: TelegramDispatchAttempt[];
 }
 
-function isDispatchOrderSnapshot(value: unknown): value is DispatchOrderSnapshot {
-  return !!value && typeof value === 'object' && 'id' in value;
-}
-
-function extractDispatchOrder(payload: unknown, orderId: string): DispatchOrderSnapshot | null {
+function extractDispatchOrder(payload: DispatchProxyPayload | DispatchOrderSnapshot[] | unknown, orderId: string): DispatchOrderSnapshot | null {
   if (Array.isArray(payload)) {
-    const matched = payload.find((item) => String((item as { id?: unknown })?.id || '').trim() === orderId);
+    const matched = payload.find((item) => String(item?.id || '').trim() === orderId);
     return matched && isDispatchOrderSnapshot(matched) ? matched : null;
   }
   if (!payload || typeof payload !== 'object') return null;
-
-  const direct = payload as {
-    order?: DispatchOrderSnapshot;
-    orders?: DispatchOrderSnapshot[];
-    data?: { order?: DispatchOrderSnapshot; orders?: DispatchOrderSnapshot[] } | DispatchOrderSnapshot;
-  };
-
-  if (isDispatchOrderSnapshot(direct.order)) return direct.order;
-  if (Array.isArray(direct.orders)) {
-    const matched = direct.orders.find((item) => String(item?.id || '').trim() === orderId);
+  if (isDispatchOrderSnapshot((payload as DispatchProxyPayload).order)) return (payload as DispatchProxyPayload).order;
+  if (Array.isArray((payload as DispatchProxyPayload).orders)) {
+    const matched = (payload as DispatchProxyPayload).orders?.find((item) => String(item?.id || '').trim() === orderId);
     if (matched) return matched;
   }
-  if (direct.data && typeof direct.data === 'object' && 'order' in direct.data && isDispatchOrderSnapshot(direct.data.order)) {
-    return direct.data.order || null;
+  if ((payload as DispatchProxyPayload).data && typeof (payload as DispatchProxyPayload).data === 'object' && 'order' in (payload as DispatchProxyPayload).data! && isDispatchOrderSnapshot((payload as { data?: { order?: DispatchOrderSnapshot } }).data?.order)) {
+    return (payload as { data?: { order?: DispatchOrderSnapshot } }).data?.order || null;
   }
-  if (direct.data && typeof direct.data === 'object' && 'orders' in direct.data && Array.isArray(direct.data.orders)) {
-    const matched = direct.data.orders.find((item) => String(item?.id || '').trim() === orderId);
+  if ((payload as DispatchProxyPayload).data && typeof (payload as DispatchProxyPayload).data === 'object' && 'orders' in (payload as DispatchProxyPayload).data! && Array.isArray((payload as { data?: { orders?: DispatchOrderSnapshot[] } }).data?.orders)) {
+    const matched = (payload as { data?: { orders?: DispatchOrderSnapshot[] } }).data?.orders?.find((item) => String(item?.id || '').trim() === orderId);
     if (matched) return matched;
   }
-  if (isDispatchOrderSnapshot(direct.data)) return direct.data;
+  if (isDispatchOrderSnapshot((payload as DispatchProxyPayload).data)) {
+    return (payload as DispatchProxyPayload).data as DispatchOrderSnapshot;
+  }
   return null;
 }
 
@@ -105,33 +97,18 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
   const directOrder = extractDispatchOrder(payload, orderId);
   if (directOrder) return directOrder;
 
-  const shopSlug = String(readDispatchBodyValue(payload, 'shopSlug', 'shop_slug') || '').trim();
-  const shopId = String(readDispatchBodyValue(payload, 'shopId', 'shop_id') || '').trim();
-  const shopName = String(readDispatchBodyValue(payload, 'shopName', 'shop_name') || '').trim();
-  const restaurantName = String(readDispatchBodyValue(payload, 'restaurantName', 'restaurant_name') || '').trim();
-  const shopAddress = String(readDispatchBodyValue(payload, 'shopAddress', 'shop_address') || '').trim();
-  const restaurantAddress = String(readDispatchBodyValue(payload, 'restaurantAddress', 'restaurant_address') || '').trim();
-  const shopMapUrl = String(readDispatchBodyValue(payload, 'shopMapUrl', 'shop_map_url') || '').trim();
-  const tableInfo = String(readDispatchBodyValue(payload, 'tableInfo', 'table_info') || '').trim();
-  const deliveryAddress = String(readDispatchBodyValue(payload, 'deliveryAddress', 'delivery_address') || '').trim();
-  const deliveryMapUrl = String(readDispatchBodyValue(payload, 'deliveryMapUrl', 'delivery_map_url') || '').trim();
-  const totalAmount = String(readDispatchBodyValue(payload, 'totalAmount', 'total_amount') || '').trim();
-  const userPhone = String(readDispatchBodyValue(payload, 'userPhone', 'user_phone') || '').trim();
-  const status = String(readDispatchBodyValue(payload, 'status', 'status') || '').trim();
-  const hasSnapshotFields = !!(
-    shopSlug
-    || shopId
-    || shopName
-    || restaurantName
-    || shopAddress
-    || restaurantAddress
-    || shopMapUrl
-    || tableInfo
-    || deliveryAddress
-    || deliveryMapUrl
-    || totalAmount
-    || userPhone
-  );
+  const shopSlug = String(payload.shopSlug || '').trim();
+  const shopId = String(payload.shopId || '').trim();
+  const shopName = String(payload.shopName || '').trim();
+  const shopAddress = String(payload.shopAddress || '').trim();
+  const shopMapUrl = String(payload.shopMapUrl || '').trim();
+  const tableInfo = String(payload.tableInfo || '').trim();
+  const deliveryAddress = String(payload.deliveryAddress || '').trim();
+  const deliveryMapUrl = String(payload.deliveryMapUrl || '').trim();
+  const totalAmount = String(payload.totalAmount || '').trim();
+  const userPhone = String(payload.userPhone || '').trim();
+  const status = String(payload.status || '').trim();
+  const hasSnapshotFields = !!(shopSlug || shopId || shopName || shopAddress || shopMapUrl || tableInfo || deliveryAddress || deliveryMapUrl || totalAmount || userPhone);
   if (!hasSnapshotFields) return null;
 
   return {
@@ -139,86 +116,19 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
     shopSlug: shopSlug || undefined,
     shopId: shopId || undefined,
     shopName: shopName || undefined,
-    restaurantName: restaurantName || undefined,
     shopAddress: shopAddress || undefined,
-    restaurantAddress: restaurantAddress || undefined,
     shopMapUrl: shopMapUrl || undefined,
     tableInfo: tableInfo || undefined,
     deliveryAddress: deliveryAddress || undefined,
     deliveryMapUrl: deliveryMapUrl || undefined,
     totalAmount: totalAmount || undefined,
     userPhone: userPhone || undefined,
-    items: payload.items,
-    itemsJson: payload.itemsJson ?? payload.items_json,
-    items_json: payload.items_json ?? payload.itemsJson,
     status: status || undefined,
-    pickupEtaMinutes: readDispatchBodyValue(payload, 'pickupEtaMinutes', 'pickup_eta_minutes') != null
-      ? String(readDispatchBodyValue(payload, 'pickupEtaMinutes', 'pickup_eta_minutes'))
-      : undefined,
-    pickupReadyAt: String(readDispatchBodyValue(payload, 'pickupReadyAt', 'pickup_ready_at') || '').trim() || undefined,
-    riderBroadcastedAt: String(readDispatchBodyValue(payload, 'riderBroadcastedAt', 'rider_broadcasted_at') || '').trim() || undefined,
-    riderRemindCount: readDispatchBodyValue(payload, 'riderRemindCount', 'rider_remind_count') != null
-      ? String(readDispatchBodyValue(payload, 'riderRemindCount', 'rider_remind_count'))
-      : undefined,
-    riderLastRemindedAt: String(readDispatchBodyValue(payload, 'riderLastRemindedAt', 'rider_last_reminded_at') || '').trim() || undefined,
-  };
-}
-
-function shouldHydratePublishOrderSummary(order: DispatchOrderSnapshot, remarksJsonHint = ''): boolean {
-  const shopName = String((order as { shopName?: unknown; restaurantName?: unknown }).shopName || (order as { restaurantName?: unknown }).restaurantName || '').trim();
-  if (!shopName) return true;
-
-  const hasPickupLocation = !!String(order.shopMapUrl || order.shopAddress || order.restaurantAddress || '').trim();
-  const hasDeliveryAddress = !!String(order.tableInfo || order.deliveryAddress || '').trim();
-  const hasPhone = !!String(order.userPhone || '').trim();
-  const hasPositiveAmount = Number(order.totalAmount || 0) > 0;
-  const hasItemSummary = order.items != null
-    || !!String(order.itemsJson || order.items_json || '').trim();
-  const hasRemarksSnapshot = !!String(remarksJsonHint || order.remarksJson || '').trim();
-
-  if (!hasDeliveryAddress || !hasPhone || !hasPositiveAmount) {
-    return true;
-  }
-
-  return !hasRemarksSnapshot && !hasPickupLocation && !hasItemSummary;
-}
-
-function shouldHydrateNonPublishOrderSummary(order: DispatchOrderSnapshot, remarksJsonHint = ''): boolean {
-  const shopName = String((order as { shopName?: unknown; restaurantName?: unknown }).shopName || (order as { restaurantName?: unknown }).restaurantName || '').trim();
-  if (!shopName) return true;
-
-  const hasPickupLocation = !!String(order.shopMapUrl || order.shopAddress || order.restaurantAddress || '').trim();
-  const hasItemSummary = order.items != null
-    || !!String(order.itemsJson || order.items_json || '').trim();
-  const hasRemarksSnapshot = !!String(remarksJsonHint || order.remarksJson || '').trim();
-
-  return !hasRemarksSnapshot && !hasPickupLocation && !hasItemSummary;
-}
-
-async function fetchDispatchOrderSnapshot({
-  request,
-  cookies,
-  orderId,
-}: {
-  request: Request;
-  cookies: Parameters<APIRoute['POST']>[0]['cookies'];
-  orderId: string;
-}): Promise<
-  | { ok: true; order: DispatchOrderSnapshot | null }
-  | { ok: false; status: number; upstreamBody: string }
-> {
-  const result = await fetchAdminOrderDetails({ request, cookies, orderId });
-  if (!result.ok) {
-    return {
-      ok: false,
-      status: result.upstreamStatus || 502,
-      upstreamBody: result.upstreamBody || '',
-    };
-  }
-
-  return {
-    ok: true,
-    order: result.orderRow as DispatchOrderSnapshot | null,
+    pickupEtaMinutes: payload.pickupEtaMinutes != null ? String(payload.pickupEtaMinutes) : undefined,
+    pickupReadyAt: String(payload.pickupReadyAt || '').trim() || undefined,
+    riderBroadcastedAt: String(payload.riderBroadcastedAt || '').trim() || undefined,
+    riderRemindCount: payload.riderRemindCount != null ? String(payload.riderRemindCount) : undefined,
+    riderLastRemindedAt: String(payload.riderLastRemindedAt || '').trim() || undefined,
   };
 }
 
@@ -239,10 +149,6 @@ async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRou
   } catch {
     return [];
   }
-}
-
-function readDispatchBodyValue(body: Record<string, unknown>, camelKey: string, snakeKey: string): unknown {
-  return body[camelKey] ?? body[snakeKey];
 }
 
 function readForcedRiderId(value: unknown): string {
@@ -327,6 +233,58 @@ function pickNextRiderOnTimeout({
   return candidates[(currentIndex + 1) % candidates.length] || null;
 }
 
+async function writeDispatchMetaRemarks({
+  request,
+  cookies,
+  orderId,
+  order,
+  nextMeta,
+}: {
+  request: Request;
+  cookies: Parameters<APIRoute['POST']>[0]['cookies'];
+  orderId: string;
+  order: DispatchOrderSnapshot;
+  nextMeta: DispatchMeta;
+}) {
+  const existingRemarksJson = String((order as { remarksJson?: unknown }).remarksJson || '').trim();
+  const nextRemarks = buildDispatchMetaRemarks(existingRemarksJson, nextMeta);
+
+  const remarksRes = await proxyAdminRequest({
+    request,
+    cookies,
+    url: `${API_BASE_URL}/api/admin/orders/remarks`,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      orderId,
+      remarks: nextRemarks,
+    }),
+  });
+  const remarksText = await remarksRes.text();
+
+  let remarksJson: Record<string, unknown> = {};
+  try {
+    remarksJson = JSON.parse(remarksText) as Record<string, unknown>;
+  } catch {
+    remarksJson = {};
+  }
+
+  if (!remarksRes.ok || remarksJson.success === false) {
+    return {
+      ok: false as const,
+      status: remarksRes.status,
+      upstreamBody: remarksText || JSON.stringify(remarksJson),
+    };
+  }
+
+  return {
+    ok: true as const,
+    remarksJson: JSON.stringify(nextRemarks),
+  };
+}
+
 async function fetchLatestOrderRemarks({
   request,
   cookies,
@@ -336,19 +294,42 @@ async function fetchLatestOrderRemarks({
   cookies: Parameters<APIRoute['POST']>[0]['cookies'];
   orderId: string;
 }) {
-  const result = await fetchAdminOrderDetails({ request, cookies, orderId });
-  if (!result.ok || !result.orderRow) {
+  const orderRes = await proxyAdminRequest({
+    request,
+    cookies,
+    url: `${API_BASE_URL}/api/admin/orders`,
+    method: 'GET',
+  });
+  const orderText = await orderRes.text();
+
+  let orderPayload: Record<string, unknown> = {};
+  try {
+    orderPayload = JSON.parse(orderText) as Record<string, unknown>;
+  } catch {
+    orderPayload = {};
+  }
+
+  if (!orderRes.ok || orderPayload.success === false) {
     return {
       ok: false as const,
-      status: result.upstreamStatus || 502,
-      upstreamBody: result.upstreamBody || '',
+      status: orderRes.status,
+      upstreamBody: orderText || JSON.stringify(orderPayload),
+    };
+  }
+
+  const order = extractDispatchOrder(orderPayload as DispatchProxyPayload, orderId);
+  if (!order) {
+    return {
+      ok: false as const,
+      status: orderRes.status || 502,
+      upstreamBody: orderText || JSON.stringify(orderPayload),
     };
   }
 
   return {
     ok: true as const,
-    order: result.orderRow as DispatchOrderSnapshot,
-    remarksJson: result.remarksJson,
+    order,
+    remarksJson: String(order.remarksJson || '').trim(),
   };
 }
 
@@ -414,8 +395,6 @@ async function notifyTelegramRecipients(
   const totalAmount = Number(order.totalAmount || 0);
   const pickupEtaMinutes = Number(order.pickupEtaMinutes || 0);
   const phone = String(order.userPhone || '');
-  const itemSummary = buildOrderItemTextLinesShared(order.items ?? order.itemsJson ?? order.items_json)
-    .map((line) => line.replace(/^•\s*/, ''));
 
   const attempts = await Promise.all(telegramRiders.map(async (rider): Promise<TelegramDispatchAttempt> => {
     const dashboardLink = buildTelegramDeepLink({
@@ -450,31 +429,54 @@ async function notifyTelegramRecipients(
       pickupEtaMinutes,
       phone,
       dashboardLink,
-      itemSummary,
       shopMapUrl: orderView.shopMapUrl,
       deliveryMapUrl: orderView.deliveryMapUrl,
       claimCallbackData,
     });
 
     try {
-      const sendResult = await sendTelegramDispatchMessage({
+      const rawCookie = String(request.headers.get('cookie') || '').trim();
+      const sendRes = await proxyAdminRequest({
         request,
-        payload: {
+        cookies,
+        url: new URL('/api/telegram/send', request.url).toString(),
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(rawCookie ? { cookie: rawCookie } : {}),
+        },
+        body: JSON.stringify({
           shopSlug: String(order.shopSlug || '').trim(),
           chat_id: riderChatId,
           ...message,
-        },
+        }),
       });
-      if (!sendResult.ok) {
+      const responseText = await sendRes.text();
+      let parsedResponse: Record<string, unknown> = {};
+      try {
+        parsedResponse = JSON.parse(responseText) as Record<string, unknown>;
+      } catch {
+        parsedResponse = {};
+      }
+      if (!sendRes.ok || parsedResponse.success === false || parsedResponse.ok === false) {
         return {
           riderId: String(rider.id || '').trim(),
           riderName: String(rider.name || '未命名骑手').trim(),
           riderPhone: riderPhone,
           telegramChatIdBound: true,
           delivered: false,
-          error: sendResult.error,
+          error: responseText.trim() || `telegram_send_http_${sendRes.status}`,
         };
       }
+
+      const rawResult = parsedResponse.result;
+      const messageId = Number(
+        (rawResult && typeof rawResult === 'object'
+          ? (rawResult as { message_id?: unknown }).message_id
+          : undefined)
+        ?? parsedResponse.message_id
+        ?? 0,
+      );
 
       return {
         riderId: String(rider.id || '').trim(),
@@ -482,7 +484,7 @@ async function notifyTelegramRecipients(
         riderPhone: riderPhone,
         telegramChatIdBound: true,
         delivered: true,
-        ...(sendResult.messageRef ? { messageRef: sendResult.messageRef } : {}),
+        ...(messageId > 0 ? { messageRef: { chatId: riderChatId, messageId } } : {}),
       };
     } catch (error) {
       return {
@@ -528,7 +530,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     action = '';
   }
 
-  const orderId = String(parsedBody.orderId || parsedBody.order_id || parsedBody.id || '').trim();
+  const orderId = String(parsedBody.orderId || parsedBody.id || '').trim();
   if (!orderId) {
     return new Response(JSON.stringify({ success: false, error: 'order_id_required' }), {
       status: 400,
@@ -541,96 +543,68 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   if (action === 'publish' || action === 'remind' || action === 'republish_on_timeout') {
     let order = readDispatchOrderFromBody(parsedBody, orderId);
 
-    const remarksJsonHint = String(readDispatchBodyValue(parsedBody, 'remarksJson', 'remarks_json') || '').trim();
-    const shouldHydrateOrderSummary = !order
-      ? true
-      : action === 'publish'
-        ? shouldHydratePublishOrderSummary(order, remarksJsonHint)
-        : shouldHydrateNonPublishOrderSummary(order, remarksJsonHint);
-
-    if (shouldHydrateOrderSummary) {
-      const snapshotResult = await fetchDispatchOrderSnapshot({
+    if (!order) {
+      const orderRes = await proxyAdminRequest({
         request,
         cookies,
-        orderId,
+        url: `${API_BASE_URL}/api/admin/orders`,
+        method: 'GET',
       });
+      const orderText = await orderRes.text();
 
-      if (!snapshotResult.ok) {
+      let orderPayload: Record<string, unknown> = {};
+      try {
+        orderPayload = JSON.parse(orderText) as Record<string, unknown>;
+      } catch {
+        orderPayload = {};
+      }
+
+      if (!orderRes.ok || orderPayload.success === false) {
         return new Response(JSON.stringify({
           success: false,
           error: 'order_fetch_failed',
-          upstream_status: snapshotResult.status,
-          upstream_body: snapshotResult.upstreamBody,
+          upstream_status: orderRes.status,
+          upstream_body: orderText || JSON.stringify(orderPayload),
         }), {
-          status: snapshotResult.status,
+          status: orderRes.status,
           headers: { 'Content-Type': 'application/json' },
         });
       }
 
-      if (!order) {
-        order = snapshotResult.order;
-      } else if (snapshotResult.order) {
-        order = {
-          ...snapshotResult.order,
-          ...order,
-          shopName: order.shopName || snapshotResult.order.shopName,
-          restaurantName: order.restaurantName || snapshotResult.order.restaurantName,
-          shopAddress: order.shopAddress || snapshotResult.order.shopAddress || snapshotResult.order.restaurantAddress,
-          restaurantAddress: order.restaurantAddress || snapshotResult.order.restaurantAddress,
-          shopMapUrl: order.shopMapUrl || snapshotResult.order.shopMapUrl,
-          tableInfo: snapshotResult.order.tableInfo || order.tableInfo,
-          deliveryAddress: snapshotResult.order.deliveryAddress || order.deliveryAddress,
-          deliveryMapUrl: snapshotResult.order.deliveryMapUrl || order.deliveryMapUrl,
-          totalAmount: order.totalAmount || snapshotResult.order.totalAmount,
-          userPhone: order.userPhone || snapshotResult.order.userPhone,
-          items: order.items ?? snapshotResult.order.items,
-          itemsJson: order.itemsJson ?? snapshotResult.order.itemsJson,
-          items_json: order.items_json ?? snapshotResult.order.items_json,
-          remarksJson: order.remarksJson || snapshotResult.order.remarksJson,
-          status: order.status || snapshotResult.order.status,
-        };
-      }
-
+      order = extractDispatchOrder(orderPayload as DispatchProxyPayload, orderId) || (orderPayload as DispatchOrderSnapshot);
       if (!order || !order.id) {
         return new Response(JSON.stringify({
           success: false,
           error: 'order_snapshot_unavailable',
-          raw_response_text: '',
+          raw_response_text: orderText,
         }), {
-          status: 502,
+          status: orderRes.status || 502,
           headers: { 'Content-Type': 'application/json' },
         });
       }
     }
 
-    const forcedRiderId = readForcedRiderId(readDispatchBodyValue(parsedBody, 'forceRiderId', 'force_rider_id'));
+    const forcedRiderId = readForcedRiderId(parsedBody.forceRiderId);
     const nowIso = readNowIsoFromBody(parsedBody);
-    const existingRemarksJson = String(readDispatchBodyValue(parsedBody, 'remarksJson', 'remarks_json') || order.remarksJson || '').trim();
+    const existingRemarksJson = String(parsedBody.remarksJson || order.remarksJson || '').trim();
     const existingMeta = readDispatchMetaFromRemarks(existingRemarksJson);
 
-    const parsedStatus = String(readDispatchBodyValue(parsedBody, 'status', 'status') || '').trim();
-    const parsedPickupEtaMinutes = readDispatchBodyValue(parsedBody, 'pickupEtaMinutes', 'pickup_eta_minutes');
-    const parsedPickupReadyAt = readDispatchBodyValue(parsedBody, 'pickupReadyAt', 'pickup_ready_at');
-    const parsedRiderBroadcastedAt = readDispatchBodyValue(parsedBody, 'riderBroadcastedAt', 'rider_broadcasted_at');
-    const parsedRiderRemindCount = readDispatchBodyValue(parsedBody, 'riderRemindCount', 'rider_remind_count');
-    const parsedRiderLastRemindedAt = readDispatchBodyValue(parsedBody, 'riderLastRemindedAt', 'rider_last_reminded_at');
-
     const currentStatus = String(order.status || '').trim();
-    const publishStatus = parsedStatus || (currentStatus === 'awaiting_courier' ? currentStatus : 'awaiting_courier');
+    const publishStatus = String(parsedBody.status || '').trim() || (currentStatus === 'awaiting_courier' ? currentStatus : 'awaiting_courier');
 
     const updatePayload = action === 'publish'
       ? {
           status: publishStatus,
-          pickupEtaMinutes: parsedPickupEtaMinutes,
-          pickupReadyAt: parsedPickupReadyAt,
-          riderBroadcastedAt: parsedRiderBroadcastedAt,
-          riderRemindCount: parsedRiderRemindCount,
-          riderLastRemindedAt: parsedRiderLastRemindedAt,
+          pickupEtaMinutes: parsedBody.pickupEtaMinutes,
+          pickupReadyAt: parsedBody.pickupReadyAt,
+          riderBroadcastedAt: parsedBody.riderBroadcastedAt,
+          riderRemindCount: parsedBody.riderRemindCount,
+          riderLastRemindedAt: parsedBody.riderLastRemindedAt,
         }
       : {
           status: currentStatus || 'awaiting_courier',
-          riderRemindCount: parsedRiderRemindCount,
-          riderLastRemindedAt: parsedRiderLastRemindedAt,
+          riderRemindCount: parsedBody.riderRemindCount,
+          riderLastRemindedAt: parsedBody.riderLastRemindedAt,
         };
 
     const updateRes = await proxyAdminRequest({
@@ -667,11 +641,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const mergedOrderBase = {
       ...order,
       status: action === 'publish' ? publishStatus : (currentStatus || 'awaiting_courier'),
-      pickupEtaMinutes: parsedPickupEtaMinutes ?? order.pickupEtaMinutes,
-      pickupReadyAt: parsedPickupReadyAt ?? order.pickupReadyAt,
-      riderBroadcastedAt: parsedRiderBroadcastedAt ?? order.riderBroadcastedAt,
-      riderRemindCount: parsedRiderRemindCount ?? order.riderRemindCount,
-      riderLastRemindedAt: parsedRiderLastRemindedAt ?? order.riderLastRemindedAt,
+      pickupEtaMinutes: parsedBody.pickupEtaMinutes ?? order.pickupEtaMinutes,
+      pickupReadyAt: parsedBody.pickupReadyAt ?? order.pickupReadyAt,
+      riderBroadcastedAt: parsedBody.riderBroadcastedAt ?? order.riderBroadcastedAt,
+      riderRemindCount: parsedBody.riderRemindCount ?? order.riderRemindCount,
+      riderLastRemindedAt: parsedBody.riderLastRemindedAt ?? order.riderLastRemindedAt,
       remarksJson: existingRemarksJson,
     } satisfies DispatchOrderSnapshot;
 
@@ -721,7 +695,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         request,
         cookies,
         orderId,
-        remarksJson: String(mergedOrderBase.remarksJson || '').trim(),
+        order: mergedOrderBase,
         nextMeta: timeoutMeta,
       });
       if (!remarksResult.ok) {
@@ -805,7 +779,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
           request,
           cookies,
           orderId,
-          remarksJson: String(mergedOrderBase.remarksJson || '').trim(),
+          order: mergedOrderBase,
           nextMeta,
         });
         if (!remarksResult.ok) {
@@ -847,12 +821,16 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         };
       } else {
         const latestOrder = latestRemarksResult.order;
-        const remarksResult = await persistTelegramMessageRef({
+        const nextMeta: DispatchMeta = {
+          ...readDispatchMetaFromRemarks(latestRemarksResult.remarksJson),
+          telegramMessageRef: telegram_dispatch.telegramMessageRef,
+        };
+        const remarksResult = await writeDispatchMetaRemarks({
           request,
           cookies,
           orderId,
-          remarksJson: latestRemarksResult.remarksJson,
-          messageRef: telegram_dispatch.telegramMessageRef,
+          order: latestOrder,
+          nextMeta,
         });
         if (!remarksResult.ok) {
           warning = {

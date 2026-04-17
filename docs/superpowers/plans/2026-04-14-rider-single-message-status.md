@@ -1,13 +1,10 @@
 # Rider Single-Message Status Implementation Plan
 
-> 状态说明（大体已实现）：本计划的大方向仍有效，但其中“从发送第二条阶段消息改成 edit 原消息”现在已经是既成事实，不应再把文中的 FAIL 预期或迁移步骤当作当前代码状态。
-> 继续修改时请优先看 `docs/superpowers/specs/2026-04-15-dispatch-telegram-rider-admin-cleanup-design.md`、`src/lib/rider-dispatch.ts`、`src/lib/telegram-dispatch.ts`、`src/pages/api/telegram/rider-claim.ts`。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让 Telegram 每个订单始终只保留一条可编辑消息，并让 rider dashboard 与 Telegram 共享同一套“待接单 / 待取餐 / 配送中 / 已送达”状态语义、`接单 / 暂不接单 / 取餐 / 送达` 动作文案，以及贝尔格莱德时间显示。
 
-**Architecture:** 在 `dispatch_meta` 中补动作时间与 Telegram message ref，继续复用现有 `resolveRiderOrderAction(...)` 作为服务端动作真相来源，再扩展共享 helper 输出双端统一的状态文案、动作文案和时间。Telegram 从“发送第二条阶段消息”改成“send 首条 + edit 原消息”，rider dashboard 改成消费同一套 helper，并把时间统一到 `Europe/Belgrade`。
+**Architecture:** 在 `dispatch_meta` 中补动作时间与 Telegram message ref，继续复用现有 `resolveRiderOrderAction(...)` 作为服务端动作真相来源，再扩展共享 helper 输出双端统一的状态文案、动作文案和时间。Telegram 从“补发新消息”改成“send 首条 + edit 原消息”，rider dashboard 改成消费同一套 helper，并把时间统一到 `Europe/Belgrade`。
 
 **Tech Stack:** Astro API routes, TypeScript, Node test runner, existing Telegram send route, existing rider dispatch helpers.
 
@@ -27,7 +24,7 @@
 - Modify: `src/pages/api/telegram/send.ts`
   - 支持 `sendMessage` 与 `editMessageText` / `editMessageReplyMarkup` 所需 payload，回传 message id
 - Modify: `src/pages/api/telegram/rider-claim.ts`
-  - 接单/取餐/送达后不再发送第二条阶段消息，改为编辑原消息并写入动作时间
+  - 接单/取餐/送达后不再补发新消息，改为编辑原消息并写入动作时间
 - Modify: `src/lib/telegram-rider-claim-route-spec.ts`
   - 锁定 Telegram callback 写时间、编辑原消息、完成态移除按钮
 - Modify: `src/pages/api/rider/action.ts`
@@ -146,7 +143,7 @@ test('resolveRiderUnifiedStatus returns shared status/action semantics for teleg
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-历史红灯预期：提示 `acceptedAt` / `telegramMessageRef` 未解析或 `resolveRiderUnifiedStatus` 未定义。
+Expected: FAIL，提示 `acceptedAt` / `telegramMessageRef` 未解析或 `resolveRiderUnifiedStatus` 未定义。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -316,7 +313,7 @@ test('buildTelegramEditMessagePayload keeps one editable telegram message', () =
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-dispatch-spec.ts`
-历史红灯预期：提示单消息 builder / edit payload helper 不存在，或仍输出 `已取餐` / `已送达` 按钮。
+Expected: FAIL，提示单消息 builder / edit payload helper 不存在，或仍输出 `已取餐` / `已送达` 按钮。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -450,7 +447,7 @@ test('telegram send route supports edit message payload and returns upstream mes
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-dispatch-spec.ts`
-历史红灯预期：当前 `/api/telegram/send` 只会发 `sendMessage`，不支持 `message_id` 编辑路径。
+Expected: FAIL，当前 `/api/telegram/send` 只会发 `sendMessage`，不支持 `message_id` 编辑路径。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -573,7 +570,7 @@ test('publish dispatch stores telegram message ref into dispatch_meta remarks', 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/admin-rider-dispatch-route-spec.ts`
-历史红灯预期：当前 remarks 不会保存 Telegram `message_id`。
+Expected: FAIL，当前 remarks 不会保存 Telegram `message_id`。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -709,7 +706,7 @@ test('complete edits original telegram message to readonly delivered state witho
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
-历史红灯预期：当前是发送第二条阶段消息，且不会写 `pickedUpAt` / `completedAt`。
+Expected: FAIL，当前是补发新消息，且不会写 `pickedUpAt` / `completedAt`。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -847,7 +844,7 @@ test('picked_up via rider action writes pickedUpAt and edits original telegram m
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/rider-action-route-spec.ts`
-历史红灯预期：当前 rider action 只更新业务状态，不会同步 Telegram 原消息。
+Expected: FAIL，当前 rider action 只更新业务状态，不会同步 Telegram 原消息。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -929,7 +926,7 @@ test('dashboard script renders short rider action labels and formatted action ti
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-历史红灯预期：dashboard 仍然手切时间，且按钮文案还是 `已取餐` / `已送达`。
+Expected: FAIL，dashboard 仍然手切时间，且按钮文案还是 `已取餐` / `已送达`。
 
 - [ ] **Step 3: Write minimal implementation**
 

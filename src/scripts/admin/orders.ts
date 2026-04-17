@@ -9,12 +9,11 @@ import {
 } from '../../lib/rider-dispatch.ts';
 import {
   formatHHmm,
-  normalizeAdminOrderItemsJSONString,
+  normalizeJSONString,
   normalizeRemarkJSONString,
-  parseAdminOrderItems,
   parseDBDateMs,
 } from '../../lib/admin-dashboard-utils.ts';
-import { getAdminHandler, getAdminRuntimeState } from './globals.ts';
+import { getAdminHandler } from './globals.ts';
 
 type TelegramNotificationDiagnostics = {
   success?: boolean;
@@ -45,25 +44,6 @@ type AdminOrderRow = {
   courierPhone?: string;
   createdAt?: string;
   isDeleted?: string | number;
-  shopName?: string;
-  restaurantName?: string;
-  shopAddress?: string;
-  restaurantAddress?: string;
-  shopMapUrl?: string;
-  deliveryMapUrl?: string;
-  shopSlug?: string;
-};
-
-type AssignOrderSummary = {
-  orderNo: string;
-  shopName: string;
-  shopAddress?: string;
-  shopMapUrl?: string;
-  deliveryAddress: string;
-  userPhone: string;
-  totalAmount: number;
-  scheduledFor: string;
-  items: unknown[];
 };
 
 const ASSIGN_RIDER_REQUEST_TIMEOUT_MS = 15000;
@@ -150,7 +130,7 @@ function normalizeAdminOrdersPayload(data: unknown): AdminOrderRow[] {
       orderType: source.orderType ?? (tableInfo ? 'dine_in' : ''),
       status: source.status ?? (tableInfo ? 'pending' : ''),
       totalAmount: source.totalAmount ?? 0,
-      itemsJson: normalizeAdminOrderItemsJSONString(source.itemsJson),
+      itemsJson: normalizeJSONString(source.itemsJson, '[]'),
       remarksJson: normalizeRemarkJSONString(source.remarksJson),
       tableInfo,
       userPhone: source.userPhone ?? '',
@@ -167,87 +147,6 @@ function normalizeAdminOrdersPayload(data: unknown): AdminOrderRow[] {
       isDeleted: source.isDeleted ?? 0,
     } satisfies AdminOrderRow;
   });
-}
-
-function readAssignRuntime(): {
-  shopName: string;
-  shopAddress: string;
-  shopMapUrl: string;
-} {
-  const runtime = getAdminRuntimeState() as {
-    shop?: {
-      name?: string;
-      address?: string;
-      zone?: string;
-      mapUrl?: string;
-      map_url?: string;
-      contact?: { mapUrl?: string; map_url?: string };
-    };
-    currentSettings?: {
-      address?: string;
-      mapUrl?: string;
-      map_url?: string;
-      contact?: {
-        address?: string;
-        mapUrl?: string;
-        map_url?: string;
-      };
-    };
-  };
-  const shop = runtime.shop;
-  const settings = runtime.currentSettings;
-  return {
-    shopName: String(shop?.name || '').trim(),
-    shopAddress: String(settings?.contact?.address || settings?.address || shop?.address || shop?.zone || '').trim(),
-    shopMapUrl: String(
-      settings?.contact?.mapUrl
-      || settings?.contact?.map_url
-      || settings?.mapUrl
-      || settings?.map_url
-      || shop?.contact?.mapUrl
-      || shop?.contact?.map_url
-      || shop?.mapUrl
-      || shop?.map_url
-      || ''
-    ).trim(),
-  };
-}
-
-function readAssignOrderSummary(hidden: HTMLElement | null): AssignOrderSummary {
-  const dataset = hidden?.dataset || {};
-  const runtime = typeof window === 'undefined'
-    ? { shopName: '', shopAddress: '', shopMapUrl: '' }
-    : readAssignRuntime();
-  return {
-    orderNo: String(dataset.orderNo || dataset.orderId || dataset.oid || '').trim(),
-    shopName: String(dataset.shopName || dataset.restaurantName || runtime.shopName || '').trim(),
-    shopAddress: String(dataset.shopAddress || dataset.restaurantAddress || runtime.shopAddress || '').trim(),
-    shopMapUrl: String(dataset.shopMapUrl || runtime.shopMapUrl || '').trim(),
-    deliveryAddress: String(dataset.table || '').trim(),
-    userPhone: String(dataset.userPhone || '').trim(),
-    totalAmount: Number(dataset.total || 0) || 0,
-    scheduledFor: String(dataset.scheduledFor || '').trim(),
-    items: parseAdminOrderItems(dataset.items),
-  };
-}
-
-function readHiddenAssignOrderSummary(orderId: string): AssignOrderSummary {
-  if (typeof document === 'undefined') {
-    return {
-      orderNo: orderId,
-      shopName: '',
-      shopAddress: '',
-      shopMapUrl: '',
-      deliveryAddress: '',
-      userPhone: '',
-      totalAmount: 0,
-      scheduledFor: '',
-      items: [],
-    };
-  }
-  const hidden = document.querySelector(`.hidden-data[data-order-id="${orderId}"]`) as HTMLElement | null
-    || document.querySelector(`.hidden-data[data-oid="${orderId}"]`) as HTMLElement | null;
-  return readAssignOrderSummary(hidden);
 }
 
 function replaceHiddenOrderData(rows: AdminOrderRow[]) {
@@ -268,9 +167,6 @@ function replaceHiddenOrderData(rows: AdminOrderRow[]) {
     riderRemindCount: toDatasetValue(row.riderRemindCount),
     courierName: toDatasetValue(row.courierName),
     courierPhone: toDatasetValue(row.courierPhone),
-    shopName: toDatasetValue(row.shopName),
-    restaurantName: toDatasetValue(row.restaurantName),
-    shopSlug: toDatasetValue(row.shopSlug),
   }));
 
   const existing = document.querySelectorAll('.hidden-data') as ArrayLike<{ dataset?: Record<string, string> }>;
@@ -293,6 +189,19 @@ function replaceHiddenOrderData(rows: AdminOrderRow[]) {
       .join('');
     return `<span class="hidden-data"${attrs}></span>`;
   }).join('');
+}
+
+function parseOrderItems(itemsJson: string | undefined): Array<Record<string, unknown>> {
+  try {
+    const parsed = JSON.parse(String(itemsJson || '[]'));
+    if (Array.isArray(parsed)) return parsed as Array<Record<string, unknown>>;
+    if (parsed && typeof parsed === 'object') {
+      return Object.values(parsed as Record<string, unknown>).filter((item): item is Record<string, unknown> => !!item && typeof item === 'object');
+    }
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 function formatScheduledLabel(value: string | undefined): string {
@@ -331,7 +240,7 @@ function renderDeliveryOrderList(rows: AdminOrderRow[]) {
     const orderNo = toDatasetValue(row.orderNo || row.id);
     const pickupNo = orderNo.slice(-3);
     const displayPrefix = orderNo.slice(0, Math.max(0, orderNo.length - pickupNo.length));
-    const items = parseAdminOrderItems(row.itemsJson);
+    const items = parseOrderItems(row.itemsJson);
     const dispatchMeta = readDispatchMetaFromRemarks(String(row.remarksJson || ''));
     const lastRiderDecision = dispatchMeta.lastRiderDecision;
     const riderDeclinedAwaitingCourier = isAwaitingCourierOrder({ status: row.status }) && lastRiderDecision?.action === 'declined';
@@ -386,7 +295,7 @@ function renderAdminOrderList(rows: AdminOrderRow[]) {
     const orderTypeClass = isDelivery ? 'delivery' : 'dine';
     const orderTypeLabel = isDelivery ? '外卖' : '堂食';
     const statusToken = normalizeStatusToken(row.status);
-    const items = parseAdminOrderItems(row.itemsJson);
+    const items = parseOrderItems(row.itemsJson);
     const dispatchMeta = readDispatchMetaFromRemarks(String(row.remarksJson || ''));
     const lastRiderDecision = dispatchMeta.lastRiderDecision;
     const scheduledLabel = formatScheduledLabel(row.scheduledFor);
@@ -430,7 +339,7 @@ export async function loadOrders() {
   renderAdminOrderList(rows);
 }
 
-export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number; riderTelegramChatId?: string; telegramBotToken?: string; orderSummary?: AssignOrderSummary } = {}) {
+export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number; riderTelegramChatId?: string; telegramBotToken?: string } = {}) {
   window.__adminAssignInFlight = true;
   window.__adminPendingOrderRefresh = false;
 
@@ -438,7 +347,6 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
   let flushedDeferredRefresh = false;
   let assignError: Error | null = null;
   const controller = new AbortController();
-  const orderSummary = input.orderSummary ?? readHiddenAssignOrderSummary(orderId);
   try {
     const timeoutId = setTimeout(() => controller.abort('request timeout'), ASSIGN_RIDER_REQUEST_TIMEOUT_MS);
     res = await fetch('/api/admin/rider-assign', {
@@ -452,7 +360,6 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
         pickupEtaMinutes: Number(input.pickupEtaMinutes || 0),
         riderTelegramChatId: String(input.riderTelegramChatId || '').trim(),
         telegramBotToken: String(input.telegramBotToken || '').trim(),
-        orderSummary,
       }),
       signal: controller.signal,
     }).finally(() => clearTimeout(timeoutId));

@@ -1,8 +1,5 @@
 # Admin 促销弹窗重设计 Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是 admin 促销弹窗重设计时的实施步骤，文中的 `历史红灯预期：` 属于当时的阶段性红灯预期，不应再直接当作当前实现状态。
-> 若继续处理促销弹窗、搜索区或双语菜品渲染，请先以当前 `TabMarketing.astro` 与现有测试为准。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 重做 `/admin/[slug]` 营销页的促销弹窗，让“今日特价”在桌面端更宽、更易选、更易搜，并保持现有提交接口与 payload 不变。
@@ -78,7 +75,7 @@ Run:
 ```bash
 node --test "D:/ai/food/.worktrees/260311/food2astro/src/pages/admin/promotion-ui.test.ts"
 ```
-历史红灯预期：，因为当前 `TabMarketing.astro` 还没有更宽 modal、special 搜索框、已选区和新的状态渲染函数。
+Expected: FAIL，因为当前 `TabMarketing.astro` 还没有更宽 modal、special 搜索框、已选区和新的状态渲染函数。
 
 - [ ] **Step 3: Write minimal implementation scaffold**
 
@@ -157,7 +154,7 @@ Run:
 ```bash
 node --test "D:/ai/food/.worktrees/260311/food2astro/src/pages/admin/promotion-ui.test.ts"
 ```
-历史红灯预期：，因为当前 `loadProducts()` 只保存 `{ id, name, price }`，没有双语字段归一化。
+Expected: FAIL，因为当前 `loadProducts()` 只保存 `{ id, name, price }`，没有双语字段归一化。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -236,7 +233,7 @@ Run:
 ```bash
 node --test "D:/ai/food/.worktrees/260311/food2astro/src/pages/admin/promotion-ui.test.ts"
 ```
-历史红灯预期：，因为当前还没有 add/remove、过滤和双区渲染的完整实现。
+Expected: FAIL，因为当前还没有 add/remove、过滤和双区渲染的完整实现。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -433,7 +430,7 @@ Run:
 ```bash
 node --test "D:/ai/food/.worktrees/260311/food2astro/src/pages/admin/promotion-ui.test.ts"
 ```
-历史红灯预期：，因为当前 open/edit/updatePromoFields 还没有完整串起新状态模型。
+Expected: FAIL，因为当前 open/edit/updatePromoFields 还没有完整串起新状态模型。
 
 - [ ] **Step 3: Write minimal implementation**
 

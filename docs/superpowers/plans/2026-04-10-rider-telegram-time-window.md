@@ -1,7 +1,5 @@
 # Rider Telegram Time Window Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是 Telegram 5 分钟时窗只限制待接单阶段时的实施步骤；文中的红灯预期属于当时 contract 收口过程，不应直接当作当前实现状态。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让 Telegram 仅在待接单阶段执行 5 分钟超时，`已取餐`/`已送达` 改为只受订单真实状态与当前骑手身份约束。
@@ -107,7 +105,7 @@ test('picked_up and complete callbacks remain parseable after the dispatch windo
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-dispatch-spec.ts`
-历史红灯预期：，当前 `picked_up` / `complete` 仍会抛出 `expired_callback`。
+Expected: FAIL，当前 `picked_up` / `complete` 仍会抛出 `expired_callback`。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -356,7 +354,7 @@ test('handleTelegramRiderClaim returns order_completed for stale complete button
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
-历史红灯预期：，当前 stale `picked_up` 会被提前拦成 `expired_callback`，完成态按钮也不会返回 `order_completed`。
+Expected: FAIL，当前 stale `picked_up` 会被提前拦成 `expired_callback`，完成态按钮也不会返回 `order_completed`。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -467,7 +465,7 @@ test('mapTelegramClaimErrorToCallbackText covers dispatch and delivery failures'
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-webhook-route-spec.ts`
-历史红灯预期：，当前文件里还没有 `mapTelegramClaimErrorToCallbackText`，且错误文案仍只区分 `expired_callback` 和其他失败。
+Expected: FAIL，当前文件里还没有 `mapTelegramClaimErrorToCallbackText`，且错误文案仍只区分 `expired_callback` 和其他失败。
 
 - [ ] **Step 3: Write minimal implementation**
 

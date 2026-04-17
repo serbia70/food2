@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
-import { API_BASE_URL } from '../../../../../config.ts';
-import { proxyAdminRequest } from '../../../../../lib/admin-api-route.ts';
+import { API_BASE_URL } from '../../../../../config';
+import { proxyAdminRequest } from '../../../../../lib/admin-api-route';
 
 export const prerender = false;
 

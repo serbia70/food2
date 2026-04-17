@@ -182,7 +182,7 @@
 ### 4.2 Go（后端）
 
 1. 订单状态机：
-   - 文件：`D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\order_status_flow_test．go（历史文件名）`
+   - 文件：`D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\order_status_flow_test.go`
    - 关注点：
      - `delivering -> picked_up` 合法
      - `picked_up -> completed` 合法
@@ -191,7 +191,7 @@
      - `remarks_json` 持久化（decline 反馈路径）
 
 2. Telegram send：
-   - 文件：`D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\telegram_send_test．go（历史文件名）`
+   - 文件：`D:\ai\food\.worktrees\260311\foos2Go\internal\handlers\telegram_send_test.go`
    - 关注点：token 回退、reply_markup 透传、出站失败语义。
 
 ### 4.3 人工链路（上线前最少跑 1 次）

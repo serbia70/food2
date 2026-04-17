@@ -1,8 +1,5 @@
 # Belgrade 时区统一与前台促销展示 Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是 Belgrade 时区统一与前台促销展示时的实施步骤，文中的 `历史红灯预期：` 与旧后端测试文件名属于当时的推进语境，不应再直接当作当前仓库基线。
-> 若继续处理促销展示、Belgrade 时间语义或后端统计边界，请先以当前前后端真实实现与现有测试为准。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 统一 special promotion 与相关统计的 Europe/Belgrade 时间语义，并在店铺页增加“今日特价”模块与明确的促销价格展示。
@@ -26,7 +23,7 @@
 - `foos2Go/internal/handlers/promotions.go` — promotion 时间解析与月统计区间
 - `foos2Go/internal/handlers/master_init_data.go` — today/month 统计区间
 - `foos2Go/internal/handlers/reservation.go` — 预约时间解析与今日统计口径
-- `foos2Go/internal/handlers/master_stats_test．go（历史文件名）` — 后端 today/month 边界回归测试
+- `foos2Go/internal/handlers/master_stats_test.go` — 后端 today/month 边界回归测试
 
 ### Task 1: 扩展前端促销归一化能力
 
@@ -103,7 +100,7 @@ Run:
 node --test src/lib/cart-store-promotions.test.ts
 ```
 
-历史红灯预期：，报 `getActiveSpecialPromotionProducts` 未导出或断言不通过。
+Expected: FAIL，报 `getActiveSpecialPromotionProducts` 未导出或断言不通过。
 
 - [ ] **Step 3: 在 `cartStore.ts` 加最小实现，统一 special price 映射与顶部模块数据**
 
@@ -230,7 +227,7 @@ Run:
 node --test src/pages/menu-list-promotions.test.ts src/pages/shop-promotions-surface.test.ts
 ```
 
-历史红灯预期：，报 `getActiveSpecialPromotionProducts`、`今日特价` 或 `promotions={promotionsData}` 断言不成立。
+Expected: FAIL，报 `getActiveSpecialPromotionProducts`、`今日特价` 或 `promotions={promotionsData}` 断言不成立。
 
 - [ ] **Step 3: 在 `MenuList.tsx` 和店铺页加入最小实现**
 
@@ -368,7 +365,7 @@ Run:
 node --test src/pages/menu-list-promotions.test.ts
 ```
 
-历史红灯预期：，缺少 `isSpecialPrice`、删除线或 `今日特价` 标签。
+Expected: FAIL，缺少 `isSpecialPrice`、删除线或 `今日特价` 标签。
 
 - [ ] **Step 3: 在 `MenuList.tsx` 和 `CartModal.tsx` 加最小实现，保证展示与结算一致**
 
@@ -438,7 +435,7 @@ git commit -m "feat: show special promotion state in menu pricing"
 - Modify: `foos2Go/internal/handlers/promotions.go`
 - Modify: `foos2Go/internal/handlers/master_init_data.go`
 - Modify: `foos2Go/internal/handlers/reservation.go`
-- Test: `foos2Go/internal/handlers/master_stats_test．go（历史文件名）`
+- Test: `foos2Go/internal/handlers/master_stats_test.go`
 
 - [ ] **Step 1: 写失败测试，锁定 today/month 都走 Belgrade 区间而不是裸 `time.Now()`**
 
@@ -465,7 +462,7 @@ Run:
 go test ./internal/handlers -run "TestBelgradeDayRange|TestBuildMasterShopSummaryUsesBelgradeDayWindow|TestBuildMasterStatsSourceUsesBelgradeWindowHelpers"
 ```
 
-历史红灯预期：，如果 `master_init_data.go`、`promotions.go`、`reservation.go` 仍有残余 `time.Now()` / `LIKE` / `date('now')` 边界写法。
+Expected: FAIL，如果 `master_init_data.go`、`promotions.go`、`reservation.go` 仍有残余 `time.Now()` / `LIKE` / `date('now')` 边界写法。
 
 - [ ] **Step 3: 在 handlers 中做最小实现，全部改成显式 Belgrade 区间**
 
@@ -523,7 +520,7 @@ Expected: PASS，today/month 统计断言和源码断言全部通过。
 - [ ] **Step 5: 提交当前任务**
 
 ```bash
-git add internal/handlers/order_numbering.go internal/handlers/promotions.go internal/handlers/master_init_data.go internal/handlers/reservation.go internal/handlers/master_stats_test．go（历史文件名）
+git add internal/handlers/order_numbering.go internal/handlers/promotions.go internal/handlers/master_init_data.go internal/handlers/reservation.go internal/handlers/master_stats_test.go
 git commit -m "fix: align handler statistics with belgrade time windows"
 ```
 
@@ -538,7 +535,7 @@ git commit -m "fix: align handler statistics with belgrade time windows"
 - Test: `src/lib/cart-store-promotions.test.ts`
 - Test: `src/pages/menu-list-promotions.test.ts`
 - Test: `src/pages/shop-promotions-surface.test.ts`
-- Test: `foos2Go/internal/handlers/master_stats_test．go（历史文件名）`
+- Test: `foos2Go/internal/handlers/master_stats_test.go`
 
 - [ ] **Step 1: 运行前端定向测试，确认促销链路全部通过**
 
@@ -571,7 +568,7 @@ Expected: PASS，构建完成，无新的页面或类型错误。
 
 Run:
 ```bash
-git diff -- src/store/cartStore.ts src/components/MenuList.tsx src/pages/[slug]/index.astro src/components/CartModal.tsx src/lib/cart-store-promotions.test.ts src/pages/menu-list-promotions.test.ts src/pages/shop-promotions-surface.test.ts ../foos2Go/internal/handlers/order_numbering.go ../foos2Go/internal/handlers/promotions.go ../foos2Go/internal/handlers/master_init_data.go ../foos2Go/internal/handlers/reservation.go ../foos2Go/internal/handlers/master_stats_test．go（历史文件名）
+git diff -- src/store/cartStore.ts src/components/MenuList.tsx src/pages/[slug]/index.astro src/components/CartModal.tsx src/lib/cart-store-promotions.test.ts src/pages/menu-list-promotions.test.ts src/pages/shop-promotions-surface.test.ts ../foos2Go/internal/handlers/order_numbering.go ../foos2Go/internal/handlers/promotions.go ../foos2Go/internal/handlers/master_init_data.go ../foos2Go/internal/handlers/reservation.go ../foos2Go/internal/handlers/master_stats_test.go
 ```
 
 Expected: 只看到 Belgrade 时间统一、今日特价模块、菜单促销态和对应测试改动，没有顺手扩 scope 的内容。
@@ -580,6 +577,6 @@ Expected: 只看到 Belgrade 时间统一、今日特价模块、菜单促销态
 
 ```bash
 git add src/store/cartStore.ts src/components/MenuList.tsx src/pages/[slug]/index.astro src/components/CartModal.tsx src/lib/cart-store-promotions.test.ts src/pages/menu-list-promotions.test.ts src/pages/shop-promotions-surface.test.ts
-git add ../foos2Go/internal/handlers/order_numbering.go ../foos2Go/internal/handlers/promotions.go ../foos2Go/internal/handlers/master_init_data.go ../foos2Go/internal/handlers/reservation.go ../foos2Go/internal/handlers/master_stats_test．go（历史文件名）
+git add ../foos2Go/internal/handlers/order_numbering.go ../foos2Go/internal/handlers/promotions.go ../foos2Go/internal/handlers/master_init_data.go ../foos2Go/internal/handlers/reservation.go ../foos2Go/internal/handlers/master_stats_test.go
 git commit -m "feat: surface active specials with belgrade time alignment"
 ```

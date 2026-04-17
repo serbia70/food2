@@ -1,11 +1,8 @@
 # Backend Single-Truth Orders API Implementation Plan
 
-> 状态说明（部分过期）：本计划中“移除 foos2Go Go 测试文件 / 删除所有测试消息运行时入口”不应再视为当前真实实施目标；它主要保留为当时的收口思路记录。
-> 继续处理订单 contract 时，请优先看当前实际已落地实现和最新总文档：`foos2Go/internal/handlers/order_dto.go`、`order_shop_enrich.go`、`mobile.go`、`order_list_flow.go`、`docs/superpowers/specs/2026-04-15-dispatch-telegram-rider-admin-cleanup-design.md`。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 让 `foos2Go` 成为订单相关 HTTP 契约的唯一真源：后端对外统一 camelCase，前端只消费 camelCase，删除运行时 test/debug 分叉；文中关于移除 `foos2Go` Go 测试文件的部分仅保留为历史收口思路。
+**Goal:** 让 `foos2Go` 成为订单相关 HTTP 契约的唯一真源：后端对外统一 camelCase，前端只消费 camelCase，删除运行时 test/debug 分叉，并最终删除 `foos2Go` 下全部 `_test.go`。
 
 **Architecture:** 在 `foos2Go/internal/handlers` 下新增最小 DTO / mapper 边界，把数据库模型留在内部扫描层，handler 统一投影为稳定 camelCase HTTP DTO。前端与 BFF 同步删除 snake_case fallback，只保留鉴权、转发和最小必要的数据整理。最后删除运行时测试入口与 Go 测试文件，用构建、搜索和生产链路烟雾验证收尾。
 
@@ -570,15 +567,15 @@ git add foos2Go/internal/handlers/master_routes.go food2astro/src/scripts/master
 
 ---
 
-### Task 4: 历史方案中的 Go 测试文件移除与最终清理验收
+### Task 4: 删除 `foos2Go` 全部 `_test.go` 并做最终清理验收
 
 **Files:**
-- Delete: `foos2Go/**/*_test．go（历史文件名）`
+- Delete: `foos2Go/**/*_test.go`
 
 - [ ] **Step 1: 列出全部待删 Go 测试文件**
 
 Run: `git ls-files | grep '^foos2Go/.*_test\.go$'`  
-Expected: 输出所有 `foos2Go` 下 `_test．go（历史文件名）`
+Expected: 输出所有 `foos2Go` 下 `_test.go`
 
 - [ ] **Step 2: 删除全部 Go 测试文件**
 
@@ -633,7 +630,7 @@ git add foos2Go food2astro && git commit -m "chore: remove backend go tests afte
 - [ ] `PublicOrderStatus` 仍只返回正式 key：`success` / `status` / `remarks`
 - [ ] `food2astro` runtime 代码不再读取 snake_case 订单字段
 - [ ] `/api/master/telegram-test` 与 admin rider telegram test 运行时链路已删除
-- [ ] 若按当时历史方案推进，`foos2Go` 下不存在任何 `_test．go（历史文件名）`
+- [ ] `foos2Go` 下不存在任何 `_test.go`
 - [ ] 仓库中只保留一条真实生产链路
 - [ ] implementation plan 不依赖未核实的测试文件路径或虚构 API 文件名
 
@@ -641,7 +638,7 @@ git add foos2Go food2astro && git commit -m "chore: remove backend go tests afte
 
 - 4.1/4.2 后端单一真源 + camelCase only：Task 1、Task 2
 - 4.3 运行时只保留生产入口：Task 3
-- 4.4 历史方案中的 Go 测试文件移除：Task 4
+- 4.4 删除全部 `_test.go`：Task 4
 - 5.1/5.2/5.3 DTO 分层与 order/user/rider DTO：Task 1
 - 6.1 必须收口的 handler：Task 1
 - 7.1/7.2/7.3 前端 BFF / 页面 / 状态 helper 收口：Task 2
@@ -690,7 +687,7 @@ git add foos2Go food2astro && git commit -m "chore: remove backend go tests afte
    - 这一步必须在主链路已跑通后做，避免半路失去验证入口。
 
 4. **最后做 Task 4**
-   - 删除 `foos2Go` 全部 `_test．go（历史文件名）`
+   - 删除 `foos2Go` 全部 `_test.go`
    - 放到最后，避免中途丢参考物。
 
 ## First Shipping Slice
@@ -726,7 +723,7 @@ git add foos2Go food2astro && git commit -m "chore: remove backend go tests afte
 - 不保留 snake_case + camelCase 双轨输出
 - 不新增前端兼容层
 - 不为了“优雅”重构无关模块
-- 不把删除 `_test．go（历史文件名）` 提前到主链路打通之前
+- 不把删除 `_test.go` 提前到主链路打通之前
 
 ## Done Means
 
@@ -737,5 +734,5 @@ git add foos2Go food2astro && git commit -m "chore: remove backend go tests afte
 - 买家订单历史恢复
 - rider / Telegram / admin / buyer 状态展示一致
 - runtime test/debug 路由和 UI 删除
-- `foos2Go` 下不存在 `_test．go（历史文件名）`
+- `foos2Go` 下不存在 `_test.go`
 - 仓库里只剩一条真实生产链路

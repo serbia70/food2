@@ -1,8 +1,5 @@
 # Safe Upload Batch Script Implementation Plan
 
-> 状态说明（历史计划）：这份计划记录的是安全上传 bat 脚本设计时的实施步骤，文中的 `历史红灯预期：` 属于当时的红灯预期，不应再直接当作当前仓库状态。
-> 若继续处理上传脚本，请先以当前仓库里实际保留的 bat 脚本与项目约定为准。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 新增一个默认安全的 Windows bat 上传脚本，用于在当前分支上先确认再提交推送，避免误把整个工作区一键上传。
@@ -55,7 +52,7 @@ Run:
 ```bash
 node --test <新测试文件路径>
 ```
-历史红灯预期：，因为脚本还不存在。
+Expected: FAIL，因为脚本还不存在。
 
 - [ ] **Step 3: 写最小 bat 实现**
 

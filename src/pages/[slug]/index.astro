@@ -270,6 +270,7 @@ const belgradeTimeOptions = {
   hour12: false,
 };
 const belgradeTime = new Intl.DateTimeFormat('sr-RS', belgradeTimeOptions);
+const endedOrderStatusList = ['completed', 'cancelled', 'archived', 'paid'];
 
 const tableStatusMap: Record<string, { occupied: boolean; total: number; orderTime: string; activeCount: number }> = {};
 

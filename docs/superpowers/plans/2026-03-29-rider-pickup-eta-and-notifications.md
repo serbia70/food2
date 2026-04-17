@@ -1,5 +1,7 @@
 # Rider Pickup ETA And Notifications Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是派单 ETA、提醒与 Telegram 初期接线时的实施步骤；文中的红灯预期和“新建文件”表述属于当时语境，不应直接映射为当前仓库状态。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a delivery dispatch flow where admin chooses a pickup ETA before notifying riders, riders see and claim `awaiting_courier` orders, unclaimed orders surface reminder/contact state, and Telegram becomes the primary external notification channel.
@@ -86,7 +88,7 @@ test('pickAvailableRiders only keeps available riders with phone', () => {
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-Expected: FAIL with module export errors because `src/lib/rider-dispatch.ts` does not exist yet.
+历史红灯预期： with module export errors because `src/lib/rider-dispatch.ts` does not exist yet.
 
 - [ ] **Step 3: 扩展共享类型，先把新字段放到类型层**
 
@@ -246,7 +248,7 @@ test('formatPickupEtaLabel still returns empty string for invalid input', () => 
 - [ ] **Step 2: 跑测试确认新增断言失败**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-Expected: FAIL with `getAdminDispatchStatusCopy is not a function`.
+历史红灯预期： with `getAdminDispatchStatusCopy is not a function`.
 
 - [ ] **Step 3: 在 helper 里补状态映射实现**
 
@@ -375,7 +377,7 @@ test('buildDispatchPublishPayload stores awaiting_courier state and eta metadata
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-Expected: FAIL with missing export `buildDispatchPublishPayload`.
+历史红灯预期： with missing export `buildDispatchPublishPayload`.
 
 - [ ] **Step 3: 在 helper 中补 publish payload 实现**
 
@@ -523,7 +525,7 @@ test('filterRiderActiveOrders keeps awaiting_courier and delivering cards in act
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-Expected: FAIL with missing export `filterRiderActiveOrders`.
+历史红灯预期： with missing export `filterRiderActiveOrders`.
 
 - [ ] **Step 3: 在 helper 中补 rider 过滤实现**
 
@@ -653,7 +655,7 @@ test('buildReminderPayload increments reminder count and stamp', () => {
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-Expected: FAIL with missing exports.
+历史红灯预期： with missing exports.
 
 - [ ] **Step 3: 在 helper 中补实现**
 
@@ -770,7 +772,7 @@ test('buildTelegramDispatchMessage includes eta and action labels', () => {
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `node --test src/lib/telegram-dispatch-spec.ts`
-Expected: FAIL because `src/lib/telegram-dispatch.ts` does not exist.
+历史红灯预期： because `src/lib/telegram-dispatch.ts` does not exist.
 
 - [ ] **Step 3: 写最小 Telegram 深链接实现**
 
@@ -878,7 +880,7 @@ test('telegram claim callback round-trips order and rider identity', () => {
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `node --test src/lib/telegram-dispatch-spec.ts`
-Expected: FAIL with missing callback helpers.
+历史红灯预期： with missing callback helpers.
 
 - [ ] **Step 3: 在 Telegram helper 中增加 callback 编解码与按钮**
 

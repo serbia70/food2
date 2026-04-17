@@ -1,5 +1,7 @@
 # Rider Telegram Unbind Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 rider 端补解绑能力时的实施步骤；文中的红灯预期属于当时新增接口与页面接线阶段，不应直接当作当前仓库状态。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在骑手端增加“解除 Telegram 绑定”能力，让当前骑手可一键清空自己的 Telegram 绑定并立即重新测试绑定流程。
@@ -108,7 +110,7 @@ test('POST rider telegram unbind 会把 telegram_chat_id 清空后转发到后�
 
 Run: `node --test "src/tests/pages/api/rider-telegram-unbind.test.ts"`
 
-Expected: FAIL，因为 `src/pages/api/rider/telegram/unbind.ts` 还不存在。
+历史红灯预期：，因为 `src/pages/api/rider/telegram/unbind.ts` 还不存在。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -195,7 +197,7 @@ assert.match(source, /alert\('已解除 Telegram 绑定'\);/);
 
 Run: `node --test "src/tests/pages/rider-dashboard-canonical.test.ts"`
 
-Expected: FAIL，因为当前页面还没有解绑按钮和 `unbindTelegram()`。
+历史红灯预期：，因为当前页面还没有解绑按钮和 `unbindTelegram()`。
 
 - [ ] **Step 3: Write minimal implementation**
 

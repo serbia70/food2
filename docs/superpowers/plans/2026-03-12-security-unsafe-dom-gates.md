@@ -1,5 +1,8 @@
 # Unsafe DOM Sink Gates Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是当时为 unsafe DOM sink 建立门禁时的推进步骤，文中的 `历史红灯预期：` 属于阶段性红灯预期，不应再直接当作当前实现状态。
+> 若继续处理 DOM 安全门禁，请先以当前 `scripts/` 与实际安全策略为准，再决定哪些检查仍需保留或扩展。
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add repo-wide safety gates that prevent re-introducing high-risk DOM injection APIs (innerHTML/insertAdjacentHTML/dangerouslySetInnerHTML/document.write) and catch regressions in build output.
@@ -162,7 +165,7 @@ cd meituanAstro
 node --test scripts/check-no-unsafe-dom-apis-repo.test.mjs
 ```
 
-Expected: FAIL if any unsafe patterns exist in the expanded scan surface.
+历史红灯预期： if any unsafe patterns exist in the expanded scan surface.
 
 - [ ] **Step 3: Make minimal changes to pass (GREEN)**
 

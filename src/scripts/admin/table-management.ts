@@ -1,5 +1,6 @@
 import { matchesTableRef, parseTableRef, inferLegacySimpleHallNumber } from '../../lib/admin-table-ref';
 import { isActiveDineInOrder } from '../../lib/admin-dashboard-utils.ts';
+import { buildAdminTableOrderSummaryShared, parseOrderItemsShared } from '../../lib/order-items-shared.ts';
 import { getRemarkCategoryTheme } from '../../lib/remark-ui-theme';
 import { getAdminHandler, getAdminRuntimeState, registerAdminGlobal, showAdminToast } from './globals';
 
@@ -167,16 +168,7 @@ function getOrdersForTable(tableNum: string) {
 
     const tableInfo = el.dataset.table || "";
     if (matchesTableRef(targetRef, tableInfo, maxConfiguredTable)) {
-      // 解析 items
-      let items: any[] = [];
-      try {
-        const parsed = JSON.parse(el.dataset.items || "[]");
-        if (Array.isArray(parsed)) {
-          items = parsed.filter((i: any) => i != null);
-        } else if (typeof parsed === "object" && parsed !== null) {
-          items = Object.values(parsed).filter((i: any) => i != null);
-        }
-      } catch (e) {}
+      const items = parseOrderItemsShared(el.dataset.items || '[]');
 
       // 解析 remarks
       let remarks: string[] = [];
@@ -201,7 +193,7 @@ function getOrdersForTable(tableNum: string) {
         items: items,
         remarks: remarks, // 保存备注
         time: time,
-        summary: items.filter((i: any) => i).map((i: any) => `${i.name} x${i.quantity}`).join(", "),
+        summary: buildAdminTableOrderSummaryShared(el.dataset.items || '[]'),
         element: el, // 保存 DOM 元素引用，用于 handleEditOrder
       });
     }

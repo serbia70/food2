@@ -139,6 +139,7 @@ import Layout from '../../layouts/Layout.astro';
   <script>
     import { getRiderTelegramBindingCopy, isValidRiderSession, normalizeRiderSession } from '../../lib/rider-session';
     import { filterRiderDashboardOrders, getRiderStatusHintCopy, resolveRiderUnifiedStatus } from '../../lib/rider-dispatch.ts';
+    import { parseOrderItemsShared } from '../../lib/order-items-shared.ts';
 
     const BELGRADE_TIME_ZONE = 'Europe/Belgrade';
     const belgradeDateTimeFormatter = new Intl.DateTimeFormat('sr-RS', {
@@ -556,15 +557,6 @@ import Layout from '../../layouts/Layout.astro';
       }
     }
 
-    function parseItems(raw) {
-      try {
-        const parsed = JSON.parse(raw || '[]');
-        return Array.isArray(parsed) ? parsed : Object.values(parsed || {});
-      } catch {
-        return [];
-      }
-    }
-
     function createInfoRow(iconText, contentNode) {
       const row = document.createElement('div');
       row.className = 'info-row';
@@ -674,7 +666,7 @@ import Layout from '../../layouts/Layout.astro';
         const canDecline = unifiedStatus.secondaryAction === '暂不接单';
         const canPickUp = unifiedStatus.primaryAction === '取餐';
         const canComplete = unifiedStatus.primaryAction === '送达';
-        const items = parseItems(order?.itemsJson);
+        const items = parseOrderItemsShared(order?.itemsJson);
 
         const card = document.createElement('div');
         card.className = `order-card status-${String(order?.status || '').trim()}`;

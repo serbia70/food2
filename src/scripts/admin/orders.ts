@@ -9,8 +9,9 @@ import {
 } from '../../lib/rider-dispatch.ts';
 import {
   formatHHmm,
-  normalizeJSONString,
+  normalizeAdminOrderItemsJSONString,
   normalizeRemarkJSONString,
+  parseAdminOrderItems,
   parseDBDateMs,
 } from '../../lib/admin-dashboard-utils.ts';
 import { getAdminHandler } from './globals.ts';
@@ -130,7 +131,7 @@ function normalizeAdminOrdersPayload(data: unknown): AdminOrderRow[] {
       orderType: source.orderType ?? (tableInfo ? 'dine_in' : ''),
       status: source.status ?? (tableInfo ? 'pending' : ''),
       totalAmount: source.totalAmount ?? 0,
-      itemsJson: normalizeJSONString(source.itemsJson, '[]'),
+      itemsJson: normalizeAdminOrderItemsJSONString(source.itemsJson),
       remarksJson: normalizeRemarkJSONString(source.remarksJson),
       tableInfo,
       userPhone: source.userPhone ?? '',
@@ -191,19 +192,6 @@ function replaceHiddenOrderData(rows: AdminOrderRow[]) {
   }).join('');
 }
 
-function parseOrderItems(itemsJson: string | undefined): Array<Record<string, unknown>> {
-  try {
-    const parsed = JSON.parse(String(itemsJson || '[]'));
-    if (Array.isArray(parsed)) return parsed as Array<Record<string, unknown>>;
-    if (parsed && typeof parsed === 'object') {
-      return Object.values(parsed as Record<string, unknown>).filter((item): item is Record<string, unknown> => !!item && typeof item === 'object');
-    }
-    return [];
-  } catch {
-    return [];
-  }
-}
-
 function formatScheduledLabel(value: string | undefined): string {
   const ms = parseDBDateMs(value);
   if (!ms) return '';
@@ -240,7 +228,7 @@ function renderDeliveryOrderList(rows: AdminOrderRow[]) {
     const orderNo = toDatasetValue(row.orderNo || row.id);
     const pickupNo = orderNo.slice(-3);
     const displayPrefix = orderNo.slice(0, Math.max(0, orderNo.length - pickupNo.length));
-    const items = parseOrderItems(row.itemsJson);
+    const items = parseAdminOrderItems(row.itemsJson);
     const dispatchMeta = readDispatchMetaFromRemarks(String(row.remarksJson || ''));
     const lastRiderDecision = dispatchMeta.lastRiderDecision;
     const riderDeclinedAwaitingCourier = isAwaitingCourierOrder({ status: row.status }) && lastRiderDecision?.action === 'declined';
@@ -295,7 +283,7 @@ function renderAdminOrderList(rows: AdminOrderRow[]) {
     const orderTypeClass = isDelivery ? 'delivery' : 'dine';
     const orderTypeLabel = isDelivery ? '外卖' : '堂食';
     const statusToken = normalizeStatusToken(row.status);
-    const items = parseOrderItems(row.itemsJson);
+    const items = parseAdminOrderItems(row.itemsJson);
     const dispatchMeta = readDispatchMetaFromRemarks(String(row.remarksJson || ''));
     const lastRiderDecision = dispatchMeta.lastRiderDecision;
     const scheduledLabel = formatScheduledLabel(row.scheduledFor);

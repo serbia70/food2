@@ -5,14 +5,13 @@ import test, { type TestContext } from 'node:test';
 import {
   buildRiderAwaitingPickupTelegramMessage,
   buildRiderDeliveringTelegramMessage,
-  buildRiderDeliveryCompleteTelegramMessage,
-  buildRiderPickedUpTelegramMessage,
   buildRiderSingleMessageTelegram,
   buildTelegramClaimCallback,
   buildTelegramEditMessagePayload,
   buildTelegramShortClaimCallback,
   parseTelegramClaimCallback,
 } from './telegram-dispatch.ts';
+import * as telegramDispatchModule from './telegram-dispatch.ts';
 import { POST as sendTelegramRoute } from '../pages/api/telegram/send.ts';
 
 type TelegramClaimAction = 'accept' | 'decline' | 'picked_up' | 'complete';
@@ -607,16 +606,7 @@ test('buildRiderDeliveringTelegramMessage uses delivering semantics', () => {
   assert.equal(message.replyMarkup.inline_keyboard[0]?.[0]?.text, '送达');
 });
 
-test('legacy rider telegram builders delegate to renamed semantic builders', () => {
-  const pickedUpLegacy = buildRiderPickedUpTelegramMessage({
-    orderNo: 'A476',
-    shopName: '店铺A',
-    address: 'Kralja Petra 10',
-    phone: '381600000000',
-    totalAmount: 1200,
-    pickupEtaMinutes: 15,
-    completeCallbackData: 'cb-pickup',
-  });
+test('semantic rider telegram builders cover awaiting-pickup and delivering stages without legacy aliases', () => {
   const awaitingPickup = buildRiderAwaitingPickupTelegramMessage({
     orderNo: 'A476',
     shopName: '店铺A',
@@ -625,15 +615,6 @@ test('legacy rider telegram builders delegate to renamed semantic builders', () 
     totalAmount: 1200,
     pickupEtaMinutes: 15,
     completeCallbackData: 'cb-pickup',
-  });
-  const completeLegacy = buildRiderDeliveryCompleteTelegramMessage({
-    orderNo: 'A476',
-    shopName: '店铺A',
-    address: 'Kralja Petra 10',
-    phone: '381600000000',
-    totalAmount: 1200,
-    pickupEtaMinutes: 15,
-    completeCallbackData: 'cb-complete',
   });
   const delivering = buildRiderDeliveringTelegramMessage({
     orderNo: 'A476',
@@ -645,6 +626,10 @@ test('legacy rider telegram builders delegate to renamed semantic builders', () 
     completeCallbackData: 'cb-complete',
   });
 
-  assert.deepEqual(pickedUpLegacy, awaitingPickup);
-  assert.deepEqual(completeLegacy, delivering);
+  assert.match(awaitingPickup.text, /状态：待取餐/);
+  assert.equal(awaitingPickup.replyMarkup.inline_keyboard[0]?.[0]?.text, '取餐');
+  assert.match(delivering.text, /状态：配送中/);
+  assert.equal(delivering.replyMarkup.inline_keyboard[0]?.[0]?.text, '送达');
+  assert.equal('buildRiderPickedUpTelegramMessage' in telegramDispatchModule, false);
+  assert.equal('buildRiderDeliveryCompleteTelegramMessage' in telegramDispatchModule, false);
 });

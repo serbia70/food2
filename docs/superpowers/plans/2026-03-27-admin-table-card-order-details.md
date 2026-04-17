@@ -1,5 +1,8 @@
 # Admin 桌卡订单详情入口 Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 admin 桌卡订单详情入口补齐时的实施步骤，文中的 `历史红灯预期：` 属于当时的红灯预期，不应再直接当作当前代码状态。
+> 若继续处理桌卡详情入口、现有弹窗复用或备注展示，请先以当前组件、脚本与真实测试为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在 `/admin/[slug]` 的堂食桌卡标题区增加一个不增行的小详情入口，点击后打开现有订单详情弹窗，并显示当前桌订单备注。
@@ -47,7 +50,7 @@ Run:
 ```bash
 node --test "D:/ai/food/.worktrees/260311/food2astro/src/pages/master/dine-in-panel-routing.test.ts"
 ```
-Expected: FAIL，因为当前还没有 `data-admin-action="table-details"`
+历史红灯预期：，因为当前还没有 `data-admin-action="table-details"`
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -111,7 +114,7 @@ Run:
 ```bash
 node --test "D:/ai/food/.worktrees/260311/food2astro/src/pages/master/dine-in-panel-routing.test.ts"
 ```
-Expected: FAIL，因为 `table-details` 和 `handleTableDetails` 目前还不存在
+历史红灯预期：，因为 `table-details` 和 `handleTableDetails` 目前还不存在
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -193,7 +196,7 @@ Run:
 ```bash
 node --test "D:/ai/food/.worktrees/260311/food2astro/src/pages/master/dine-in-panel-routing.test.ts"
 ```
-Expected: FAIL，因为当前 `showDetailsModal()` 只显示菜品和金额，没有备注区块
+历史红灯预期：，因为当前 `showDetailsModal()` 只显示菜品和金额，没有备注区块
 
 - [ ] **Step 3: Write minimal implementation**
 

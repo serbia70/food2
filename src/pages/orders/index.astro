@@ -2,6 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import PlatformBottomNav from '../../components/PlatformBottomNav.astro';
 import { CUSTOMER_COMPLETED_STATUSES, getCustomerOrderStatusCopy, getCustomerDeliveryStatusCopy, isCustomerActiveStatus } from '../../lib/rider-dispatch.ts';
+import { buildOrderItemTextLinesShared } from '../../lib/order-items-shared.ts';
 ---
 
 <Layout title="订单中心">
@@ -275,18 +276,8 @@ import { CUSTOMER_COMPLETED_STATUSES, getCustomerOrderStatusCopy, getCustomerDel
     }
 
     function parseItems(order) {
-      try {
-        const items = typeof order.itemsJson === 'string' ? JSON.parse(order.itemsJson) : order.itemsJson;
-        const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
-        return itemsArray.map((item) => {
-          const itemName = item && item.name ? item.name : '未命名商品';
-          const subName = item && item.subName ? item.subName : '';
-          const quantity = Number(item && item.quantity ? item.quantity : 0);
-          return `• ${itemName}${subName ? ` (${subName})` : ''}${quantity ? ` x${quantity}` : ''}`;
-        });
-      } catch {
-        return ['商品解析失败'];
-      }
+      const lines = buildOrderItemTextLinesShared(order && order.itemsJson);
+      return lines.length > 0 ? lines : ['商品解析失败'];
     }
 
     function renderMemberships(summaries) {

@@ -5,6 +5,7 @@ interface TelegramDispatchInput {
   pickupEtaMinutes: number;
   phone: string;
   dashboardLink: string;
+  itemSummary?: string[];
   shopMapUrl?: string;
   deliveryMapUrl?: string;
   claimCallbackData?: string;
@@ -27,7 +28,7 @@ interface AdminAssignedOrderTelegramInput {
 
 type TelegramClaimAction = 'accept' | 'decline' | 'picked_up' | 'complete';
 
-interface RiderDeliveryCompleteTelegramInput {
+interface RiderDeliveringTelegramInput {
   orderNo: string;
   shopName: string;
   address: string;
@@ -39,7 +40,7 @@ interface RiderDeliveryCompleteTelegramInput {
   completeCallbackData?: string;
 }
 
-interface RiderPickedUpTelegramInput {
+interface RiderAwaitingPickupTelegramInput {
   orderNo: string;
   shopName: string;
   address: string;
@@ -277,6 +278,16 @@ function readShortCallbackToken(payload: string): string {
   return value.slice(TELEGRAM_SHORT_CALLBACK_PREFIX.length);
 }
 
+export function matchesShortTelegramClaimChatId(payload: string, chatId: string): boolean | null {
+  const token = readShortCallbackToken(payload);
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 8) return null;
+  const shortChatIdHash = String(parts[4] || '').trim();
+  if (!shortChatIdHash) return null;
+  return computeShortChatIdHash(chatId) === shortChatIdHash;
+}
+
 function signShortCallbackParts(parts: string[]): string {
   const secret = requireTelegramCallbackSecret();
   return createHmac('sha256', secret)
@@ -435,20 +446,20 @@ export function buildTelegramDispatchMessage(input: TelegramDispatchInput): Tele
     `联系电话：${input.phone}`,
   ];
 
-  const shopMapUrl = String(input.shopMapUrl || '').trim();
-  if (shopMapUrl) {
-    lines.push(`店铺地图：${shopMapUrl}`);
+  const itemLines = formatTelegramItemSummary(input.itemSummary || []);
+  if (itemLines.length > 0) {
+    lines.push('菜品：', ...itemLines);
   }
 
-  const deliveryMapUrl = String(input.deliveryMapUrl || '').trim();
-  if (deliveryMapUrl) {
-    lines.push(`客户导航：${deliveryMapUrl}`);
-  }
+  const inlineKeyboard = appendTelegramNavigationButtons([primaryButtons], {
+    shopMapUrl: input.shopMapUrl,
+    deliveryMapUrl: input.deliveryMapUrl,
+  });
 
   return {
     text: lines.join('\n'),
     replyMarkup: {
-      inline_keyboard: [primaryButtons],
+      inline_keyboard: inlineKeyboard,
     },
   };
 }
@@ -605,7 +616,7 @@ function appendLegacyRiderSummary(message: TelegramDispatchMessage, input: {
   };
 }
 
-export function buildRiderAwaitingPickupTelegramMessage(input: RiderPickedUpTelegramInput): TelegramDispatchMessage {
+export function buildRiderAwaitingPickupTelegramMessage(input: RiderAwaitingPickupTelegramInput): TelegramDispatchMessage {
   return appendLegacyRiderSummary(buildRiderSingleMessageTelegram({
     orderNo: input.orderNo,
     shopName: input.shopName,
@@ -627,7 +638,7 @@ export function buildRiderAwaitingPickupTelegramMessage(input: RiderPickedUpTele
   });
 }
 
-export function buildRiderDeliveringTelegramMessage(input: RiderDeliveryCompleteTelegramInput): TelegramDispatchMessage {
+export function buildRiderDeliveringTelegramMessage(input: RiderDeliveringTelegramInput): TelegramDispatchMessage {
   return appendLegacyRiderSummary(buildRiderSingleMessageTelegram({
     orderNo: input.orderNo,
     shopName: input.shopName,
@@ -649,10 +660,3 @@ export function buildRiderDeliveringTelegramMessage(input: RiderDeliveryComplete
   });
 }
 
-export function buildRiderPickedUpTelegramMessage(input: RiderPickedUpTelegramInput): TelegramDispatchMessage {
-  return buildRiderAwaitingPickupTelegramMessage(input);
-}
-
-export function buildRiderDeliveryCompleteTelegramMessage(input: RiderDeliveryCompleteTelegramInput): TelegramDispatchMessage {
-  return buildRiderDeliveringTelegramMessage(input);
-}

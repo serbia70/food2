@@ -1,5 +1,8 @@
 # Delivery Disabled Cart Button State Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是外卖关闭态购物车按钮收口时的实施步骤，文中的 `历史红灯预期：` 属于当时的红灯预期，不应再直接当作当前代码状态。
+> 若继续处理购物车关闭态按钮，请先以当前 `CartModeActions`、相关测试与真实页面接线为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在店铺外卖关闭时，让购物车底部现有橙色外卖按钮改为 `Dostava nije dostupna / 外卖尚未开通` 并进入禁用态，不新增额外提示 UI。
@@ -56,7 +59,7 @@ assert.match(pageSource, /enableDelivery=\{enableDelivery\}/);
 - [ ] **Step 2: 运行测试并确认先失败**
 
 Run: `node --test src/components/cart-modal/CartModal-step1-scroll.test.ts`
-Expected: FAIL，因为源码尚未包含新变量定义、关闭态文案或点击保护
+历史红灯预期：，因为源码尚未包含新变量定义、关闭态文案或点击保护
 
 - [ ] **Step 3: 仅补最小断言，不扩大测试范围**
 

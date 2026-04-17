@@ -1,5 +1,8 @@
 # Tier And Promotion Simplification Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 tier 与 promotion 简化时的实施步骤，文中的 `历史红灯预期：` 与旧后端测试文件名属于当时的推进语境，不应再直接当作当前仓库基线。
+> 若继续处理 tier feature gating、promotion narrowing 或 storefront/cart 促销展示，请先以当前 helper、页面与真实测试为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move admin statistics into the subscription tier, keep business tier as subscription plus only marketing/customers, and simplify promotions to special + spend_discount with spend-discount surfaced on the storefront and cart.
@@ -32,7 +35,7 @@
 
 ### Backend promotion narrowing
 - Modify: `foos2Go/internal/handlers/promotions.go` — reject removed promo types on create/update and filter them out from list/active queries.
-- Create or modify: `foos2Go/internal/handlers/promotions_test.go` — add backend coverage for accepted promo types and filtering of disabled legacy promo types.
+- Create or modify: `foos2Go/internal/handlers/promotions_test．go（历史文件名）` — add backend coverage for accepted promo types and filtering of disabled legacy promo types.
 - Modify: backend order/promotion application code if it still consumes removed promo types after narrowing (identify exact file during Task 4 and update only that file).
 
 ---
@@ -81,7 +84,7 @@ Run:
 node --test src/lib/shop-tier.test.ts
 ```
 
-Expected: FAIL because subscription currently has `advancedAnalytics: false`.
+历史红灯预期： because subscription currently has `advancedAnalytics: false`.
 
 - [ ] **Step 3: Implement the minimal tier flag change**
 
@@ -150,7 +153,7 @@ Run the exact file you modified, for example:
 node --test src/pages/admin/<target-test-file>.ts
 ```
 
-Expected: FAIL if the old assumption is still encoded in assertions.
+历史红灯预期： if the old assumption is still encoded in assertions.
 
 - [ ] **Step 3: Update admin page/tab wiring**
 
@@ -222,7 +225,7 @@ Run:
 node --test src/pages/admin/promotion-ui.test.ts
 ```
 
-Expected: FAIL because the file still contains `percent_discount`, `bonus_points`, and points-only fields.
+历史红灯预期： because the file still contains `percent_discount`, `bonus_points`, and points-only fields.
 
 - [ ] **Step 3: Update the marketing form and source logic**
 
@@ -278,12 +281,12 @@ git commit -m "refactor: trim admin promotions to special and spend discount"
 
 **Files:**
 - Modify: `foos2Go/internal/handlers/promotions.go`
-- Test: `foos2Go/internal/handlers/promotions_test.go`
+- Test: `foos2Go/internal/handlers/promotions_test．go（历史文件名）`
 - Modify if needed: exact backend order/promotion application file found while implementing this task
 
 - [ ] **Step 1: Write the failing Go tests for allowed promo types and filtering**
 
-Extend `foos2Go/internal/handlers/promotions_test.go` with tests that:
+Extend `foos2Go/internal/handlers/promotions_test．go（历史文件名）` with tests that:
 - reject `percent_discount`
 - reject `bonus_points`
 - filter legacy promo types out of admin list / active promotion results
@@ -319,7 +322,7 @@ Run:
 cd /d/ai/food/.worktrees/260311/foos2Go && go test ./internal/handlers -run 'Test(CreatePromotionRejectsRemovedPromoTypes|ListPromotionsByShopFiltersRemovedPromoTypes|GetActivePromotionsUsesBelgradeNowBoundary)$'
 ```
 
-Expected: FAIL because removed types are still accepted/returned.
+历史红灯预期： because removed types are still accepted/returned.
 
 - [ ] **Step 3: Implement backend narrowing**
 
@@ -367,7 +370,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /d/ai/food/.worktrees/260311/foos2Go && git add internal/handlers/promotions.go internal/handlers/promotions_test.go && git commit -m "refactor: disable legacy promotion types"
+cd /d/ai/food/.worktrees/260311/foos2Go && git add internal/handlers/promotions.go internal/handlers/promotions_test．go（历史文件名） && git commit -m "refactor: disable legacy promotion types"
 ```
 
 ---
@@ -417,7 +420,7 @@ Run:
 node --test src/lib/cart-store-promotions.test.ts
 ```
 
-Expected: FAIL because spend-discount helpers do not exist yet.
+历史红灯预期： because spend-discount helpers do not exist yet.
 
 - [ ] **Step 3: Implement the minimal spend-discount helpers in the store**
 
@@ -510,7 +513,7 @@ Run:
 node --test src/pages/menu-list-promotions.test.ts
 ```
 
-Expected: FAIL because `MenuList.tsx` has no spend-discount block yet.
+历史红灯预期： because `MenuList.tsx` has no spend-discount block yet.
 
 - [ ] **Step 3: Implement the menu-top spend-discount card**
 
@@ -598,7 +601,7 @@ And, if you added a cart UI source test:
 node --test <cart-ui-test-file>
 ```
 
-Expected: FAIL because cart UI/message wiring does not exist yet.
+历史红灯预期： because cart UI/message wiring does not exist yet.
 
 - [ ] **Step 3: Implement cart spend-discount messaging and keep totals single-sourced**
 
@@ -651,7 +654,7 @@ git commit -m "feat: show spend discount progress in cart"
 - Test only: `src/pages/menu-list-promotions.test.ts`
 - Test only: `src/lib/cart-store-promotions.test.ts`
 - Test only: `src/lib/cart-order-submit-promotions.test.ts`
-- Test only: `foos2Go/internal/handlers/promotions_test.go`
+- Test only: `foos2Go/internal/handlers/promotions_test．go（历史文件名）`
 
 - [ ] **Step 1: Run the full targeted frontend regression batch**
 
@@ -680,7 +683,7 @@ git diff -- src/lib/shop-tier.ts src/lib/shop-tier.test.ts src/pages/admin/[slug
 
 And:
 ```bash
-cd /d/ai/food/.worktrees/260311/foos2Go && git diff -- internal/handlers/promotions.go internal/handlers/promotions_test.go
+cd /d/ai/food/.worktrees/260311/foos2Go && git diff -- internal/handlers/promotions.go internal/handlers/promotions_test．go（历史文件名）
 ```
 
 Expected: Diff only covers tier remapping, promo narrowing, storefront/cart messaging, and Go promo filtering.
@@ -692,7 +695,7 @@ git add src/lib/shop-tier.ts src/lib/shop-tier.test.ts src/pages/admin/[slug]/in
 ```
 
 ```bash
-cd /d/ai/food/.worktrees/260311/foos2Go && git add internal/handlers/promotions.go internal/handlers/promotions_test.go
+cd /d/ai/food/.worktrees/260311/foos2Go && git add internal/handlers/promotions.go internal/handlers/promotions_test．go（历史文件名）
 ```
 
 ```bash

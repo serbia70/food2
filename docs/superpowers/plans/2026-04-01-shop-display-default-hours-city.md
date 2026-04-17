@@ -1,5 +1,7 @@
 # Shop Display Default Hours & City Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是店铺默认城市与营业时间展示统一时的实施步骤；文中的 `历史红灯预期：` 只代表当时引入 resolver 的阶段，不应直接当作当前实现状态。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让前台首页、店铺页、CartModal、admin 设置页的城市与营业时间统一读取“店铺真实设置优先，master 全局默认兜底”的同一套解析结果。
@@ -115,7 +117,7 @@ test('invalid settings do not crash and return empty values when no defaults exi
 - [ ] **Step 2: Run resolver test to verify it fails**
 
 Run: `node --test src/lib/shop-display-settings.test.ts`
-Expected: FAIL with `Cannot find module './shop-display-settings.ts'` or missing export.
+历史红灯预期： with `Cannot find module './shop-display-settings.ts'` or missing export.
 
 - [ ] **Step 3: Write the minimal resolver implementation**
 
@@ -243,7 +245,7 @@ test('buildMasterSettingsView falls back to empty shop defaults values', () => {
 - [ ] **Step 2: Run view test to verify it fails**
 
 Run: `node --test src/lib/master-settings-view.test.ts`
-Expected: FAIL because `shopDefaults` does not exist on `MasterSettingsView`.
+历史红灯预期： because `shopDefaults` does not exist on `MasterSettingsView`.
 
 - [ ] **Step 3: Extend `buildMasterSettingsView()` minimally**
 
@@ -387,7 +389,7 @@ test('admin settings source uses resolved shop display settings for city and hou
 - [ ] **Step 2: Run admin source test to verify it fails**
 
 Run: `node --test src/tests/pages/admin/admin-index-canonical-init.test.ts`
-Expected: FAIL because resolver is not wired yet.
+历史红灯预期： because resolver is not wired yet.
 
 - [ ] **Step 3: Wire resolver into admin page and settings tab**
 
@@ -497,7 +499,7 @@ test('CartModal source does not hardcode default business hours', async () => {
 - [ ] **Step 2: Run the CartModal test to verify it fails**
 
 Run: `node --test <选定的 CartModal 测试文件>`
-Expected: FAIL because hardcoded fallback still exists.
+历史红灯预期： because hardcoded fallback still exists.
 
 - [ ] **Step 3: Implement minimal CartModal change**
 
@@ -563,7 +565,7 @@ assert.match(source, /resolvedDisplaySettings\.city/);
 - [ ] **Step 2: Run the page tests to verify they fail**
 
 Run: `node --test <店铺页/首页相关测试文件>`
-Expected: FAIL because pages do not yet use resolver.
+历史红灯预期： because pages do not yet use resolver.
 
 - [ ] **Step 3: Wire resolver into shop and home pages minimally**
 

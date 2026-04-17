@@ -1,5 +1,7 @@
 # Admin Dispatch Priority Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 admin 成为派单主入口时的实施步骤；文中的红灯预期与阶段性拆分只代表当时推进顺序，不应直接当作当前代码状态。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让 admin 成为商家默认派单入口，支持广播通知、手动指派、自动派单，并让 rider 端能正确区分待接单池与我的配送。
@@ -159,7 +161,7 @@ test('buildAssignedOrderStatusPayload writes canonical delivering payload', () =
 
 Run: `node --test src/lib/rider-assignment.test.ts`
 
-Expected: FAIL，因为文件还不存在，导入会报 `ERR_MODULE_NOT_FOUND`。
+历史红灯预期：，因为文件还不存在，导入会报 `ERR_MODULE_NOT_FOUND`。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -389,7 +391,7 @@ test('returns no_available_riders when no available rider exists', async () => {
 
 Run: `node --test src/tests/pages/api/admin-rider-assign.test.ts`
 
-Expected: FAIL，因为 `src/pages/api/admin/rider-assign.ts` 还不存在。
+历史红灯预期：，因为 `src/pages/api/admin/rider-assign.ts` 还不存在。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -626,7 +628,7 @@ test('autoAssignRider posts auto_assign payload with cursor and eta', async () =
 
 Run: `node --test src/scripts/admin/orders.test.ts src/tests/pages/master/dine-in-panel-routing.test.ts`
 
-Expected: FAIL；因为当前 `orders.ts` 没有 `assignRider/autoAssignRider`，`TabTables.astro` 也没有这两个按钮。
+历史红灯预期：；因为当前 `orders.ts` 没有 `assignRider/autoAssignRider`，`TabTables.astro` 也没有这两个按钮。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -825,7 +827,7 @@ test('rider dashboard source separates awaiting pool from assigned deliveries', 
 
 Run: `node --test src/tests/pages/rider-dashboard-canonical.test.ts`
 
-Expected: FAIL；当前源码仍是 `const myOrders = allOrders;`。
+历史红灯预期：；当前源码仍是 `const myOrders = allOrders;`。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -893,7 +895,7 @@ test('master dispatch source reuses admin rider assign api', async () => {
 
 Run: `node --test src/tests/pages/master/master-dispatch-ui.test.ts`
 
-Expected: FAIL；当前 master 还直接调用 `/api/admin/orders/:id/status`。
+历史红灯预期：；当前 master 还直接调用 `/api/admin/orders/:id/status`。
 
 - [ ] **Step 3: Write minimal implementation**
 

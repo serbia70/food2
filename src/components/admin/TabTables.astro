@@ -1,5 +1,6 @@
 ---
 import { inferLegacySimpleHallNumber } from '../../lib/admin-table-ref';
+import { normalizeAdminOrderItemsJSONString, parseAdminOrderItems } from '../../lib/admin-dashboard-utils.ts';
 import { getAdminDeliveryActionFlags, getAdminDispatchStatusCopy, isAwaitingCourierOrder, readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
 const {
   tableCardsData,
@@ -45,15 +46,6 @@ function formatScheduledLabel(v: any) {
     minute: '2-digit',
     hour12: false,
   });
-}
-
-function parseItems(raw: any): any[] {
-  try {
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (Array.isArray(parsed)) return parsed;
-    if (parsed && typeof parsed === 'object') return Object.values(parsed);
-  } catch {}
-  return [];
 }
 
 function formatTableTitle(card: any) {
@@ -222,7 +214,7 @@ function formatUnmatchedTableLabel(rawTableInfo: any) {
         const displayPrefix = orderNo.slice(0, Math.max(0, orderNo.length - pickupNo.length));
         const displaySuffix = pickupNo;
         const oTime = new Date(o.createdAt).getTime();
-        const deliveryItems = parseItems(o.itemsJson);
+        const deliveryItems = parseAdminOrderItems(normalizeAdminOrderItemsJSONString(o.itemsJson));
         const dispatchMeta = readDispatchMetaFromRemarks(String(o.remarksJson || ''));
         const lastRiderDecision = dispatchMeta.lastRiderDecision;
         const riderDeclinedAwaitingCourier = isAwaitingCourierOrder(o) && lastRiderDecision?.action === 'declined';

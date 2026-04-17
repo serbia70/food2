@@ -1,5 +1,8 @@
 # Master Dashboard Simplification Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 master dashboard 收口时的实施步骤，文中的 `历史红灯预期：` 属于当时的红灯预期，不应再直接当作当前实现状态。
+> 若继续处理 master dashboard view-model、页面装配或 table 依赖边界，请先以当前 `src/pages/master/index.astro`、相关 view builder 与现有测试为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将 master 后台页面收口为清晰的入口层，引入统一 dashboard view-model，减少 page / component / lib 的耦合，并在不改后端/BFF 的前提下降低后续修改成本。
@@ -76,7 +79,7 @@ test('buildMasterDashboardView aggregates overview and typed child views in read
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/master-dashboard-view.test.ts`
-Expected: FAIL with missing module or missing export for `buildMasterDashboardView`
+历史红灯预期： with missing module or missing export for `buildMasterDashboardView`
 
 - [ ] **Step 3: Write the failing tests for non-ready page states and input boundaries**
 
@@ -115,7 +118,7 @@ test('buildMasterDashboardView exposes typed child models instead of raw shop/se
 - [ ] **Step 4: Run tests to verify they fail for the intended reason**
 
 Run: `node --test src/lib/master-dashboard-view.test.ts`
-Expected: FAIL because builder behavior does not exist yet
+历史红灯预期： because builder behavior does not exist yet
 
 - [ ] **Step 5: Commit test scaffold**
 
@@ -192,7 +195,7 @@ Constraint: `buildMasterDashboardView()` only accepts already-normalized `active
 - [ ] **Step 2: Run dashboard builder tests and confirm the failure narrows to behavior**
 
 Run: `node --test src/lib/master-dashboard-view.test.ts`
-Expected: FAIL with assertions against `not implemented` or wrong output shape
+历史红灯预期： with assertions against `not implemented` or wrong output shape
 
 - [ ] **Step 3: Implement ready/unauthorized/load_error branches and overview aggregation**
 
@@ -251,7 +254,7 @@ assert.doesNotMatch(page, /buildMasterShopView\(shop, \{/);
 - [ ] **Step 2: Run the source test and verify it fails**
 
 Run: `node --test src/pages/master/master-billing-ui.test.ts`
-Expected: FAIL because page still imports/builds old pieces directly
+历史红灯预期： because page still imports/builds old pieces directly
 
 - [ ] **Step 3: Replace page-level aggregation with dashboard builder wiring**
 
@@ -308,7 +311,7 @@ The goal is to lock the boundary, not to force an exact line-for-line component 
 - [ ] **Step 2: Run the source test and confirm failure if raw dependencies remain**
 
 Run: `node --test src/pages/master/master-billing-ui.test.ts`
-Expected: FAIL only if table still depends on raw payload or the new assertions are not yet satisfied
+历史红灯预期： only if table still depends on raw payload or the new assertions are not yet satisfied
 
 - [ ] **Step 3: Trim the component to pure display concerns**
 
@@ -356,7 +359,7 @@ assert.doesNotMatch(page, /const masterFeeDefaults = \{/);
 - [ ] **Step 2: Run the page source test and verify it fails**
 
 Run: `node --test src/pages/master/master-billing-ui.test.ts`
-Expected: FAIL because the page still builds panel defaults locally
+历史红灯预期： because the page still builds panel defaults locally
 
 - [ ] **Step 3: Rewire panel default reads without changing payload contracts**
 

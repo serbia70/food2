@@ -1,5 +1,8 @@
 # 备注 UI 彩色卡片统一 Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 remark UI 彩色卡片统一时的实施步骤，文中的 `历史红灯预期：` 等红绿灯表述属于当时的 TDD 推进语境，不应再被直接视作当前实现状态。
+> 若继续处理备注 UI，请先以当前组件、脚本和全局样式真实代码为准，再决定哪些结构仍值得沿用。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将后台与用户端所有“备注”区域统一为彩色分组卡片风格（标题色条 + 边框 + 网格按钮 + 选中态），并为纯文本备注提供同一视觉体系的只读/可编辑卡片。
@@ -103,7 +106,7 @@ test('theme: default -> #607d8b', () => {
 
 - [ ] **Step 2: 运行测试确认失败**
 Run: `node --test src/lib/remark-ui-theme.test.ts`
-Expected: FAIL（模块不存在或导出不存在）。
+历史红灯预期：（模块不存在或导出不存在）。
 
 - [ ] **Step 3: 写最小实现让测试通过**
 

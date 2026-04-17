@@ -1,16 +1,20 @@
 import type { APIRoute } from 'astro';
 import { timingSafeEqual } from 'node:crypto';
 import { API_BASE_URL } from '../../../config.ts';
-import { buildDispatchMetaRemarks, buildRiderOrderView, readDispatchMetaFromRemarks, resolveRiderOrderAction, resolveRiderUnifiedStatus } from '../../../lib/rider-dispatch.ts';
+import { resolveRiderOrderAction } from '../../../lib/rider-dispatch.ts';
 import {
   buildForwardHeaders,
   buildUpstreamFailureResponse,
   readJsonObject,
   readOrderDetail,
-  readTelegramItemSummaryFromOrder,
+  sendTelegramMessage,
   writeOrderDispatchRemarks,
 } from '../../../lib/rider-route-shared.ts';
-import { buildRiderSingleMessageTelegram, buildTelegramEditMessagePayload, buildTelegramShortClaimCallback, parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
+import {
+  buildRiderProgressUpdate,
+  buildRiderTelegramProgressSyncPayload,
+} from '../../../lib/rider-progress-shared.ts';
+import { matchesShortTelegramClaimChatId, parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
 import { pickNextAvailableRider, readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
 import { readTelegramRequestSecret } from '../../../lib/telegram-secrets.ts';
 
@@ -21,34 +25,61 @@ interface TelegramClaimBody {
   chatId?: unknown;
 }
 
-type TelegramClaimAction = ReturnType<typeof parseTelegramClaimCallback>['action'];
+type TelegramClaimCallback = ReturnType<typeof parseTelegramClaimCallback>;
+type TelegramClaimAction = TelegramClaimCallback['action'];
+type TelegramClaimActionDecision = ReturnType<typeof resolveRiderOrderAction>;
+
+type TelegramClaimRiderIdentity = { riderName: string; riderPhone: string };
+
+type TelegramClaimRequestBodyResolution = {
+  callbackData: string;
+  chatId: string;
+  response: Response | null;
+};
+
+type TelegramClaimCallbackResolution = {
+  callback: TelegramClaimCallback | null;
+  response: Response | null;
+};
+
+type TelegramClaimIdentityResolution = {
+  resolvedName: string;
+  resolvedPhone: string;
+  response: Response | null;
+};
+
+type TelegramClaimProgressContextResult = {
+  orderIdText: string;
+  riderIdText: string;
+  nowIso: string;
+  orderDetailForProgress: Record<string, unknown> | null;
+  actionDecision: TelegramClaimActionDecision;
+  isDeclineAction: boolean;
+};
+
+type TelegramClaimContextResult = {
+  chatId: string;
+  callback: TelegramClaimCallback | null;
+  resolvedName: string;
+  resolvedPhone: string;
+  orderIdText: string;
+  riderIdText: string;
+  nowIso: string;
+  orderDetailForProgress: Record<string, unknown> | null;
+  actionDecision: TelegramClaimActionDecision;
+  isDeclineAction: boolean;
+  response: Response | null;
+};
 
 function readRiderChatId(rider: AssignableRider): string {
-  return String(rider.telegramChatId || '').trim();
+  return String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
 }
 
 function readInternalApiBaseUrl(): string {
   return String(process.env.PUBLIC_API_URL || API_BASE_URL || '').trim().replace(/\/$/, '');
 }
 
-function readTelegramSendShopSlug(value: unknown): string {
-  const slug = String(value || '').trim();
-  if (!slug || slug === 'admin') return '';
-  return /^[a-z0-9][a-z0-9-]*$/i.test(slug) ? slug : '';
-}
-
-function readOrderShopSlug(order: Record<string, unknown>, fallback?: unknown): string {
-  return readTelegramSendShopSlug(order.shopSlug)
-    || readTelegramSendShopSlug(order.slug)
-    || readTelegramSendShopSlug(order.restaurantSlug)
-    || readTelegramSendShopSlug(order.shop_slug)
-    || readTelegramSendShopSlug(order.restaurant_slug)
-    || readTelegramSendShopSlug(order.restaurantId)
-    || readTelegramSendShopSlug(order.shopId)
-    || readTelegramSendShopSlug(fallback);
-}
-
-async function readRiderIdentityByChatId(request: Request, chatId: string): Promise<{ riderName: string; riderPhone: string } | null> {
+async function readRiderIdentityByChatId(request: Request, chatId: string): Promise<TelegramClaimRiderIdentity | null> {
   const upstream = await fetch(`${readInternalApiBaseUrl()}/api/rider/status?action=list_available`, {
     headers: buildForwardHeaders(request),
   });
@@ -90,179 +121,177 @@ function resolveTelegramClaimStage(action: TelegramClaimAction): 'delivering' | 
   return null;
 }
 
-async function editDeliveryProgressMessage(
-  request: Request,
-  callback: ReturnType<typeof parseTelegramClaimCallback>,
-  riderName: string,
-  riderPhone: string,
-  fallbackChatId: string,
-  remarksJson: string,
-  targetStatus: 'delivering' | 'picked_up' | 'completed',
-  fallbackOrder?: Record<string, unknown> | null,
-): Promise<void> {
-  const meta = readDispatchMetaFromRemarks(remarksJson);
-  const messageRef = meta.telegramMessageRef;
-  if (!messageRef) return;
+function toTelegramClaimPublicError(error: unknown): string {
+  const message = error instanceof Error ? String(error.message || '').trim() : '';
+  return new Set(['expired_callback', 'invalid_signature', 'rider_identity_mismatch']).has(message)
+    ? message
+    : 'invalid_callback_data';
+}
 
-  const order = fallbackOrder || await readOrderDetail(request, readInternalApiBaseUrl(), String(callback.orderId || '').trim(), riderPhone);
-  if (!order) return;
-
-  const orderView = buildRiderOrderView({
-    ...order,
-    status: targetStatus,
-    remarksJson,
-    courierPhone: riderPhone,
-  });
-  const unifiedStatus = resolveRiderUnifiedStatus({
-    ...order,
-    status: targetStatus,
-    remarksJson,
-    courierPhone: riderPhone,
-  }, {
-    riderId: String(callback.riderId || '').trim(),
-    riderName,
-    riderPhone,
-  });
-  const realShopSlug = readOrderShopSlug(order, callback.restaurantId);
-
-  const primaryCallbackData = unifiedStatus.primaryAction && realShopSlug
-    ? buildTelegramShortClaimCallback({
-        orderId: Number(callback.orderId),
-        riderId: Number(callback.riderId),
-        riderName,
-        riderPhone,
-        restaurantId: realShopSlug,
-        telegramChatId: fallbackChatId,
-        action: unifiedStatus.primaryAction === '送达' ? 'complete' : 'picked_up',
-      })
-    : '';
-
-  const message = buildRiderSingleMessageTelegram({
-    orderNo: String(order.orderNo || callback.orderId || '').trim(),
-    shopName: orderView.shopName,
-    address: orderView.deliveryAddress || '未提供地址',
-    phone: String(order.userPhone || '').trim() || '-',
-    statusLabel: unifiedStatus.statusLabel,
-    acceptedAtLabel: unifiedStatus.acceptedAt,
-    pickedUpAtLabel: unifiedStatus.pickedUpAt,
-    completedAtLabel: unifiedStatus.completedAt,
-    itemSummary: readTelegramItemSummaryFromOrder(order),
-    shopMapUrl: orderView.shopMapUrl,
-    deliveryMapUrl: orderView.deliveryMapUrl,
-    primaryAction: unifiedStatus.primaryAction && primaryCallbackData
-      ? { text: unifiedStatus.primaryAction, callbackData: primaryCallbackData }
-      : null,
-    secondaryAction: null,
-  });
-
-  await fetch(new URL('/api/telegram/send', request.url), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...buildForwardHeaders(request),
-    },
-    body: JSON.stringify({
-      ...(realShopSlug ? { shopSlug: realShopSlug } : {}),
-      ...buildTelegramEditMessagePayload({
-        chatId: messageRef.chatId || fallbackChatId,
-        messageId: messageRef.messageId,
-        text: message.text,
-        replyMarkup: message.replyMarkup,
-      }),
-    }),
+export function buildTelegramClaimFailureResponse(error: unknown): Response {
+  return new Response(JSON.stringify({ success: false, error: toTelegramClaimPublicError(error) }), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' },
   });
 }
 
-export async function handleTelegramRiderClaim(request: Request): Promise<Response> {
+function buildTelegramClaimFailureResult(error: unknown): TelegramClaimCallbackResolution {
+  return {
+    callback: null,
+    response: buildTelegramClaimFailureResponse(error),
+  };
+}
+
+export function buildTelegramClaimCallbackIdentityFailureResult(): TelegramClaimCallbackResolution {
+  return buildTelegramClaimFailureResult(new Error('rider_identity_mismatch'));
+}
+
+export async function resolveTelegramClaimCallbackOrFailureResponse({
+  request,
+  callbackData,
+  chatId,
+}: {
+  request: Request;
+  callbackData: string;
+  chatId: string;
+}): Promise<TelegramClaimCallbackResolution> {
+  try {
+    return {
+      callback: parseTelegramClaimCallback(callbackData, { chatId }),
+      response: null,
+    };
+  } catch (error) {
+    const firstError = error instanceof Error ? String(error.message || '').trim() : '';
+    if (firstError !== 'rider_identity_mismatch') {
+      return buildTelegramClaimFailureResult(error);
+    }
+
+    if (matchesShortTelegramClaimChatId(callbackData, chatId) === false) {
+      return buildTelegramClaimCallbackIdentityFailureResult();
+    }
+
+    const riderIdentity = await readRiderIdentityByChatId(request, chatId);
+    if (!riderIdentity?.riderPhone) {
+      return buildTelegramClaimCallbackIdentityFailureResult();
+    }
+
+    try {
+      return {
+        callback: parseTelegramClaimCallback(callbackData, {
+          chatId,
+          riderPhone: riderIdentity.riderPhone,
+        }),
+        response: null,
+      };
+    } catch (secondError) {
+      return buildTelegramClaimFailureResult(secondError);
+    }
+  }
+}
+
+export function buildTelegramClaimInvalidCallbackFailureResponse(): Response {
+  return buildTelegramClaimFailureResponse(new Error('invalid_callback_data'));
+}
+
+export function buildTelegramClaimIdentityFailureResponse(): Response {
+  return buildTelegramClaimFailureResponse(new Error('rider_identity_mismatch'));
+}
+
+export function buildTelegramClaimIdentityFailureResult(): TelegramClaimIdentityResolution {
+  return {
+    resolvedName: '',
+    resolvedPhone: '',
+    response: buildTelegramClaimIdentityFailureResponse(),
+  };
+}
+
+export function resolveTelegramClaimIdentityOrFailureResponse({
+  callback,
+  chatId,
+}: {
+  callback: TelegramClaimCallback;
+  chatId: string;
+}): TelegramClaimIdentityResolution {
+  const resolvedPhone = String(callback.riderPhone || '').trim();
+  const resolvedName = String(callback.riderName || '').trim();
+  const matchedChatId = String(callback.telegramChatId || '').trim();
+  if (!resolvedPhone || !matchedChatId || matchedChatId !== chatId) {
+    return buildTelegramClaimIdentityFailureResult();
+  }
+  return {
+    resolvedName,
+    resolvedPhone,
+    response: null,
+  };
+}
+
+export function buildTelegramClaimRequestBodyFailureResult(error: 'invalid_json' | 'callback_data_required' | 'chat_id_required'): TelegramClaimRequestBodyResolution {
+  return {
+    callbackData: '',
+    chatId: '',
+    response: new Response(JSON.stringify({ success: false, error }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  };
+}
+
+export async function resolveTelegramClaimRequestBodyOrFailureResponse(request: Request): Promise<TelegramClaimRequestBodyResolution> {
   let parsedBody: TelegramClaimBody;
 
   try {
     parsedBody = (await request.json()) as TelegramClaimBody;
   } catch {
-    return new Response(JSON.stringify({ success: false, error: 'invalid_json' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildTelegramClaimRequestBodyFailureResult('invalid_json');
   }
 
   const callbackData = String(parsedBody.callbackData || '').trim();
   const chatId = String(parsedBody.chatId || '').trim();
   if (!callbackData) {
-    return new Response(JSON.stringify({ success: false, error: 'callback_data_required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildTelegramClaimRequestBodyFailureResult('callback_data_required');
   }
   if (!chatId) {
-    return new Response(JSON.stringify({ success: false, error: 'chat_id_required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildTelegramClaimRequestBodyFailureResult('chat_id_required');
   }
 
-  let callback;
-  try {
-    callback = parseTelegramClaimCallback(callbackData, { chatId });
-  } catch (error) {
-    const firstError = error instanceof Error ? String(error.message || '').trim() : '';
+  return {
+    callbackData,
+    chatId,
+    response: null,
+  };
+}
 
-    if (firstError === 'rider_identity_mismatch') {
-      const riderIdentity = await readRiderIdentityByChatId(request, chatId);
-      try {
-        callback = parseTelegramClaimCallback(callbackData, {
-          chatId,
-          riderPhone: riderIdentity?.riderPhone,
-        });
-      } catch (secondError) {
-        const message = secondError instanceof Error ? String(secondError.message || '').trim() : '';
-        const safeErrors = new Set(['expired_callback', 'invalid_signature', 'rider_identity_mismatch']);
-        const publicError = safeErrors.has(message) ? message : 'invalid_callback_data';
-        return new Response(JSON.stringify({ success: false, error: publicError }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-    } else {
-      const safeErrors = new Set(['expired_callback', 'invalid_signature', 'rider_identity_mismatch']);
-      const publicError = safeErrors.has(firstError) ? firstError : 'invalid_callback_data';
-      return new Response(JSON.stringify({ success: false, error: publicError }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-  }
+export function buildTelegramClaimActionDecisionFailureResponse(actionDecision: Pick<TelegramClaimActionDecision, 'error' | 'reason'>): Response {
+  const body: Record<string, unknown> = { success: false, error: actionDecision.error };
+  if (actionDecision.reason) body.reason = actionDecision.reason;
+  return new Response(JSON.stringify(body), {
+    status: 409,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
-  const matchedPhone = String(callback.riderPhone || '').trim();
-  const matchedName = String(callback.riderName || '').trim();
-  const matchedChatId = String(callback.telegramChatId || '').trim();
-  if (!matchedPhone || !matchedChatId || matchedChatId !== chatId) {
-    return new Response(JSON.stringify({ success: false, error: 'rider_identity_mismatch' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+export function buildTelegramClaimProgressSuccessResponse(action: 'picked_up' | 'complete', status: number): Response {
+  return new Response(JSON.stringify({ success: true, action }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
-  const riderIdentity = await readRiderIdentityByChatId(request, chatId);
-  const resolvedName = String(riderIdentity?.riderName || matchedName || '').trim() || matchedName;
-  const resolvedPhone = String(riderIdentity?.riderPhone || matchedPhone || '').trim();
-  if (!resolvedPhone) {
-    return new Response(JSON.stringify({ success: false, error: 'rider_identity_mismatch' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
+export async function buildTelegramClaimProgressContext({
+  request,
+  callback,
+  resolvedName,
+  resolvedPhone,
+}: {
+  request: Request;
+  callback: TelegramClaimCallback;
+  resolvedName: string;
+  resolvedPhone: string;
+}): Promise<TelegramClaimProgressContextResult> {
   const orderIdText = String(callback.orderId || '').trim();
   const riderIdText = String(callback.riderId || '').trim();
   const nowIso = new Date().toISOString();
-  const progressStage = resolveTelegramClaimStage(callback.action);
   const orderDetailForProgress = await readOrderDetail(request, readInternalApiBaseUrl(), orderIdText, resolvedPhone);
-  const currentMeta = readDispatchMetaFromRemarks(String(orderDetailForProgress?.remarksJson || orderDetailForProgress?.remarks_json || ''));
-  const nextActionTimes = {
-    acceptedAt: currentMeta.acceptedAt,
-    pickedUpAt: callback.action === 'picked_up' ? nowIso : currentMeta.pickedUpAt,
-    completedAt: callback.action === 'complete' ? nowIso : currentMeta.completedAt,
-  };
   const actionDecision = resolveRiderOrderAction({
     action: callback.action,
     order: {
@@ -275,112 +304,58 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
     riderPhone: resolvedPhone,
     nowIso,
   });
-  const isDeclineAction = callback.action === 'decline';
+  return {
+    orderIdText,
+    riderIdText,
+    nowIso,
+    orderDetailForProgress,
+    actionDecision,
+    isDeclineAction: callback.action === 'decline',
+  };
+}
 
-  if (!actionDecision.allowed) {
-    const body: Record<string, unknown> = { success: false, error: actionDecision.error };
-    if (actionDecision.reason) body.reason = actionDecision.reason;
-    return new Response(JSON.stringify(body), {
-      status: 409,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  if (isDeclineAction) {
-    const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status/${encodeURIComponent(orderIdText)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...buildForwardHeaders(request),
-      },
-      body: JSON.stringify({
-        id: callback.orderId,
-        expectedCurrentStatus: actionDecision.expectedCurrentStatus,
-        status: actionDecision.targetStatus,
-        remarksJson: actionDecision.nextRemarksJson,
-      }),
-    });
-
-    if (!upstream.ok) {
-      const text = await upstream.text();
-      return new Response(text || JSON.stringify({ success: false, error: 'decline_feedback_failed' }), {
-        status: upstream.status,
-        headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
-      });
-    }
-
-    let reassigned = false;
-    try {
-      const riderListUpstream = await fetch(`${readInternalApiBaseUrl()}/api/rider/status?action=list_available`, {
-        headers: buildForwardHeaders(request),
-      });
-      const riders = readOnlineRiders((readJsonObject(await riderListUpstream.text()) || {}).riders);
-      const nextRider = pickNextAvailableRider({
-        riders,
-        lastAssignedRiderId: riderIdText,
-        excludedRiderIds: actionDecision.excludedRiderIds,
-      });
-
-      if (nextRider) {
-        const redispatch = await fetch(`${readInternalApiBaseUrl()}/api/admin/rider-dispatch`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...buildForwardHeaders(request),
-          },
-          body: JSON.stringify({
-            orderId: callback.orderId,
-            action: 'publish',
-            forceRiderId: String(nextRider.id || '').trim(),
-          }),
-        });
-        reassigned = redispatch.ok;
-      }
-    } catch {
-      reassigned = false;
-    }
-
-    console.info('[telegram/rider-claim:decline]', JSON.stringify({
-      orderId: callback.orderId,
-      riderId: callback.riderId,
-      riderName: resolvedName,
-      riderPhone: resolvedPhone,
-      chatId,
-      feedbackWritten: true,
-      reassigned,
-    }));
-    return new Response(JSON.stringify({ success: true, action: 'decline', reassigned }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
+export async function handleTelegramProgressSubmission({
+  request,
+  callback,
+  orderIdText,
+  resolvedName,
+  resolvedPhone,
+  chatId,
+  nowIso,
+  orderDetailForProgress,
+  actionDecision,
+}: {
+  request: Request;
+  callback: { orderId?: unknown; riderId?: unknown; action?: TelegramClaimAction };
+  orderIdText: string;
+  resolvedName: string;
+  resolvedPhone: string;
+  chatId: string;
+  nowIso: string;
+  orderDetailForProgress: Record<string, unknown> | null;
+  actionDecision: Pick<TelegramClaimActionDecision, 'expectedCurrentStatus' | 'targetStatus' | 'feedbackWriteMode' | 'nextRemarksJson'>;
+}): Promise<{
+  feedbackWritten: boolean;
+  nextRemarksJson: string;
+  upstream: Response;
+  text: string;
+}> {
   const feedbackWritten = actionDecision.feedbackWriteMode !== 'admin_remarks'
     ? true
     : await writeOrderDispatchRemarks(request, readInternalApiBaseUrl(), orderIdText, actionDecision.nextRemarksJson);
 
-  const nextRemarksJson = callback.action === 'picked_up' || callback.action === 'complete'
-    ? JSON.stringify(buildDispatchMetaRemarks(String(orderDetailForProgress?.remarksJson || orderDetailForProgress?.remarks_json || ''), {
-        ...currentMeta,
-        acceptedAt: nextActionTimes.acceptedAt,
-        pickedUpAt: nextActionTimes.pickedUpAt,
-        completedAt: nextActionTimes.completedAt,
-      }))
-    : actionDecision.nextRemarksJson;
-
-  const numericOrderId = Number(callback.orderId);
-  const updateStatusPayload: Record<string, unknown> = {
-    id: Number.isInteger(numericOrderId) && numericOrderId > 0 ? numericOrderId : callback.orderId,
-    expectedCurrentStatus: actionDecision.expectedCurrentStatus,
-    status: actionDecision.targetStatus,
-  };
-  if (actionDecision.feedbackWriteMode === 'update_status_remarks' || callback.action === 'picked_up' || callback.action === 'complete') {
-    updateStatusPayload.remarksJson = nextRemarksJson;
-  }
-  if (actionDecision.feedbackWriteMode !== 'update_status_remarks') {
-    updateStatusPayload.courierName = resolvedName;
-    updateStatusPayload.courierPhone = resolvedPhone;
-  }
+  const {
+    nextRemarksJson,
+    updateStatusPayload,
+  } = buildRiderProgressUpdate({
+    action: String(callback.action || '').trim() as TelegramClaimAction,
+    orderId: orderIdText,
+    riderName: resolvedName,
+    riderPhone: resolvedPhone,
+    remarksJson: String(orderDetailForProgress?.remarksJson || orderDetailForProgress?.remarks_json || ''),
+    nowIso,
+    actionDecision,
+  });
 
   const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status/${encodeURIComponent(String(callback.orderId || '').trim())}`, {
     method: 'POST',
@@ -399,20 +374,63 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
       chatId,
     }));
   }
+
+  return {
+    feedbackWritten,
+    nextRemarksJson,
+    upstream,
+    text,
+  };
+}
+
+export async function handleTelegramProgressActionTransition({
+  request,
+  callback,
+  actionDecision,
+  orderIdText,
+  riderIdText,
+  resolvedName,
+  resolvedPhone,
+  nextRemarksJson,
+  orderDetailForProgress,
+  upstream,
+  text,
+}: {
+  request: Request;
+  callback: { orderId?: unknown; riderId?: unknown; restaurantId?: unknown; action?: TelegramClaimAction };
+  actionDecision: Pick<TelegramClaimActionDecision, 'targetStatus'>;
+  orderIdText: string;
+  riderIdText: string;
+  resolvedName: string;
+  resolvedPhone: string;
+  nextRemarksJson: string;
+  orderDetailForProgress: Record<string, unknown> | null;
+  upstream: Response;
+  text: string;
+}): Promise<Response> {
+  const progressStage = resolveTelegramClaimStage(String(callback.action || '').trim() as TelegramClaimAction);
   if (upstream.ok && progressStage) {
     try {
-      await editDeliveryProgressMessage(
-        request,
-        callback,
-        resolvedName,
-        resolvedPhone,
-        chatId,
-        nextRemarksJson,
-        actionDecision.targetStatus === 'completed'
-          ? 'completed'
-          : (actionDecision.targetStatus === 'picked_up' ? 'picked_up' : 'delivering'),
-        orderDetailForProgress,
-      );
+      const syncPayload = orderDetailForProgress
+        ? buildRiderTelegramProgressSyncPayload({
+            order: orderDetailForProgress,
+            orderId: orderIdText,
+            riderId: riderIdText,
+            riderName: resolvedName,
+            riderPhone: resolvedPhone,
+            remarksJson: nextRemarksJson,
+            targetStatus: actionDecision.targetStatus === 'completed'
+              ? 'completed'
+              : (actionDecision.targetStatus === 'picked_up' ? 'picked_up' : 'delivering'),
+            fallbackShopSlug: callback.restaurantId,
+          })
+        : null;
+      if (syncPayload) {
+        await sendTelegramMessage({
+          request,
+          payload: syncPayload.payload,
+        });
+      }
     } catch {
       // 不阻断接单成功回包
     }
@@ -424,15 +442,519 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   }
 
   if (callback.action === 'picked_up' || callback.action === 'complete') {
-    return new Response(JSON.stringify({ success: true, action: callback.action }), {
-      status: upstream.status,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildTelegramClaimProgressSuccessResponse(callback.action, upstream.status);
   }
 
   return new Response(text, {
     status: upstream.status,
     headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
+  });
+}
+
+export async function handleTelegramDeclineAction({
+  request,
+  callback,
+  actionDecision,
+  orderIdText,
+  riderIdText,
+  resolvedName,
+  resolvedPhone,
+  chatId,
+}: {
+  request: Request;
+  callback: { orderId?: unknown; riderId?: unknown; riderName?: unknown; riderPhone?: unknown };
+  actionDecision: Pick<TelegramClaimActionDecision, 'expectedCurrentStatus' | 'targetStatus' | 'feedbackWriteMode' | 'nextRemarksJson' | 'excludedRiderIds'>;
+  orderIdText: string;
+  riderIdText: string;
+  resolvedName: string;
+  resolvedPhone: string;
+  chatId: string;
+}): Promise<Response> {
+  const { updateStatusPayload } = buildRiderProgressUpdate({
+    action: 'decline',
+    orderId: orderIdText,
+    riderName: resolvedName,
+    riderPhone: resolvedPhone,
+    remarksJson: '',
+    nowIso: new Date().toISOString(),
+    actionDecision,
+  });
+
+  const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status/${encodeURIComponent(orderIdText)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildForwardHeaders(request),
+    },
+    body: JSON.stringify(updateStatusPayload),
+  });
+
+  if (!upstream.ok) {
+    const text = await upstream.text();
+    return new Response(text || JSON.stringify({ success: false, error: 'decline_feedback_failed' }), {
+      status: upstream.status,
+      headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
+    });
+  }
+
+  let reassigned = false;
+  try {
+    const riderListUpstream = await fetch(`${readInternalApiBaseUrl()}/api/rider/status?action=list_available`, {
+      headers: buildForwardHeaders(request),
+    });
+    const riders = readOnlineRiders((readJsonObject(await riderListUpstream.text()) || {}).riders);
+    const nextRider = pickNextAvailableRider({
+      riders,
+      lastAssignedRiderId: riderIdText,
+      excludedRiderIds: actionDecision.excludedRiderIds,
+    });
+
+    if (nextRider) {
+      const redispatch = await fetch(`${readInternalApiBaseUrl()}/api/admin/rider-dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildForwardHeaders(request),
+        },
+        body: JSON.stringify({
+          orderId: callback.orderId,
+          action: 'publish',
+          forceRiderId: String(nextRider.id || '').trim(),
+        }),
+      });
+      reassigned = redispatch.ok;
+    }
+  } catch {
+    reassigned = false;
+  }
+
+  console.info('[telegram/rider-claim:decline]', JSON.stringify({
+    orderId: callback.orderId,
+    riderId: callback.riderId,
+    riderName: resolvedName,
+    riderPhone: resolvedPhone,
+    chatId,
+    feedbackWritten: true,
+    reassigned,
+  }));
+  return new Response(JSON.stringify({ success: true, action: 'decline', reassigned }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+export function buildDefaultTelegramClaimActionDecision(): TelegramClaimActionDecision {
+  return resolveRiderOrderAction({
+    action: 'accept',
+    order: { status: '', remarksJson: '', courierPhone: '' },
+    riderId: '',
+    riderName: '',
+    riderPhone: '',
+    nowIso: '',
+  });
+}
+
+export function buildTelegramClaimEmptyContextResult({
+  chatId = '',
+  callback = null,
+  resolvedName = '',
+  resolvedPhone = '',
+  response = null,
+}: {
+  chatId?: string;
+  callback?: TelegramClaimCallback | null;
+  resolvedName?: string;
+  resolvedPhone?: string;
+  response?: Response | null;
+}): TelegramClaimContextResult {
+  return {
+    chatId,
+    callback,
+    resolvedName,
+    resolvedPhone,
+    orderIdText: '',
+    riderIdText: '',
+    nowIso: '',
+    orderDetailForProgress: null,
+    actionDecision: buildDefaultTelegramClaimActionDecision(),
+    isDeclineAction: false,
+    response,
+  };
+}
+
+export function buildTelegramClaimContextFailureResult({
+  chatId = '',
+  callback = null,
+  response,
+}: {
+  chatId?: string;
+  callback?: TelegramClaimCallback | null;
+  response: Response;
+}): TelegramClaimContextResult {
+  return buildTelegramClaimEmptyContextResult({
+    chatId,
+    callback,
+    response,
+  });
+}
+
+export function buildTelegramClaimContextFailureWithEmptyChatId(response: Response): TelegramClaimContextResult {
+  return buildTelegramClaimContextFailureWithChatId(response);
+}
+
+export function buildTelegramClaimContextFailureWithChatId(
+  chatIdOrResponse: string | Response,
+  maybeResponse?: Response,
+): TelegramClaimContextResult {
+  const chatId = typeof chatIdOrResponse === 'string' ? chatIdOrResponse : '';
+  const response = (typeof chatIdOrResponse === 'string' ? maybeResponse : chatIdOrResponse) as Response;
+  return buildTelegramClaimContextFailureResult({
+    chatId,
+    callback: null,
+    response,
+  });
+}
+
+export function buildTelegramClaimContextFailureWithCallback(
+  chatIdOrCallback: string | TelegramClaimCallback,
+  callbackOrResponse: TelegramClaimCallback | Response,
+  maybeResponse?: Response,
+): TelegramClaimContextResult {
+  const chatId = typeof chatIdOrCallback === 'string' ? chatIdOrCallback : '';
+  const callback = typeof chatIdOrCallback === 'string'
+    ? callbackOrResponse as TelegramClaimCallback
+    : chatIdOrCallback;
+  const response = (typeof chatIdOrCallback === 'string' ? maybeResponse : callbackOrResponse) as Response;
+  return buildTelegramClaimContextFailureResult({
+    chatId,
+    callback,
+    response,
+  });
+}
+
+export function buildTelegramClaimContextSuccessResult({
+  chatId,
+  callback,
+  resolvedName,
+  resolvedPhone,
+  progressContext,
+}: {
+  chatId: string;
+  callback: TelegramClaimCallback;
+  resolvedName: string;
+  resolvedPhone: string;
+  progressContext: TelegramClaimProgressContextResult;
+}): TelegramClaimContextResult {
+  return {
+    chatId,
+    callback,
+    resolvedName,
+    resolvedPhone,
+    orderIdText: progressContext.orderIdText,
+    riderIdText: progressContext.riderIdText,
+    nowIso: progressContext.nowIso,
+    orderDetailForProgress: progressContext.orderDetailForProgress,
+    actionDecision: progressContext.actionDecision,
+    isDeclineAction: progressContext.isDeclineAction,
+    response: null,
+  };
+}
+
+export function resolveTelegramClaimContextProgressContextSuccessResult(args: {
+  chatId: string;
+  callback: TelegramClaimCallback;
+  resolvedName: string;
+  resolvedPhone: string;
+  progressContext: TelegramClaimProgressContextResult;
+}): TelegramClaimContextResult {
+  return buildTelegramClaimContextSuccessResult(args);
+}
+
+export function resolveTelegramClaimContextCallbackOrFailureResult(
+  chatIdOrCallback: string | TelegramClaimCallback | null,
+  maybeCallback?: TelegramClaimCallback | null,
+): TelegramClaimContextResult {
+  const chatId = typeof chatIdOrCallback === 'string' ? chatIdOrCallback : '';
+  const callback = typeof chatIdOrCallback === 'string' ? (maybeCallback ?? null) : chatIdOrCallback;
+  if (!callback) {
+    return buildTelegramClaimContextFailureWithChatId(chatId, buildTelegramClaimInvalidCallbackFailureResponse());
+  }
+  return buildTelegramClaimEmptyContextResult({
+    chatId,
+    callback,
+  });
+}
+
+export function resolveTelegramClaimContextCallbackResolutionOrFailureResult(
+  chatIdOrCallbackResolution: string | TelegramClaimCallbackResolution,
+  maybeCallbackResolution?: TelegramClaimCallbackResolution,
+): TelegramClaimContextResult {
+  const chatId = typeof chatIdOrCallbackResolution === 'string' ? chatIdOrCallbackResolution : '';
+  const callbackResolution = typeof chatIdOrCallbackResolution === 'string'
+    ? maybeCallbackResolution as TelegramClaimCallbackResolution
+    : chatIdOrCallbackResolution;
+  if (callbackResolution.response) {
+    return buildTelegramClaimContextFailureWithChatId(chatId, callbackResolution.response);
+  }
+  return resolveTelegramClaimContextCallbackOrFailureResult(chatId, callbackResolution.callback);
+}
+
+export function resolveTelegramClaimContextCallbackContextOrFailureResult({
+  chatId,
+  callbackContext,
+}: {
+  chatId?: string;
+  callbackContext: TelegramClaimContextResult;
+}): TelegramClaimContextResult {
+  if (callbackContext.response) {
+    return callbackContext;
+  }
+  return resolveTelegramClaimContextCallbackOrFailureResult(chatId ?? callbackContext.chatId, callbackContext.callback);
+}
+
+export function resolveTelegramClaimContextIdentityResolutionOrFailureResult(
+  chatIdOrCallback: string | TelegramClaimCallback,
+  callbackOrIdentityResolution: TelegramClaimCallback | TelegramClaimIdentityResolution,
+  maybeIdentityResolution?: TelegramClaimIdentityResolution,
+): TelegramClaimContextResult {
+  const chatId = typeof chatIdOrCallback === 'string' ? chatIdOrCallback : '';
+  const callback = typeof chatIdOrCallback === 'string'
+    ? callbackOrIdentityResolution as TelegramClaimCallback
+    : chatIdOrCallback;
+  const identityResolution = (typeof chatIdOrCallback === 'string'
+    ? maybeIdentityResolution
+    : callbackOrIdentityResolution) as TelegramClaimIdentityResolution;
+  if (identityResolution.response) {
+    return buildTelegramClaimContextFailureWithCallback(chatId, callback, identityResolution.response);
+  }
+  return buildTelegramClaimEmptyContextResult({
+    chatId,
+    callback,
+    resolvedName: identityResolution.resolvedName,
+    resolvedPhone: identityResolution.resolvedPhone,
+  });
+}
+
+export async function resolveTelegramClaimContextIdentityContextOrFailureResult({
+  request,
+  chatId,
+  callback,
+  identityContext,
+}: {
+  request: Request;
+  chatId: string;
+  callback: TelegramClaimCallback;
+  identityContext: TelegramClaimContextResult;
+}): Promise<TelegramClaimContextResult> {
+  if (identityContext.response) {
+    return identityContext;
+  }
+  const progressContext = await buildTelegramClaimProgressContext({
+    request,
+    callback,
+    resolvedName: identityContext.resolvedName,
+    resolvedPhone: identityContext.resolvedPhone,
+  });
+  return resolveTelegramClaimContextProgressContextSuccessResult({
+    chatId,
+    callback,
+    resolvedName: identityContext.resolvedName,
+    resolvedPhone: identityContext.resolvedPhone,
+    progressContext,
+  });
+}
+
+export async function resolveTelegramClaimContextRequestBodyResolutionOrFailureResult({
+  request,
+  requestBodyResolution,
+}: {
+  request: Request;
+  requestBodyResolution: TelegramClaimRequestBodyResolution;
+}): Promise<TelegramClaimContextResult> {
+  if (requestBodyResolution.response) {
+    return buildTelegramClaimContextFailureWithEmptyChatId(requestBodyResolution.response);
+  }
+  const { callbackData, chatId } = requestBodyResolution;
+  const callbackResolution = await resolveTelegramClaimCallbackOrFailureResponse({
+    request,
+    callbackData,
+    chatId,
+  });
+  return resolveTelegramClaimContextCallbackResolutionOrFailureResult(chatId, callbackResolution);
+}
+
+export async function resolveTelegramClaimContextRequestBodyContextOrFailureResult({
+  request,
+  requestBodyResolution,
+}: {
+  request: Request;
+  requestBodyResolution: TelegramClaimRequestBodyResolution;
+}): Promise<TelegramClaimContextResult> {
+  const callbackContext = await resolveTelegramClaimContextRequestBodyResolutionOrFailureResult({
+    request,
+    requestBodyResolution,
+  });
+  return resolveTelegramClaimContextCallbackContextOrFailureResult({
+    chatId: callbackContext.chatId,
+    callbackContext,
+  });
+}
+
+export function resolveTelegramClaimContextCallbackToIdentityContextOrFailureResult({
+  chatId,
+  callbackNextContext,
+}: {
+  chatId: string;
+  callbackNextContext: TelegramClaimContextResult;
+}): TelegramClaimContextResult {
+  if (callbackNextContext.response) {
+    return callbackNextContext;
+  }
+  return resolveTelegramClaimContextIdentityResolutionOrFailureResult(
+    chatId,
+    callbackNextContext.callback,
+    resolveTelegramClaimIdentityOrFailureResponse({
+      callback: callbackNextContext.callback,
+      chatId,
+    }),
+  );
+}
+
+export async function resolveTelegramClaimContextCallbackToFinalContextOrFailureResult({
+  request,
+  callbackNextContext,
+}: {
+  request: Request;
+  callbackNextContext: TelegramClaimContextResult;
+}): Promise<TelegramClaimContextResult> {
+  const chatId = callbackNextContext.chatId;
+  const identityContext = resolveTelegramClaimContextCallbackToIdentityContextOrFailureResult({
+    chatId,
+    callbackNextContext,
+  });
+  return resolveTelegramClaimContextIdentityContextOrFailureResult({
+    request,
+    chatId,
+    callback: identityContext.callback as TelegramClaimCallback,
+    identityContext,
+  });
+}
+
+export async function resolveTelegramClaimContextOrFailureResponse(request: Request): Promise<TelegramClaimContextResult> {
+  const requestBodyResolution = await resolveTelegramClaimRequestBodyOrFailureResponse(request);
+  const callbackNextContext = await resolveTelegramClaimContextRequestBodyContextOrFailureResult({
+    request,
+    requestBodyResolution,
+  });
+  return resolveTelegramClaimContextCallbackToFinalContextOrFailureResult({
+    request,
+    callbackNextContext,
+  });
+}
+
+export async function handleTelegramNonDeclineAction({
+  request,
+  callback,
+  orderIdText,
+  riderIdText,
+  resolvedName,
+  resolvedPhone,
+  chatId,
+  nowIso,
+  orderDetailForProgress,
+  actionDecision,
+}: {
+  request: Request;
+  callback: { orderId?: unknown; riderId?: unknown; restaurantId?: unknown; action?: TelegramClaimAction };
+  orderIdText: string;
+  riderIdText: string;
+  resolvedName: string;
+  resolvedPhone: string;
+  chatId: string;
+  nowIso: string;
+  orderDetailForProgress: Record<string, unknown> | null;
+  actionDecision: Pick<TelegramClaimActionDecision, 'expectedCurrentStatus' | 'targetStatus' | 'feedbackWriteMode' | 'nextRemarksJson'>;
+}): Promise<Response> {
+  const {
+    nextRemarksJson,
+    upstream,
+    text,
+  } = await handleTelegramProgressSubmission({
+    request,
+    callback,
+    orderIdText,
+    resolvedName,
+    resolvedPhone,
+    chatId,
+    nowIso,
+    orderDetailForProgress,
+    actionDecision,
+  });
+
+  return handleTelegramProgressActionTransition({
+    request,
+    callback,
+    actionDecision,
+    orderIdText,
+    riderIdText,
+    resolvedName,
+    resolvedPhone,
+    nextRemarksJson,
+    orderDetailForProgress,
+    upstream,
+    text,
+  });
+}
+
+export async function handleTelegramRiderClaim(request: Request): Promise<Response> {
+  const contextResolution = await resolveTelegramClaimContextOrFailureResponse(request);
+  if (contextResolution.response) return contextResolution.response;
+
+  const {
+    chatId,
+    callback,
+    resolvedName,
+    resolvedPhone,
+    orderIdText,
+    riderIdText,
+    nowIso,
+    orderDetailForProgress,
+    actionDecision,
+    isDeclineAction,
+  } = contextResolution;
+
+  if (!callback) {
+    return buildTelegramClaimInvalidCallbackFailureResponse();
+  }
+
+  if (!actionDecision.allowed) {
+    return buildTelegramClaimActionDecisionFailureResponse(actionDecision);
+  }
+
+  if (isDeclineAction) {
+    return handleTelegramDeclineAction({
+      request,
+      callback,
+      actionDecision,
+      orderIdText,
+      riderIdText,
+      resolvedName,
+      resolvedPhone,
+      chatId,
+    });
+  }
+
+  return handleTelegramNonDeclineAction({
+    request,
+    callback,
+    orderIdText,
+    riderIdText,
+    resolvedName,
+    resolvedPhone,
+    chatId,
+    nowIso,
+    orderDetailForProgress,
+    actionDecision,
   });
 }
 

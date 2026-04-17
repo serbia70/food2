@@ -1,3 +1,5 @@
+import { parseOrderItemsShared } from './order-items-shared.ts';
+
 type OrderLike = Record<string, any>;
 
 function hasCJK(s: string) {
@@ -38,24 +40,10 @@ function pickZhSr(nameRaw: string, subRaw: string) {
   return { zh: a, sr: b };
 }
 
-function toItemArray(itemsRaw: unknown): any[] {
-  if (!itemsRaw) return [];
-  if (Array.isArray(itemsRaw)) return itemsRaw;
-  if (typeof itemsRaw === 'object') return Object.values(itemsRaw as Record<string, unknown>);
-  return [];
-}
-
 export function buildOrderItemsPreview(order: OrderLike | null | undefined, opts?: { maxItems?: number }) {
   const maxItems = Math.max(1, Number(opts?.maxItems ?? 3) || 3);
 
-  let arr: any[] = [];
-  try {
-    const raw = (order as any)?.itemsJson;
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    arr = toItemArray(parsed);
-  } catch {
-    arr = [];
-  }
+  const arr = parseOrderItemsShared((order as any)?.itemsJson);
 
   const normalized = arr
     .map((it: any) => {

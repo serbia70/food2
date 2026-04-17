@@ -11,6 +11,7 @@ import { getContactShopLabel } from '../lib/shop-chat-copy';
 import { normalizeUserChatMessages } from '../lib/user-chat-panel-state';
 import { ensureUserChatRealtime } from '../lib/user-chat-realtime';
 import { buildCustomerConversationList } from '../lib/customer-chat-conversations';
+import { buildOrderItemTextLinesShared, parseOrderItemsShared } from '../lib/order-items-shared.ts';
 import { getCustomerOrderStatusCopy, getCustomerDeliveryStatusCopy, isCustomerActiveStatus, isCustomerCompletedStatus, isCustomerDeliveryStatus } from '../lib/rider-dispatch';
 
 type ConflictGuide = null | {
@@ -107,18 +108,14 @@ function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onC
     .trim();
   const shortAddress = addressSummary.length > 52 ? `${addressSummary.slice(0, 52)}...` : addressSummary;
 
-  let itemNodes: ComponentChildren = '商品解析失败';
-  try {
-    const items = typeof order.itemsJson === 'string' ? JSON.parse(order.itemsJson) : order.itemsJson;
-    const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
-    itemNodes = itemsArray.map((i: any, iIdx: number) => (
+  const parsedItems = parseOrderItemsShared(order?.itemsJson);
+  const itemNodes: ComponentChildren = parsedItems.length > 0
+    ? parsedItems.map((i, iIdx) => (
       <div key={iIdx} style={{ marginBottom: '4px' }}>
-        • {i.name} <span style={{ color: '#718096', fontSize: '11px' }}>({i.subName})</span> x{i.quantity}
+        • {String(i.name || '').trim() || '商品'} {String(i.subName || '').trim() ? <span style={{ color: '#718096', fontSize: '11px' }}>({String(i.subName || '').trim()})</span> : null} x{Number(i.quantity || i.qty || 0) || 1}
       </div>
-    ));
-  } catch {
-    itemNodes = '商品解析失败';
-  }
+    ))
+    : '商品解析失败';
 
   const statusClass = getStatusClass(order?.status);
 
@@ -182,21 +179,7 @@ function renderOrderCard(order: any, idx: number, shopMap: UserOrderShopMap, onC
 }
 
 function buildOrderItemLines(order: any): string[] {
-  try {
-    const items = typeof order?.itemsJson === 'string' ? JSON.parse(order.itemsJson) : order?.itemsJson;
-    const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
-    return (itemsArray as any[])
-      .filter(Boolean)
-      .map((i: any) => {
-        const name = String(i?.name || '').trim() || '商品';
-        const sub = String(i?.subName || '').trim();
-        const qty = Number(i?.quantity || 0) || 0;
-        const subText = sub ? ` (${sub})` : '';
-        return `${name}${subText} x${qty || 1}`;
-      });
-  } catch {
-    return [];
-  }
+  return buildOrderItemTextLinesShared(order?.itemsJson).map((line) => line.replace(/^•\s*/, ''));
 }
 
 function getStatusClass(orderStatus: any): 'status-pending' | 'status-active' | 'status-done' | 'status-closed' {

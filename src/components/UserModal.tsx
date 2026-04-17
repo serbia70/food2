@@ -21,6 +21,7 @@ import { applyLocalNicknameUpdate, buildPhoneUpdatePayload } from "../lib/user-p
 import { mapUserUpdateErrorMessage } from "../lib/user-update-error";
 import { buildPhoneConflictGuide } from "../lib/user-update-guide";
 import { validateUserLoginInput } from "../lib/user-login-validation";
+import { parseOrderItemsShared } from '../lib/order-items-shared.ts';
 import UserCenterPanel from "./UserCenterPanel";
 // import "../styles/user-modal.css"; 
 
@@ -321,13 +322,9 @@ export default function UserModal({ specialPromotionMap = {} }: UserModalProps) 
 
   const handleAddToCart = (order: Order, idx: number) => {
     try {
-      const items = typeof (order as any).itemsJson === 'string'
-        ? JSON.parse((order as any).itemsJson)
-        : (order as any).itemsJson;
+      const items = parseOrderItemsShared((order as any).itemsJson);
 
-      const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
-
-      itemsArray.forEach((i: any) => {
+      items.forEach((i) => {
         addToCart({
           id: i.id || Math.random(),
           name: i.name,

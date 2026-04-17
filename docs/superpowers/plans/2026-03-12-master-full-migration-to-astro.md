@@ -1,5 +1,8 @@
 # Master Full Migration to Astro Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 master 全量迁移到 Astro 时的阶段性步骤，文中的 `历史红灯预期：`、旧路径与 parity 清单属于当时的推进语境，不应再直接当作当前仓库基线。
+> 若继续处理 master 迁移或代理边界，请先以当前 `src/pages/master/**`、`src/pages/api/master/**` 与最新设计文档为准。
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 用 `meituanAstro` 的 `/master` 控制台 100% 替换 `meituanGo/static/master.html`，功能点与 action 完全覆盖；生产环境请求全部走同域 `/api/master/*` 代理；登录态使用 HttpOnly cookie；并在 Go 侧下线 `/master.html`（404）。
@@ -159,7 +162,7 @@ Run (from `meituanAstro/`):
 ```bash
 node --test src/lib/master-client.test.ts
 ```
-Expected: FAIL（因为还未实现）。
+历史红灯预期：（因为还未实现）。
 
 - [ ] **Step 3: 写最小实现让测试通过**
   - `createMasterClient({ fetch })` 注入 fetch，便于测试。

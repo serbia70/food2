@@ -1,5 +1,7 @@
 # Rider Dual-Surface Unified Actions Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 rider dashboard 与 Telegram 动作语义初次收口时的实施步骤；文中的 `历史红灯预期：` 与阶段消息表述仅代表当时推进顺序，不应直接当作当前实现状态。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让 rider dashboard 与 Telegram 共用同一套“接单 / 暂不接单 / 送餐完成”动作语义，同时统一派单文案并把 rider dashboard 调整为简洁商务风。
@@ -70,7 +72,7 @@ test('dispatch copy and action visibility stay unified across rider/admin surfac
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-Expected: FAIL，提示 `getRiderActionFlags` 未定义或断言不满足。
+历史红灯预期：，提示 `getRiderActionFlags` 未定义或断言不满足。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -150,7 +152,7 @@ test('buildRiderDeliveryCompleteTelegramMessage renders complete button for deli
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-dispatch-spec.ts`
-Expected: FAIL，提示新函数不存在或按钮文案不匹配。
+历史红灯预期：，提示新函数不存在或按钮文案不匹配。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -231,7 +233,7 @@ test('POST rider-claim sends delivery-complete telegram message after accept suc
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
-Expected: FAIL，提示未发送完成消息。
+历史红灯预期：，提示未发送完成消息。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -310,7 +312,7 @@ test('POST rider-claim completes delivering order when complete callback is vali
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
-Expected: FAIL，说明 callback action 未支持 `complete`。
+历史红灯预期：，说明 callback action 未支持 `complete`。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -368,7 +370,7 @@ test('rider dashboard active card shows accept and decline for awaiting_courier,
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/tests/pages/rider-dashboard-canonical.test.ts`
-Expected: FAIL，说明 rider 页面尚未引入 decline 按钮与共用规则。
+历史红灯预期：，说明 rider 页面尚未引入 decline 按钮与共用规则。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -435,7 +437,7 @@ test('rider dashboard card layout uses business-style hierarchy for active order
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/tests/pages/rider-dashboard-canonical.test.ts`
-Expected: FAIL，说明页面尚未完成新的结构/样式命名。
+历史红灯预期：，说明页面尚未完成新的结构/样式命名。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -494,7 +496,7 @@ test('admin dispatch surfaces use shared copy helper for awaiting_courier and de
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/tests/pages/admin/tab-orders-rider-feedback.test.ts src/tests/pages/admin/tab-tables-rider-status-copy.test.ts`
-Expected: FAIL，说明 TabTables 仍残留旧文案硬编码。
+历史红灯预期：，说明 TabTables 仍残留旧文案硬编码。
 
 - [ ] **Step 3: Write minimal implementation**
 

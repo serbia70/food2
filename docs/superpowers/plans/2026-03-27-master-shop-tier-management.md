@@ -1,5 +1,8 @@
 # Master Shop Tier Management Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 master 店铺 tier 管理设计时的实施步骤，文中的 `历史红灯预期：` 属于当时的红灯预期，不应再直接当作当前实现状态。
+> 若继续处理 shop tier、default tier 或 admin feature gating，请先以当前 helper、页面装配与现有测试为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a clean shop tier system (`subscription` / `business`) with global default + per-shop override in master, and use the resolved tier to control admin feature visibility.
@@ -81,7 +84,7 @@ test('resolveShopTier uses global default when shop mode is global', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/shop-tier.test.ts`
-Expected: FAIL with `Cannot find module` or `resolveShopTier is not a function`
+历史红灯预期： with `Cannot find module` or `resolveShopTier is not a function`
 
 - [ ] **Step 3: Add the minimal resolver implementation**
 
@@ -203,7 +206,7 @@ test('buildMasterSettingsView exposes default shop tier', () => {
 - [ ] **Step 2: Run the settings view test to verify it fails**
 
 Run: `node --test src/lib/master-settings-view.test.ts`
-Expected: FAIL with missing `defaultShopTier` assertions
+历史红灯预期： with missing `defaultShopTier` assertions
 
 - [ ] **Step 3: Extend `MasterSettingsView` to include default tier fields**
 
@@ -333,7 +336,7 @@ test('buildMasterShopView exposes effective shop tier and source', () => {
 - [ ] **Step 2: Run the shop view test to verify it fails**
 
 Run: `node --test src/lib/master-shop-view.test.ts`
-Expected: FAIL because `shopTier` does not exist on the view
+历史红灯预期： because `shopTier` does not exist on the view
 
 - [ ] **Step 3: Resolve tier inside `buildMasterShopView` and thread defaults from dashboard**
 
@@ -430,7 +433,7 @@ test('buildMasterShopEditPayload serializes shop tier mode and override', () => 
 - [ ] **Step 2: Run the payload test to verify it fails**
 
 Run: `node --test src/lib/master-shop-edit-payload.test.ts`
-Expected: FAIL because tier fields are absent
+历史红灯预期： because tier fields are absent
 
 - [ ] **Step 3: Add UI controls to the edit panel**
 
@@ -534,7 +537,7 @@ test('admin page uses resolved shop tier feature flags for gated tabs', () => {
 - [ ] **Step 2: Run the admin gating test to verify it fails**
 
 Run: `node --test src/pages/admin/[slug]/billing-ui.test.ts`
-Expected: FAIL because page still gates by `billingPlanType`
+历史红灯预期： because page still gates by `billingPlanType`
 
 - [ ] **Step 3: Resolve tier in the admin page and replace billing-based gating**
 

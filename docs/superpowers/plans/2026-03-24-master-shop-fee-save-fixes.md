@@ -1,5 +1,8 @@
 # Master 店铺提成保存修复 Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是当时 master 店铺提成保存问题的修复步骤，文中的 `历史红灯预期：` 与旧测试文件名属于阶段性推进语境，不应再直接当作当前仓库基线。
+> 若继续处理 master 店铺费率保存、全局默认或 override 语义，请先以当前前后端真实代码与共享 helper 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 修复 master 店铺编辑里“只有 01 店铺能改提成”和“新建店铺不继承全局预约/外卖启用状态”两个线上问题，并把店铺级预约提成改成真正可持久化。
@@ -28,9 +31,9 @@
   - `handleUpdateShop()` 把预约覆盖值持久化到 `shops.settings`，并保留现有 delivery override 逻辑。
 - `../foos2Go/internal/handlers/master_init_data.go`
   - 从 `shops.settings` 提取预约覆盖字段，在 `commission_mode=override` 时投影到 `MasterInitData` 回包。
-- `../foos2Go/internal/handlers/master_create_shop_test.go`
+- `../foos2Go/internal/handlers/master_create_shop_test．go（历史文件名）`
   - 锁定新店会继承 master settings 的启用状态，而不是吃到数据库旧默认值 `enable_reservation=0`。
-- `../foos2Go/internal/handlers/master_manage_actions_test.go`
+- `../foos2Go/internal/handlers/master_manage_actions_test．go（历史文件名）`
   - 锁定：
     - 全局店铺手动改费率后会真正变成店铺覆盖
     - 预约覆盖值保存后会在 `MasterInitData` 刷新回包里读到
@@ -167,11 +170,11 @@ git commit -m "fix(master): switch edited shop fees to override"
 
 **Files:**
 - Modify: `../foos2Go/internal/handlers/master_shop_admin.go`
-- Modify: `../foos2Go/internal/handlers/master_create_shop_test.go`
+- Modify: `../foos2Go/internal/handlers/master_create_shop_test．go（历史文件名）`
 
 - [ ] **Step 1: 先写会失败的 Go 测试**
 
-在 `../foos2Go/internal/handlers/master_create_shop_test.go` 里新增测试：
+在 `../foos2Go/internal/handlers/master_create_shop_test．go（历史文件名）` 里新增测试：
 
 ```go
 func TestMasterCreateShopInheritsMasterChannelEnabledDefaults(t *testing.T) {
@@ -225,7 +228,7 @@ func TestMasterCreateShopInheritsMasterChannelEnabledDefaults(t *testing.T) {
 
 Run: `go test ./internal/handlers -run "TestMasterCreateShop"`
 
-Expected: FAIL，因为当前 `INSERT INTO shops` 没有写 `enable_reservation` / `enable_delivery` / `enable_dine_in`
+历史红灯预期：，因为当前 `INSERT INTO shops` 没有写 `enable_reservation` / `enable_delivery` / `enable_dine_in`
 
 - [ ] **Step 3: 实现最小代码让测试变绿**
 
@@ -251,7 +254,7 @@ Expected: PASS
 - [ ] **Step 5: 提交**
 
 ```bash
-git add ../foos2Go/internal/handlers/master_shop_admin.go ../foos2Go/internal/handlers/master_create_shop_test.go
+git add ../foos2Go/internal/handlers/master_shop_admin.go ../foos2Go/internal/handlers/master_create_shop_test．go（历史文件名）
 git commit -m "fix(master): seed new shops with global channel defaults"
 ```
 
@@ -262,11 +265,11 @@ git commit -m "fix(master): seed new shops with global channel defaults"
 **Files:**
 - Modify: `../foos2Go/internal/handlers/master_shop_admin.go`
 - Modify: `../foos2Go/internal/handlers/master_init_data.go`
-- Modify: `../foos2Go/internal/handlers/master_manage_actions_test.go`
+- Modify: `../foos2Go/internal/handlers/master_manage_actions_test．go（历史文件名）`
 
 - [ ] **Step 1: 先写会失败的 Go 回归测试**
 
-在 `../foos2Go/internal/handlers/master_manage_actions_test.go` 里新增测试，覆盖“global 店铺改预约费率后刷新仍可见”：
+在 `../foos2Go/internal/handlers/master_manage_actions_test．go（历史文件名）` 里新增测试，覆盖“global 店铺改预约费率后刷新仍可见”：
 
 ```go
 func TestMasterManageUpdateShopPersistsReservationOverrideInInitResponse(t *testing.T) {
@@ -322,7 +325,7 @@ func TestMasterManageUpdateShopPersistsReservationOverrideInInitResponse(t *test
 
 Run: `go test ./internal/handlers -run "TestMasterManageUpdateShop"`
 
-Expected: FAIL，因为当前 Go 后端只持久化 delivery override，预约字段只存在于前端和测试 payload，刷新回包不会返回预约覆盖值。
+历史红灯预期：，因为当前 Go 后端只持久化 delivery override，预约字段只存在于前端和测试 payload，刷新回包不会返回预约覆盖值。
 
 - [ ] **Step 3: 实现最小代码让测试变绿**
 
@@ -354,7 +357,7 @@ Expected: PASS
 - [ ] **Step 5: 提交**
 
 ```bash
-git add ../foos2Go/internal/handlers/master_shop_admin.go ../foos2Go/internal/handlers/master_init_data.go ../foos2Go/internal/handlers/master_manage_actions_test.go
+git add ../foos2Go/internal/handlers/master_shop_admin.go ../foos2Go/internal/handlers/master_init_data.go ../foos2Go/internal/handlers/master_manage_actions_test．go（历史文件名）
 git commit -m "fix(master): persist reservation fee overrides"
 ```
 
@@ -365,8 +368,8 @@ git commit -m "fix(master): persist reservation fee overrides"
 **Files:**
 - Test: `src/lib/master-shop-edit-payload.test.ts`
 - Test: `src/pages/master/master-billing-ui.test.ts`
-- Test: `../foos2Go/internal/handlers/master_create_shop_test.go`
-- Test: `../foos2Go/internal/handlers/master_manage_actions_test.go`
+- Test: `../foos2Go/internal/handlers/master_create_shop_test．go（历史文件名）`
+- Test: `../foos2Go/internal/handlers/master_manage_actions_test．go（历史文件名）`
 
 - [ ] **Step 1: 跑前端聚焦测试**
 
@@ -403,7 +406,7 @@ Manual checklist:
 - [ ] **Step 5: 提交**
 
 ```bash
-git add src/lib/master-shop-edit-payload.test.ts src/pages/master/master-billing-ui.test.ts ../foos2Go/internal/handlers/master_create_shop_test.go ../foos2Go/internal/handlers/master_manage_actions_test.go
+git add src/lib/master-shop-edit-payload.test.ts src/pages/master/master-billing-ui.test.ts ../foos2Go/internal/handlers/master_create_shop_test．go（历史文件名） ../foos2Go/internal/handlers/master_manage_actions_test．go（历史文件名）
 git commit -m "test: cover shop fee save regressions"
 ```
 

@@ -1,5 +1,8 @@
 # User Center (Delivery + Reservations) Implementation Plan
 
+> 状态说明（历史计划）：这份计划反映的是当时 user center 的 delivery/reservations 收口步骤，文中的 `历史红灯预期：`、旧 worktree 路径与旧测试文件名属于阶段性实施记录，不应再直接当作当前仓库状态。
+> 若继续处理 user history / reservations 语义，请先以当前前后端真实代码为准，不要反向恢复这里的历史测试组织方式。
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** User-facing pages only show delivery orders + shop reservations, scoped to `login_account` (with compatibility merge to the bound `phone`), and delivery history is retained permanently.
@@ -28,8 +31,8 @@
 - Modify: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/mobile.go`
 - Create (or Modify): `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/user_reservations.go` (recommended new file)
 - Modify: `D:/ai/food2/.worktrees/260311/meituanGo/cmd/server/main.go` (register new routes)
-- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/mobile_test.go`
-- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/user_reservations_test.go`
+- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/mobile_test．go（历史文件名）`
+- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/user_reservations_test．go（历史文件名）`
 - (If needed) Read-only reference: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/reservation.go`
 
 ### Frontend (meituanAstro)
@@ -51,11 +54,11 @@
 
 **Files:**
 - Modify: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/mobile.go`
-- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/mobile_test.go`
+- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/mobile_test．go（历史文件名）`
 
 - [ ] **Step 1: Write failing test**
 
-Add a new test in `mobile_test.go` (or new file if the test is getting large) that:
+Add a new test in `mobile_test．go（历史文件名）` (or new file if the test is getting large) that:
 
 1) Seeds users table with a user:
 - `login_account = "888"`
@@ -87,7 +90,7 @@ Run (from `meituanGo` repo root):
 ```bash
 go test ./internal/handlers -run TestUserHistorySessionToken -v
 ```
-Expected: FAIL because endpoint does not exist / behavior not implemented.
+历史红灯预期： because endpoint does not exist / behavior not implemented.
 
 - [ ] **Step 3: Implement minimal handler change**
 
@@ -125,7 +128,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add internal/handlers/mobile.go internal/handlers/mobile_test.go
+git add internal/handlers/mobile.go internal/handlers/mobile_test．go（历史文件名）
 
 git commit -m "feat(user): add sessionToken delivery history"
 ```
@@ -139,11 +142,11 @@ git commit -m "feat(user): add sessionToken delivery history"
 **Files:**
 - Create: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/user_reservations.go`
 - Modify: `D:/ai/food2/.worktrees/260311/meituanGo/cmd/server/main.go`
-- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/user_reservations_test.go`
+- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/user_reservations_test．go（历史文件名）`
 
 - [ ] **Step 1: Write failing test**
 
-Create `user_reservations_test.go` that:
+Create `user_reservations_test．go（历史文件名）` that:
 
 1) Seeds users with login_account=888, phone=0613...
 2) Seeds reservations with:
@@ -171,7 +174,7 @@ Run:
 ```bash
 go test ./internal/handlers -run TestUserReservations -v
 ```
-Expected: FAIL (route/handler missing).
+历史红灯预期： (route/handler missing).
 
 - [ ] **Step 3: Implement handler**
 
@@ -196,7 +199,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/handlers/user_reservations.go internal/handlers/user_reservations_test.go cmd/server/main.go
+git add internal/handlers/user_reservations.go internal/handlers/user_reservations_test．go（历史文件名） cmd/server/main.go
 
 git commit -m "feat(user): add shop reservation list"
 ```
@@ -223,7 +226,7 @@ Run:
 ```bash
 node --test scripts/user-history-uses-sessiontoken.test.mjs
 ```
-Expected: FAIL.
+历史红灯预期：.
 
 - [ ] **Step 3: Implement minimal frontend change**
 
@@ -271,7 +274,7 @@ Add node script test that reads `orders/index.astro` and asserts:
 ```bash
 node --test scripts/orders-hides-dine-in.test.mjs
 ```
-Expected: FAIL.
+历史红灯预期：.
 
 - [ ] **Step 3: Implement minimal change**
 
@@ -357,13 +360,13 @@ git commit -m "feat(shop): show my reservations in shop user center"
 
 **Files:**
 - Modify: `D:/ai/food2/.worktrees/260311/meituanGo/internal/services/cron/order_retention.go`
-- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/services/cron/order_retention_test.go`
+- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/services/cron/order_retention_test．go（历史文件名）`
 - Modify: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/master_settings.go` (defaults)
-- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/master_settings_test.go`
+- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/master_settings_test．go（历史文件名）`
 
 - [ ] **Step 1: Write failing test**
 
-In `order_retention_test.go`, add case:
+In `order_retention_test．go（历史文件名）`, add case:
 - settings `retention_delivery_days = 0` (or a new sentinel field, if you prefer) means **do not delete** delivery orders.
 - Create a delivery order older than cutoff and assert it is retained.
 
@@ -390,7 +393,7 @@ go test ./...
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/services/cron/order_retention.go internal/services/cron/order_retention_test.go internal/handlers/master_settings.go internal/handlers/master_settings_test.go
+git add internal/services/cron/order_retention.go internal/services/cron/order_retention_test．go（历史文件名） internal/handlers/master_settings.go internal/handlers/master_settings_test．go（历史文件名）
 
 git commit -m "chore(retention): keep delivery orders permanently"
 ```

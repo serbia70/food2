@@ -1,5 +1,7 @@
 # Shared Contracts and API Foundation Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 shared contracts / API foundation 的基座化实施步骤；文中的旧 Go 测试文件名与红绿推进方式属于当时阶段，不应直接当作当前仓库状态。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 建立前后端统一的领域契约、错误模型、会话边界与 BFF/proxy 基座，为后续公共前台、admin、master 重建提供稳定基础。
@@ -34,15 +36,15 @@
 
 ### Create — `foos2Go`
 - `internal/http/api/envelope.go` — 统一 `ok/data/error` 输出 helper
-- `internal/http/api/envelope_test.go` — 锁定 envelope JSON 结构
+- `internal/http/api/envelope_test．go（历史文件名）` — 锁定 envelope JSON 结构
 - `internal/http/api/errors.go` — 统一 error code / message helper
-- `internal/http/api/errors_test.go` — 锁定错误映射
+- `internal/http/api/errors_test．go（历史文件名）` — 锁定错误映射
 - `internal/http/dto/session_dto.go` — `AuthSessionResponse` DTO
 - `internal/http/dto/shop_dto.go` — `ShopResponse` / `MenuResponse` DTO
 - `internal/http/dto/master_dto.go` — `MasterSettingsResponse` DTO
 - `internal/http/dto/order_dto.go` — `OrderResponse` / `DispatchResponse` / `RiderResponse` DTO
-- `internal/http/session_routes_test.go` — 会话接口回归测试
-- `internal/http/shop_routes_test.go` — 店铺/菜单新契约回归测试
+- `internal/http/session_routes_test．go（历史文件名）` — 会话接口回归测试
+- `internal/http/shop_routes_test．go（历史文件名）` — 店铺/菜单新契约回归测试
 
 ### Modify — `food2astro`
 - `src/lib/api-proxy.ts` — 替换旧 `success/error/code` 风格，改为消费统一 envelope helper
@@ -82,7 +84,7 @@
 - Create: `src/domain/api/api-envelope.ts`
 - Create: `src/domain/api/api-envelope.test.ts`
 - Create: `D:/ai/food/.worktrees/260311/foos2Go/internal/http/api/envelope.go`
-- Create: `D:/ai/food/.worktrees/260311/foos2Go/internal/http/api/envelope_test.go`
+- Create: `D:/ai/food/.worktrees/260311/foos2Go/internal/http/api/envelope_test．go（历史文件名）`
 
 - [ ] **Step 1: Write the failing TypeScript test for the unified success/error envelope**
 
@@ -126,7 +128,7 @@ test('api envelope creates error payloads with code and message', () => {
 - [ ] **Step 2: Run the TypeScript test to verify it fails**
 
 Run: `node --test src/domain/api/api-envelope.test.ts`
-Expected: FAIL with missing module or missing export errors
+历史红灯预期： with missing module or missing export errors
 
 - [ ] **Step 3: Write the failing Go test for the same JSON shape**
 
@@ -166,7 +168,7 @@ func TestErrorEnvelopeJSONShape(t *testing.T) {
 - [ ] **Step 4: Run the Go test to verify it fails**
 
 Run: `go test ./internal/http/api -run 'Test(Success|Error)EnvelopeJSONShape' -count=1`
-Expected: FAIL with undefined `Success` / `Error`
+历史红灯预期： with undefined `Success` / `Error`
 
 - [ ] **Step 5: Implement the minimal TypeScript envelope**
 
@@ -245,7 +247,7 @@ Expected: PASS
 - [ ] **Step 8: Commit**
 
 ```bash
-git -C "D:/ai/food/.worktrees/260311/food2astro" add src/domain/api/api-envelope.ts src/domain/api/api-envelope.test.ts && git -C "D:/ai/food/.worktrees/260311/foos2Go" add internal/http/api/envelope.go internal/http/api/envelope_test.go && git -C "D:/ai/food/.worktrees/260311/food2astro" commit -m "feat: add shared api envelope contract"
+git -C "D:/ai/food/.worktrees/260311/food2astro" add src/domain/api/api-envelope.ts src/domain/api/api-envelope.test.ts && git -C "D:/ai/food/.worktrees/260311/foos2Go" add internal/http/api/envelope.go internal/http/api/envelope_test．go（历史文件名） && git -C "D:/ai/food/.worktrees/260311/food2astro" commit -m "feat: add shared api envelope contract"
 ```
 
 ---
@@ -295,7 +297,7 @@ test('parseAuthSession rejects legacy snake_case payload', () => {
 - [ ] **Step 2: Run the session contract test and verify it fails**
 
 Run: `node --test src/domain/auth/auth-session.test.ts`
-Expected: FAIL with missing module/export
+历史红灯预期： with missing module/export
 
 - [ ] **Step 3: Write the failing shop/settings/order contract tests**
 
@@ -368,7 +370,7 @@ test('order contract accepts dispatch and rider snapshots in camelCase', () => {
 - [ ] **Step 4: Run the contract tests to verify they fail**
 
 Run: `node --test src/domain/shop/shop-contract.test.ts src/domain/master/master-settings-contract.test.ts src/domain/order/order-contract.test.ts`
-Expected: FAIL with missing modules/exports
+历史红灯预期： with missing modules/exports
 
 - [ ] **Step 5: Implement the minimal Zod-based contract modules**
 
@@ -494,7 +496,7 @@ test('resolveSessionToken prefers authorization header then cookie token', () =>
 - [ ] **Step 2: Run the new tests to verify they fail**
 
 Run: `node --test src/infra/http/http-json-client.test.ts src/infra/http/proxy-response.test.ts src/infra/auth/session-cookie.test.ts`
-Expected: FAIL with missing modules/exports
+历史红灯预期： with missing modules/exports
 
 - [ ] **Step 3: Implement the minimal infra helpers**
 
@@ -580,8 +582,8 @@ git -C "D:/ai/food/.worktrees/260311/food2astro" add src/infra src/lib/api-proxy
 - Create: `D:/ai/food/.worktrees/260311/foos2Go/internal/http/dto/shop_dto.go`
 - Create: `D:/ai/food/.worktrees/260311/foos2Go/internal/http/dto/master_dto.go`
 - Create: `D:/ai/food/.worktrees/260311/foos2Go/internal/http/dto/order_dto.go`
-- Create: `D:/ai/food/.worktrees/260311/foos2Go/internal/http/session_routes_test.go`
-- Create: `D:/ai/food/.worktrees/260311/foos2Go/internal/http/shop_routes_test.go`
+- Create: `D:/ai/food/.worktrees/260311/foos2Go/internal/http/session_routes_test．go（历史文件名）`
+- Create: `D:/ai/food/.worktrees/260311/foos2Go/internal/http/shop_routes_test．go（历史文件名）`
 - Modify: actual foos2Go auth/session handlers
 - Modify: actual foos2Go shop/menu handlers
 - Modify: `internal/handlers/master_routes.go`
@@ -640,7 +642,7 @@ func TestShopRouteReturnsCamelCaseFieldsOnly(t *testing.T) {
 - [ ] **Step 2: Run the Go tests and verify they fail**
 
 Run: `go test ./internal/http -run 'Test(AdminSessionRouteReturnsCanonicalEnvelope|ShopRouteReturnsCamelCaseFieldsOnly)' -count=1`
-Expected: FAIL because handlers/DTOs do not exist or still emit legacy fields
+历史红灯预期： because handlers/DTOs do not exist or still emit legacy fields
 
 - [ ] **Step 3: Implement the canonical DTO layer**
 
@@ -746,7 +748,7 @@ Add a source-level assertion for `src/pages/api/auth/check.ts` requiring the rou
 - [ ] **Step 2: Run the tests and verify they fail**
 
 Run: `node --test src/application/auth/load-session-query.test.ts src/lib/user-api-route.test.ts`
-Expected: FAIL because the query/helper does not exist or route still uses legacy output
+历史红灯预期： because the query/helper does not exist or route still uses legacy output
 
 - [ ] **Step 3: Implement the session query helper**
 
@@ -834,7 +836,7 @@ test('foundation routes and helpers no longer emit legacy success envelope keys'
 - [ ] **Step 2: Run the source-level test to verify it fails before cleanup**
 
 Run: `node --test src/domain/api/foundation-source.test.ts`
-Expected: FAIL because migrated helpers or routes still contain legacy keys
+历史红灯预期： because migrated helpers or routes still contain legacy keys
 
 - [ ] **Step 3: Remove the obsolete compatibility branches**
 

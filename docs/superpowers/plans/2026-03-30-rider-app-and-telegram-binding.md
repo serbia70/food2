@@ -1,5 +1,7 @@
 # Rider App And Telegram Binding Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 rider app 初期完善与 Telegram 绑定能力补齐时的实施步骤；文中的红灯预期和文件创建步骤只代表当时阶段，不应直接视为当前缺口。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a complete rider app on top of the existing `/rider/*` flow, including phone/password login, rider status switching, active/history order views, order claim/completion, and self-service Telegram binding so admin dispatch notifications can reach real riders.
@@ -95,7 +97,7 @@ test('getRiderTelegramBindingCopy reports unbound rider', () => {
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `node --test src/lib/rider-session.test.ts`
-Expected: FAIL with module-not-found because `src/lib/rider-session.ts` does not exist yet.
+历史红灯预期： with module-not-found because `src/lib/rider-session.ts` does not exist yet.
 
 - [ ] **Step 3: 在共享类型中加入 rider session 需要的字段**
 
@@ -205,7 +207,7 @@ test('getRiderStatusHintCopy explains available status', () => {
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-Expected: FAIL because the new exports do not exist yet.
+历史红灯预期： because the new exports do not exist yet.
 
 - [ ] **Step 3: 在 helper 文件里补最小实现**
 
@@ -522,7 +524,7 @@ test('parse throws on invalid signature', () => {
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `node --test src/lib/telegram-rider-bind.test.ts`
-Expected: FAIL because helper file does not exist yet.
+历史红灯预期： because helper file does not exist yet.
 
 - [ ] **Step 3: 写最小实现**
 

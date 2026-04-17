@@ -1,5 +1,8 @@
 # Admin Click Delegation + Menu Image Fix Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 admin 点击委托和菜单图片修复时的实施步骤，文中的 `历史红灯预期：` 属于当时的红灯预期，不应再被直接理解为当前代码状态。
+> 若继续处理 admin 事件委托或图片路径归一化，请先以当前组件、脚本与测试为准。
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Unify admin click handling via `data-admin-action`, remove iOS12-incompatible DOM APIs, and normalize menu image URLs so admin buttons work on mobile and menu images display correctly.
@@ -84,7 +87,7 @@ test('admin components should not use inline onclick', async () => {
 - [ ] **Step 2: Run test (expect FAIL)**
 
 Run: `node --test scripts/check-admin-no-inline-onclick.test.mjs`
-Expected: FAIL with list of admin files containing `onclick=`.
+历史红灯预期： with list of admin files containing `onclick=`.
 
 ---
 
@@ -118,7 +121,7 @@ test('menu images should be normalized with API_BASE_URL when relative', async (
 - [ ] **Step 2: Run test (expect FAIL)**
 
 Run: `node --test scripts/check-menu-image-url-normalization.test.mjs`
-Expected: FAIL because `normalizeMenuImageUrl` is not yet present.
+历史红灯预期： because `normalizeMenuImageUrl` is not yet present.
 
 ---
 

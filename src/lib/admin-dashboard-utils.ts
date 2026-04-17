@@ -1,5 +1,6 @@
 import { isHallLikeZoneName, isPlaceholderZoneName, isSimpleHallMode, buildTableValue } from './table-config.ts';
 import { parseTableRef, inferLegacySimpleHallNumber, type ParsedTableRef } from './admin-table-ref.ts';
+import { parseOrderItemsShared } from './order-items-shared.ts';
 
 export type TableCard = {
   zoneName: string;
@@ -46,6 +47,37 @@ export function normalizeJSONString(v: any, fallback: string): string {
     return JSON.stringify(v);
   } catch {
     return fallback;
+  }
+}
+
+export function parseAdminOrderItems(raw: unknown): Array<Record<string, unknown>> {
+  return parseOrderItemsShared(raw);
+}
+
+function normalizeAdminOrderItemsValue(value: unknown): string {
+  if (Array.isArray(value)) return JSON.stringify(value);
+  if (value && typeof value === 'object') {
+    const arr = Object.entries(value as Record<string, unknown>).map(([key, entry]) => {
+      const item = entry && typeof entry === 'object' ? { ...(entry as Record<string, unknown>) } : {};
+      const pid = Number(key);
+      if (item.productId == null) item.productId = Number.isNaN(pid) ? Number(item.id || 0) : pid;
+      if (item.quantity == null) item.quantity = 1;
+      return item;
+    });
+    return JSON.stringify(arr);
+  }
+  return '[]';
+}
+
+export function normalizeAdminOrderItemsJSONString(v: any): string {
+  if (v == null) return '[]';
+  if (typeof v !== 'string') return normalizeAdminOrderItemsValue(v);
+  const raw = v.trim();
+  if (!raw) return '[]';
+  try {
+    return normalizeAdminOrderItemsValue(JSON.parse(raw));
+  } catch {
+    return '[]';
   }
 }
 

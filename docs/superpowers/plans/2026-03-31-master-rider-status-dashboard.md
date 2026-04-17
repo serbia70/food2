@@ -1,5 +1,7 @@
 # Master 骑手状态看板 Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 master 骑手状态看板引入时的实施步骤；文中的 `历史红灯预期：` 只代表当时页面接线阶段，不应直接当作当前实现状态。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在 master 中新增独立“骑手状态”tab，集中展示平台骑手的状态、进行中订单、代收信息与配送费汇总，同时保持 `src/pages/master/index.astro` 只做最小挂载。
@@ -58,7 +60,7 @@ test('normalizeMasterTab keeps riders tab', () => {
 - [ ] **Step 2: 跑测试确认先失败**
 
 Run: `node --test src/lib/master-active-tab.test.ts`
-Expected: FAIL，提示 `'riders'` 目前没有被识别，返回了默认 tab。
+历史红灯预期：，提示 `'riders'` 目前没有被识别，返回了默认 tab。
 
 - [ ] **Step 3: 做最小实现，把 riders 加入 tab 联合类型与 normalize 分支**
 
@@ -123,7 +125,7 @@ test('master riders proxy requires auth like other master routes', async () => {
 - [ ] **Step 2: 跑测试确认先失败**
 
 Run: `node --test src/tests/pages/api/master-riders-route.test.ts`
-Expected: FAIL，提示模块或导出不存在。
+历史红灯预期：，提示模块或导出不存在。
 
 - [ ] **Step 3: 按 dispatch 代理模式实现最小 API 路由**
 
@@ -193,7 +195,7 @@ test('buildMasterRiderStatusView groups riders and normalizes missing values', (
 - [ ] **Step 2: 跑测试确认先失败**
 
 Run: `node --test src/lib/master-rider-status-view.test.ts`
-Expected: FAIL，提示文件或导出不存在。
+历史红灯预期：，提示文件或导出不存在。
 
 - [ ] **Step 3: 用最小纯函数实现视图模型**
 
@@ -323,7 +325,7 @@ test('master rider status panel renders summary and three groups', async () => {
 - [ ] **Step 2: 跑测试确认先失败**
 
 Run: `node --test src/tests/pages/master/master-riders-ui.test.ts`
-Expected: FAIL，提示组件文件不存在。
+历史红灯预期：，提示组件文件不存在。
 
 - [ ] **Step 3: 实现最小组件结构，先把布局和文案立住**
 
@@ -515,7 +517,7 @@ test('master page source wires riders tab into dashboard layout', async () => {
 - [ ] **Step 2: 跑测试确认先失败**
 
 Run: `node --test src/tests/pages/master/master-dispatch-ui.test.ts`
-Expected: FAIL，提示 riders tab / proxy path / 组件引用不存在。
+历史红灯预期：，提示 riders tab / proxy path / 组件引用不存在。
 
 - [ ] **Step 3: 以最小改动挂载 riders tab，避免把业务细节塞回入口**
 

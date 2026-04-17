@@ -1,5 +1,8 @@
 # Admin 骑手 Telegram 测试与接单确认设计
 
+> 状态说明（已过期）：这份设计建立在“保留 admin 单骑手 Telegram 测试入口”的前提上，但当前生产链路里已无 `telegram-test` / `rider-telegram-test` 运行时入口。
+> 后续若要改派单/Telegram 链路，请不要按本文件继续实现测试按钮或测试 API，而应以 `docs/superpowers/specs/2026-04-15-dispatch-telegram-rider-admin-cleanup-design.md`、`src/pages/api/admin/rider-assign.ts`、`src/pages/api/admin/rider-dispatch.ts`、`src/pages/api/telegram/send.ts` 为准。
+
 ## 背景
 当前系统里，骑手端已经可以看到 `awaiting_courier` 状态的可抢订单，Telegram 也已有“立即接单”回调链路，但实际排障时存在两个问题：
 

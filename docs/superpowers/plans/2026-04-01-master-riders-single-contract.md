@@ -1,5 +1,7 @@
 # Master Riders Single Contract Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 master riders impersonate 收口时的实施步骤；文中的红灯预期属于当时 contract 收敛过程，不应直接当作当前实现状态。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 把 master riders 链路收口为“站内单入口 + 单契约”，让页面层只消费 canonical impersonate 数据。
@@ -163,7 +165,7 @@ test('returns 502 when legacy upstream misses token', async () => {
 
 Run: `node --test src/pages/api/master/impersonate-shop.test.ts`
 
-Expected: FAIL，原因应是当前文件没有 `GET` 导出，且当前实现仍用 `parseJsonEnvelope()` 解析 canonical upstream，无法通过 legacy → canonical 的断言。
+历史红灯预期：，原因应是当前文件没有 `GET` 导出，且当前实现仍用 `parseJsonEnvelope()` 解析 canonical upstream，无法通过 legacy → canonical 的断言。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -408,7 +410,7 @@ return new Response(JSON.stringify({
 
 Run: `node --test src/lib/master-rider-status-loader.test.ts`
 
-Expected: FAIL；因为当前 loader 仍接受 legacy impersonate 顶层 `token`，且还兼容 `rows/items`。
+历史红灯预期：；因为当前 loader 仍接受 legacy impersonate 顶层 `token`，且还兼容 `rows/items`。
 
 - [ ] **Step 3: Write minimal implementation**
 

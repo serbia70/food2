@@ -6,7 +6,17 @@ export const prerender = false;
 
 export async function forwardOrderUpdateStatus(request: Request, routeId?: string): Promise<Response> {
   const body = await request.text();
-  const payload = body ? JSON.parse(body) as Record<string, unknown> : {};
+  let payload: Record<string, unknown> = {};
+
+  try {
+    payload = body ? JSON.parse(body) as Record<string, unknown> : {};
+  } catch {
+    return new Response(JSON.stringify({ success: false, error: 'invalid_json' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const id = String(routeId || payload.id || '').trim();
   if (!id) {
     return new Response(JSON.stringify({ success: false, error: 'order_id_required' }), {

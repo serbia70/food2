@@ -1,243 +1,93 @@
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
-import test, { type TestContext } from 'node:test';
+import test from 'node:test';
 
-import { buildDispatchMetaRemarks, readDispatchMetaFromRemarks } from './rider-dispatch.ts';
-import { buildTelegramShortClaimCallback } from './telegram-dispatch.ts';
-import { handleTelegramRiderClaim } from '../pages/api/telegram/rider-claim.ts';
+import { readDispatchMetaFromRemarks } from './rider-dispatch.ts';
+import {
+  createCallback,
+  createFetchHandler,
+  createOrderRow,
+  createRemarksJson,
+  createRequest,
+  jsonResponse,
+  readJson,
+  TEST_CHAT_ID,
+  TEST_ORDER_ID,
+  TEST_RIDER_ID,
+  TEST_RIDER_NAME,
+  TEST_RIDER_PHONE,
+  useMockFetch,
+  useTestEnv,
+} from './telegram-rider-claim-spec-helpers.ts';
+import {
+  handleTelegramDeclineAction,
+  handleTelegramNonDeclineAction,
+  handleTelegramProgressActionTransition,
+  handleTelegramProgressSubmission,
+  handleTelegramRiderClaim,
+} from '../pages/api/telegram/rider-claim.ts';
 
-const TEST_SECRET = 'telegram-rider-claim-test-secret';
-const TEST_API_BASE = 'https://api.example.com';
-const TEST_CHAT_ID = '123456789';
-const TEST_ORDER_ID = 101;
-const TEST_RIDER_ID = 202;
-const TEST_RIDER_NAME = 'Rider 1';
-const TEST_RIDER_PHONE = '381641234567';
-
-type FetchHandler = (request: Request) => Promise<Response>;
-
-interface MockFetchCall {
-  url: string;
-  method: string;
-  body: string;
-  headers: Headers;
+function readCallJson(call: { body: string } | undefined): Record<string, unknown> {
+  assert.ok(call, 'expected mocked fetch call');
+  return JSON.parse(call.body) as Record<string, unknown>;
 }
 
-interface OrderSnapshot {
-  status: string;
-  remarksJson: string;
-  courierPhone?: string;
-  shopSlug?: string;
-  itemsJson?: string;
+function readTelegramText(call: { body: string } | undefined): string {
+  return String(readCallJson(call).text || '');
 }
 
-function useTestEnv(t: TestContext): void {
-  const originalCallbackSecret = process.env.TELEGRAM_CALLBACK_SECRET;
-  const originalWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  const originalApiUrl = process.env.PUBLIC_API_URL;
-
-  process.env.TELEGRAM_CALLBACK_SECRET = TEST_SECRET;
-  process.env.TELEGRAM_WEBHOOK_SECRET = TEST_SECRET;
-  process.env.PUBLIC_API_URL = TEST_API_BASE;
-
-  t.after(() => {
-    if (typeof originalCallbackSecret === 'string') {
-      process.env.TELEGRAM_CALLBACK_SECRET = originalCallbackSecret;
-    } else {
-      delete process.env.TELEGRAM_CALLBACK_SECRET;
-    }
-
-    if (typeof originalWebhookSecret === 'string') {
-      process.env.TELEGRAM_WEBHOOK_SECRET = originalWebhookSecret;
-    } else {
-      delete process.env.TELEGRAM_WEBHOOK_SECRET;
-    }
-
-    if (typeof originalApiUrl === 'string') {
-      process.env.PUBLIC_API_URL = originalApiUrl;
-    } else {
-      delete process.env.PUBLIC_API_URL;
-    }
-  });
+function readTelegramInlineKeyboard(call: { body: string } | undefined): unknown[][] {
+  const replyMarkup = readCallJson(call).reply_markup as { inline_keyboard?: unknown[][] } | undefined;
+  if (!Array.isArray(replyMarkup?.inline_keyboard)) return [];
+  return replyMarkup.inline_keyboard
+    .filter((row): row is unknown[] => Array.isArray(row))
+    .map((row) => row.filter((button) => {
+      if (!button || typeof button !== 'object') return false;
+      const candidate = button as { text?: unknown; callback_data?: unknown; url?: unknown };
+      return typeof candidate.text === 'string'
+        && (typeof candidate.callback_data === 'string' || typeof candidate.url === 'string');
+    }));
 }
 
-function useMockFetch(t: TestContext, handler: FetchHandler): MockFetchCall[] {
-  const calls: MockFetchCall[] = [];
-  const originalFetch = globalThis.fetch;
-
-  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    const request = input instanceof Request ? input : new Request(input, init);
-    const cloned = request.clone();
-    calls.push({
-      url: request.url,
-      method: request.method,
-      body: await cloned.text(),
-      headers: request.headers,
-    });
-    return handler(request);
-  };
-
-  t.after(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  return calls;
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-function createRemarksJson(overrides: Partial<{
-  currentRiderId: string;
-  currentAssignedAt: string;
-  currentExpiresAt: string;
-  invalidatedRiderIds: string[];
-  declinedRiderIds: string[];
-  acceptedAt: string;
-  pickedUpAt: string;
-  completedAt: string;
-  telegramMessageRef: { chatId: string; messageId: number } | null;
-}> = {}): string {
-  return JSON.stringify(buildDispatchMetaRemarks('', {
-    lastRiderDecision: null,
-    declinedRiderIds: overrides.declinedRiderIds || [],
-    currentRiderId: overrides.currentRiderId || String(TEST_RIDER_ID),
-    currentAssignedAt: overrides.currentAssignedAt || '2026-04-10T10:00:00.000Z',
-    currentExpiresAt: overrides.currentExpiresAt || new Date(Date.now() + 5 * 60_000).toISOString(),
-    invalidatedRiderIds: overrides.invalidatedRiderIds || [],
-    lastInvalidationReason: null,
-    acceptedAt: overrides.acceptedAt || '',
-    pickedUpAt: overrides.pickedUpAt || '',
-    completedAt: overrides.completedAt || '',
-    telegramMessageRef: overrides.telegramMessageRef === undefined ? null : overrides.telegramMessageRef,
-  }));
-}
-
-function createOrderRow(snapshot: OrderSnapshot): Record<string, unknown> {
-  return {
-    id: String(TEST_ORDER_ID),
-    orderNo: 'A101',
-    status: snapshot.status,
-    remarksJson: snapshot.remarksJson,
-    courierPhone: snapshot.courierPhone ?? TEST_RIDER_PHONE,
-    shopSlug: snapshot.shopSlug ?? 'shop-1',
-    shopName: 'Pizza One',
-    shopAddress: 'Shop Street 1',
-    shopMapUrl: 'https://maps.example.com/shop',
-    tableInfo: 'Test Address',
-    userPhone: '381600000000',
-    totalAmount: 1500,
-    pickupEtaMinutes: 20,
-    itemsJson: snapshot.itemsJson ?? JSON.stringify([
-      { name: '土豆牛肉饼', subName: 'Pljeskavica', quantity: 2, price: 600 },
-      { name: '可乐', subName: 'Coca-Cola', quantity: 1, price: 200 },
-    ]),
-  };
-}
-
-function signShortCallbackParts(parts: string[]): string {
-  return createHmac('sha256', TEST_SECRET)
-    .update(['rc2', ...parts].join('.'))
-    .digest('base64url')
-    .slice(0, 8);
-}
-
-function hashChatId(chatId: string): string {
-  return createHmac('sha256', TEST_SECRET)
-    .update(`chat:${chatId}`)
-    .digest('base64url')
-    .slice(0, 6);
-}
-
-function createCallback(action: 'accept' | 'picked_up' | 'complete', expiresAt: number): string {
-  if (action === 'accept') {
-    const parts = [
-      'a',
-      TEST_ORDER_ID.toString(36),
-      TEST_RIDER_ID.toString(36),
-      Math.floor(expiresAt / 1000).toString(36),
-      hashChatId(TEST_CHAT_ID),
-      TEST_RIDER_PHONE,
-      'Rider_1',
-    ];
-    return `rc2.${parts.join('.')}.${signShortCallbackParts(parts)}`;
-  }
-
-  return buildTelegramShortClaimCallback({
-    orderId: TEST_ORDER_ID,
-    riderId: TEST_RIDER_ID,
-    riderName: TEST_RIDER_NAME,
-    riderPhone: TEST_RIDER_PHONE,
-    restaurantId: 'shop-1',
-    telegramChatId: TEST_CHAT_ID,
-    action,
-    expiresAt,
-  });
-}
-
-function createRequest(callbackData: string): Request {
-  return new Request('https://example.com/api/telegram/rider-claim', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ callbackData, chatId: TEST_CHAT_ID }),
-  });
-}
-
-async function readJson(response: Response): Promise<Record<string, unknown>> {
-  return JSON.parse(await response.text()) as Record<string, unknown>;
-}
-
-function createFetchHandler(
-  snapshot: OrderSnapshot,
-  options?: {
-    updateStatusOk?: boolean;
-    updateStatusBody?: unknown;
-    updateStatusStatus?: number;
-  },
-): FetchHandler {
-  return async (request: Request): Promise<Response> => {
-    const url = new URL(request.url);
-
-    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
-      return jsonResponse({
-        riders: [
-          {
-            id: TEST_RIDER_ID,
-            name: TEST_RIDER_NAME,
-            phone: TEST_RIDER_PHONE,
-            telegramChatId: TEST_CHAT_ID,
-            status: 'available',
-          },
+test('readTelegramInlineKeyboard 只保留合法按钮行', () => {
+  const inlineKeyboard = readTelegramInlineKeyboard({
+    body: JSON.stringify({
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '取餐', callback_data: 'pickup' }],
+          null,
+          'invalid-row',
+          [{ text: '送达', callback_data: 'complete' }],
         ],
-      });
-    }
+      },
+    }),
+  });
 
-    if (url.pathname === '/api/admin/orders') {
-      return jsonResponse([createOrderRow(snapshot)]);
-    }
+  assert.deepEqual(inlineKeyboard, [
+    [{ text: '取餐', callback_data: 'pickup' }],
+    [{ text: '送达', callback_data: 'complete' }],
+  ]);
+});
 
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true });
-    }
+test('readTelegramInlineKeyboard 过滤非法按钮项', () => {
+  const inlineKeyboard = readTelegramInlineKeyboard({
+    body: JSON.stringify({
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '取餐', callback_data: 'pickup' },
+            null,
+            'invalid-button',
+            { callback_data: 'missing-text' },
+          ],
+        ],
+      },
+    }),
+  });
 
-    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
-      return jsonResponse(
-        options?.updateStatusBody ?? { success: options?.updateStatusOk !== false },
-        options?.updateStatusStatus ?? (options?.updateStatusOk === false ? 409 : 200),
-      );
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
-    }
-
-    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
-  };
-}
+  assert.deepEqual(inlineKeyboard, [
+    [{ text: '取餐', callback_data: 'pickup' }],
+  ]);
+});
 
 test('stale picked_up callback 在 delivering 且当前骑手匹配时可成功推进', async (t) => {
   useTestEnv(t);
@@ -255,8 +105,9 @@ test('stale picked_up callback 在 delivering 且当前骑手匹配时可成功�
   assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.ok(updateCall);
-  assert.match(updateCall.body, /"expectedCurrentStatus":"delivering"/);
-  assert.match(updateCall.body, /"status":"picked_up"/);
+  const updatePayload = readCallJson(updateCall);
+  assert.equal(updatePayload.expectedCurrentStatus, 'delivering');
+  assert.equal(updatePayload.status, 'picked_up');
   assert.equal(telegramSendCall, undefined);
 });
 
@@ -394,6 +245,130 @@ test('配送阶段 remarksJson 为空但订单仍属于当前骑手时可推进 
   assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
 });
 
+test('short callback chatId 不匹配时直接返回 rider_identity_mismatch 且不查询 rider 列表', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({
+        riders: [
+          {
+            id: TEST_RIDER_ID,
+            name: TEST_RIDER_NAME,
+            phone: TEST_RIDER_PHONE,
+            telegram_chat_id: TEST_CHAT_ID,
+            status: 'available',
+          },
+        ],
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await handleTelegramRiderClaim(new Request('https://example.com/api/telegram/rider-claim', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      callbackData: createCallback('picked_up', Date.now() - 1_000),
+      chatId: '999999999',
+    }),
+  }));
+  const body = await readJson(response);
+  const riderStatusCalls = calls.filter((call) => call.url.includes('/api/rider/status?action=list_available'));
+
+  assert.equal(response.status, 400);
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'rider_identity_mismatch');
+  assert.equal(riderStatusCalls.length, 0);
+});
+
+test('short callback 已携带骑手身份时可直接推进 picked_up 且不查询 rider 列表', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse([createOrderRow({
+        status: 'delivering',
+        remarksJson: createRemarksJson(),
+      })]);
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('picked_up', Date.now() - 1_000)));
+  const body = await readJson(response);
+  const riderStatusCalls = calls.filter((call) => call.url.includes('/api/rider/status?action=list_available'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
+  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
+  assert.equal(riderStatusCalls.length, 0);
+});
+
+
+test('short callback 不依赖 snake_case rider 列表身份也能推进 picked_up', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({
+        riders: [
+          {
+            id: TEST_RIDER_ID,
+            name: TEST_RIDER_NAME,
+            phone: TEST_RIDER_PHONE,
+            telegram_chat_id: TEST_CHAT_ID,
+            status: 'available',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse([createOrderRow({
+        status: 'delivering',
+        remarksJson: createRemarksJson(),
+      })]);
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('picked_up', Date.now() - 1_000)));
+  const body = await readJson(response);
+  const riderStatusCalls = calls.filter((call) => call.url.includes('/api/rider/status?action=list_available'));
+  const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
+  assert.equal(riderStatusCalls.length, 0);
+  const updatePayload = readCallJson(updateCall);
+  assert.equal(String(updatePayload.courierName || ''), 'Rider_1');
+});
+
 test('picked_up writes pickedUpAt and edits original telegram message instead of sending new one', async (t) => {
   useTestEnv(t);
   const acceptedAt = '2026-04-14T10:03:00.000Z';
@@ -413,9 +388,8 @@ test('picked_up writes pickedUpAt and edits original telegram message instead of
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
-  assert.ok(updateCall);
 
-  const updatePayload = JSON.parse(updateCall.body) as { id?: unknown; remarksJson?: string };
+  const updatePayload = readCallJson(updateCall) as { id?: unknown; remarksJson?: string };
   assert.equal(updatePayload.id, TEST_ORDER_ID);
   const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
   assert.equal(nextMeta.acceptedAt, acceptedAt);
@@ -424,19 +398,23 @@ test('picked_up writes pickedUpAt and edits original telegram message instead of
   assert.deepEqual(nextMeta.telegramMessageRef, { chatId: TEST_CHAT_ID, messageId: 7788 });
 
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
-  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：\d{2}:\d{2}/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
-  assert.match(telegramCalls[0]?.body || '', /菜品：/);
-  assert.match(telegramCalls[0]?.body || '', /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
-  assert.match(telegramCalls[0]?.body || '', /可乐 \/ Coca-Cola x1 · 200 RSD/);
-  assert.match(telegramCalls[0]?.body || '', /送达/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /已送达/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /Nova dodeljena porudžbina|Stavke/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"text":"Pizza One有新单/);
+  const telegramPayload = readCallJson(telegramCalls[0]);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  const inlineKeyboard = readTelegramInlineKeyboard(telegramCalls[0]);
+  assert.equal(telegramPayload.message_id, 7788);
+  assert.equal(telegramPayload.chat_id, TEST_CHAT_ID);
+  assert.match(telegramText, /状态：配送中/);
+  assert.match(telegramText, /接单时间：12:03/);
+  assert.match(telegramText, /取餐时间：\d{2}:\d{2}/);
+  assert.doesNotMatch(telegramText, /取餐时间：\d{4}-\d{2}-\d{2}T/);
+  assert.match(telegramText, /菜品：/);
+  assert.match(telegramText, /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
+  assert.match(telegramText, /可乐 \/ Coca-Cola x1 · 200 RSD/);
+  assert.doesNotMatch(telegramText, /已送达/);
+  assert.doesNotMatch(telegramText, /Nova dodeljena porudžbina|Stavke/);
+  assert.equal(telegramText.includes('Pizza One有新单'), false);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('送达'), true);
+  assert.equal(inlineKeyboard.length > 0, true);
 });
 
 test('picked_up 更新成功后即使二次读取订单失败也必须编辑原消息', async (t) => {
@@ -498,9 +476,11 @@ test('picked_up 更新成功后即使二次读取订单失败也必须编辑原�
   assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
-  assert.match(telegramCalls[0]?.body || '', /"text":"送达"/);
-  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  const inlineKeyboard = readTelegramInlineKeyboard(telegramCalls[0]);
+  assert.match(telegramText, /状态：配送中/);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('送达'), true);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('callback_data'), true);
 });
 
 test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback 不回退 admin', async (t) => {
@@ -522,9 +502,10 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.ok(telegramCall);
-  assert.match(telegramCall.body, /"shopSlug":"real-shop"/);
-  assert.match(telegramCall.body, /real-shop/);
-  assert.doesNotMatch(telegramCall.body, /admin/);
+  const telegramPayload = readCallJson(telegramCall);
+  assert.equal(telegramPayload.shopSlug, 'real-shop');
+  assert.equal(JSON.stringify(telegramPayload).includes('real-shop'), true);
+  assert.equal(JSON.stringify(telegramPayload).includes('admin'), false);
 });
 
  test('complete edits original telegram message to readonly delivered state without action buttons', async (t) => {
@@ -548,9 +529,8 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.action, 'complete');
-  assert.ok(updateCall);
 
-  const updatePayload = JSON.parse(updateCall.body) as { remarksJson?: string };
+  const updatePayload = readCallJson(updateCall) as { remarksJson?: string };
   const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
   assert.equal(nextMeta.acceptedAt, acceptedAt);
   assert.equal(nextMeta.pickedUpAt, pickedUpAt);
@@ -558,21 +538,23 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   assert.deepEqual(nextMeta.telegramMessageRef, { chatId: TEST_CHAT_ID, messageId: 7788 });
 
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /状态：已送达/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：12:19/);
-  assert.match(telegramCalls[0]?.body || '', /送达时间：\d{2}:\d{2}/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /送达时间：\d{4}-\d{2}-\d{2}T/);
-  assert.match(telegramCalls[0]?.body || '', /菜品：/);
-  assert.match(telegramCalls[0]?.body || '', /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
-  assert.match(telegramCalls[0]?.body || '', /可乐 \/ Coca-Cola x1 · 200 RSD/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"callback_data":/);
-  assert.match(telegramCalls[0]?.body || '', /取餐导航/);
-  assert.match(telegramCalls[0]?.body || '', /送餐导航/);
-  assert.match(telegramCalls[0]?.body || '', /"inline_keyboard":\[\[/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /Nova dodeljena porudžbina|Stavke/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"text":"Pizza One有新单/);
+  const telegramPayload = readCallJson(telegramCalls[0]);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  const inlineKeyboard = readTelegramInlineKeyboard(telegramCalls[0]);
+  assert.equal(telegramPayload.message_id, 7788);
+  assert.match(telegramText, /状态：已送达/);
+  assert.match(telegramText, /接单时间：12:03/);
+  assert.match(telegramText, /取餐时间：12:19/);
+  assert.match(telegramText, /送达时间：\d{2}:\d{2}/);
+  assert.doesNotMatch(telegramText, /送达时间：\d{4}-\d{2}-\d{2}T/);
+  assert.match(telegramText, /菜品：/);
+  assert.match(telegramText, /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
+  assert.match(telegramText, /可乐 \/ Coca-Cola x1 · 200 RSD/);
+  assert.equal(telegramText.includes('Nova dodeljena porudžbina'), false);
+  assert.equal(telegramText.includes('Stavke'), false);
+  assert.equal(telegramText.includes('Pizza One有新单'), false);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('callback_data'), false);
+  assert.equal(inlineKeyboard.length > 0, true);
 });
 
 test('配送阶段 admin orders 只返回 remarks_json 时仍能识别当前骑手并推进 picked_up', async (t) => {
@@ -737,6 +719,232 @@ test('complete 在订单快照仍为 delivering 时返回 order_status_updated �
   assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), false);
 });
 
+test('handleTelegramProgressActionTransition 统一处理 complete 分支的同步与回包', async (t) => {
+  useTestEnv(t);
+  const acceptedAt = '2026-04-14T10:03:00.000Z';
+  const pickedUpAt = '2026-04-14T10:19:00.000Z';
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'picked_up',
+    remarksJson: createRemarksJson({
+      acceptedAt,
+      pickedUpAt,
+      telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+    }),
+  }));
+
+  const response = await handleTelegramProgressActionTransition({
+    request: createRequest(createCallback('complete', Date.now() + 60_000)),
+    callback: {
+      orderId: String(TEST_ORDER_ID),
+      riderId: String(TEST_RIDER_ID),
+      restaurantId: 'shop-1',
+      action: 'complete',
+    },
+    actionDecision: {
+      targetStatus: 'completed',
+    },
+    orderIdText: String(TEST_ORDER_ID),
+    riderIdText: String(TEST_RIDER_ID),
+    resolvedName: TEST_RIDER_NAME,
+    resolvedPhone: TEST_RIDER_PHONE,
+    nextRemarksJson: createRemarksJson({
+      acceptedAt,
+      pickedUpAt,
+      completedAt: '2026-04-14T10:55:00.000Z',
+      telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+    }),
+    orderDetailForProgress: createOrderRow({
+      status: 'picked_up',
+      remarksJson: createRemarksJson({
+        acceptedAt,
+        pickedUpAt,
+        telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+      }),
+    }),
+    upstream: jsonResponse({ success: true }),
+    text: JSON.stringify({ success: true }),
+  });
+  const body = await readJson(response);
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'complete');
+  assert.equal(telegramCalls.length, 1);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  assert.match(telegramText, /状态：已送达/);
+});
+
+test('handleTelegramProgressSubmission 统一处理 feedback 写入与 update_status 提交', async (t) => {
+  useTestEnv(t);
+  const baseRemarksJson = createRemarksJson();
+  const nextRemarksJson = createRemarksJson();
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const result = await handleTelegramProgressSubmission({
+    request: createRequest(createCallback('accept', Date.now() + 60_000)),
+    callback: {
+      orderId: String(TEST_ORDER_ID),
+      riderId: String(TEST_RIDER_ID),
+      action: 'accept',
+    },
+    orderIdText: String(TEST_ORDER_ID),
+    resolvedName: TEST_RIDER_NAME,
+    resolvedPhone: TEST_RIDER_PHONE,
+    chatId: TEST_CHAT_ID,
+    nowIso: '2026-04-17T10:00:00.000Z',
+    orderDetailForProgress: createOrderRow({
+      status: 'awaiting_courier',
+      remarksJson: baseRemarksJson,
+    }),
+    actionDecision: {
+      expectedCurrentStatus: 'awaiting_courier',
+      targetStatus: 'delivering',
+      feedbackWriteMode: 'admin_remarks',
+      nextRemarksJson,
+    },
+  });
+  const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
+
+  assert.equal(result.feedbackWritten, true);
+  assert.equal(result.nextRemarksJson, nextRemarksJson);
+  assert.equal(result.text, JSON.stringify({ success: true }));
+  assert.equal(result.upstream.status, 200);
+  assert.ok(updateCall);
+  const updatePayload = readCallJson(updateCall);
+  assert.equal(updatePayload.id, TEST_ORDER_ID);
+  assert.equal(updatePayload.status, 'delivering');
+  assert.equal(updatePayload.courierName, TEST_RIDER_NAME);
+  assert.equal(updatePayload.courierPhone, TEST_RIDER_PHONE);
+});
+
+test('handleTelegramNonDeclineAction 串联 submission 与 transition', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const acceptedAt = '2026-04-14T10:03:00.000Z';
+  const response = await handleTelegramNonDeclineAction({
+    request: createRequest(createCallback('picked_up', Date.now() + 60_000)),
+    callback: {
+      orderId: String(TEST_ORDER_ID),
+      riderId: String(TEST_RIDER_ID),
+      restaurantId: 'shop-1',
+      action: 'picked_up',
+    },
+    orderIdText: String(TEST_ORDER_ID),
+    riderIdText: String(TEST_RIDER_ID),
+    resolvedName: TEST_RIDER_NAME,
+    resolvedPhone: TEST_RIDER_PHONE,
+    chatId: TEST_CHAT_ID,
+    nowIso: '2026-04-17T10:00:00.000Z',
+    orderDetailForProgress: createOrderRow({
+      status: 'delivering',
+      remarksJson: createRemarksJson({
+        acceptedAt,
+        telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+      }),
+    }),
+    actionDecision: {
+      expectedCurrentStatus: 'delivering',
+      targetStatus: 'picked_up',
+      feedbackWriteMode: 'update_status_remarks',
+      nextRemarksJson: createRemarksJson({
+        acceptedAt,
+        telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+      }),
+    },
+  });
+  const body = await readJson(response);
+  const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
+  assert.ok(updateCall);
+  assert.equal(telegramCalls.length, 1);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  assert.match(telegramText, /状态：配送中/);
+});
+
+test('handleTelegramDeclineAction 通过共享 buildRiderProgressUpdate 生成 decline payload', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({ riders: [] });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await handleTelegramDeclineAction({
+    request: createRequest(createCallback('picked_up', Date.now() + 60_000)),
+    callback: {
+      orderId: String(TEST_ORDER_ID),
+      riderId: String(TEST_RIDER_ID),
+      riderName: TEST_RIDER_NAME,
+      riderPhone: TEST_RIDER_PHONE,
+    },
+    actionDecision: {
+      expectedCurrentStatus: 'awaiting_courier',
+      targetStatus: 'awaiting_courier',
+      feedbackWriteMode: 'update_status_remarks',
+      nextRemarksJson: createRemarksJson({ declinedRiderIds: ['404'] }),
+      excludedRiderIds: [String(TEST_RIDER_ID)],
+    },
+    orderIdText: String(TEST_ORDER_ID),
+    riderIdText: String(TEST_RIDER_ID),
+    resolvedName: TEST_RIDER_NAME,
+    resolvedPhone: TEST_RIDER_PHONE,
+    chatId: TEST_CHAT_ID,
+  });
+  const body = await readJson(response);
+  const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'decline');
+  assert.ok(updateCall);
+  const updatePayload = readCallJson(updateCall);
+  assert.equal(updatePayload.id, TEST_ORDER_ID);
+  assert.equal(Object.prototype.hasOwnProperty.call(updatePayload, 'courierName'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(updatePayload, 'courierPhone'), false);
+});
+
 test('decline 通过共享 actionDecision 的单一路径写回 update_status remarks 且不走 admin remarks', async (t) => {
   useTestEnv(t);
   const calls = useMockFetch(t, async (request) => {
@@ -774,16 +982,7 @@ test('decline 通过共享 actionDecision 的单一路径写回 update_status re
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
   });
 
-  const declineCallback = buildTelegramShortClaimCallback({
-    orderId: TEST_ORDER_ID,
-    riderId: TEST_RIDER_ID,
-    riderName: TEST_RIDER_NAME,
-    riderPhone: TEST_RIDER_PHONE,
-    restaurantId: 'shop-1',
-    telegramChatId: TEST_CHAT_ID,
-    action: 'decline',
-    expiresAt: Date.now() + 60_000,
-  });
+  const declineCallback = createCallback('decline', Date.now() + 60_000);
   const response = await handleTelegramRiderClaim(createRequest(declineCallback));
   const body = await readJson(response);
   const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
@@ -794,7 +993,7 @@ test('decline 通过共享 actionDecision 的单一路径写回 update_status re
   assert.ok(updateCall);
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
 
-  const updatePayload = JSON.parse(updateCall.body) as {
+  const updatePayload = readCallJson(updateCall) as {
     expectedCurrentStatus?: string;
     status?: string;
     remarksJson?: string;
@@ -811,8 +1010,8 @@ test('decline 通过共享 actionDecision 的单一路径写回 update_status re
   assert.deepEqual(nextMeta.declinedRiderIds, ['404', String(TEST_RIDER_ID)]);
   assert.deepEqual(nextMeta.invalidatedRiderIds, [String(TEST_RIDER_ID)]);
   assert.equal(nextMeta.lastInvalidationReason, 'declined');
-  assert.doesNotMatch(updateCall.body, /"courierName"/);
-  assert.doesNotMatch(updateCall.body, /"courierPhone"/);
+  assert.equal(Object.prototype.hasOwnProperty.call(updatePayload, 'courierName'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(updatePayload, 'courierPhone'), false);
 });
 
 test('decline update_status 调用会透传 cookie 和 authorization 头', async (t) => {
@@ -852,16 +1051,7 @@ test('decline update_status 调用会透传 cookie 和 authorization 头', async
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
   });
 
-  const declineCallback = buildTelegramShortClaimCallback({
-    orderId: TEST_ORDER_ID,
-    riderId: TEST_RIDER_ID,
-    riderName: TEST_RIDER_NAME,
-    riderPhone: TEST_RIDER_PHONE,
-    restaurantId: 'shop-1',
-    telegramChatId: TEST_CHAT_ID,
-    action: 'decline',
-    expiresAt: Date.now() + 60_000,
-  });
+  const declineCallback = createCallback('decline', Date.now() + 60_000);
   const response = await handleTelegramRiderClaim(new Request('https://example.com/api/telegram/rider-claim', {
     method: 'POST',
     headers: {
@@ -948,9 +1138,10 @@ test('accept 成功时即使 list_available 不再返回当前骑手，也必须
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"text":"取餐"/);
-  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+  const inlineKeyboard = readTelegramInlineKeyboard(telegramCalls[0]);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('取餐'), true);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('callback_data'), true);
+  assert.notDeepEqual(inlineKeyboard, []);
 });
 
 test('accept 成功时订单只有 restaurantId 也必须编辑出取餐按钮', async (t) => {
@@ -1001,10 +1192,12 @@ test('accept 成功时订单只有 restaurantId 也必须编辑出取餐按钮',
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"shopSlug":"103"/);
-  assert.match(telegramCalls[0]?.body || '', /"text":"取餐"/);
-  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+  const telegramPayload = readCallJson(telegramCalls[0]);
+  const inlineKeyboard = readTelegramInlineKeyboard(telegramCalls[0]);
+  assert.equal(telegramPayload.shopSlug, '103');
+  assert.equal(JSON.stringify(inlineKeyboard).includes('取餐'), true);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('callback_data'), true);
+  assert.notDeepEqual(inlineKeyboard, []);
 });
 
 test('accept 成功时写回 dispatch_meta 保留当前骑手位，并把 Telegram 原消息切到待取餐', async (t) => {
@@ -1050,12 +1243,84 @@ test('accept 成功时写回 dispatch_meta 保留当前骑手位，并把 Telegr
   assert.equal(updateCall.headers.get('authorization'), null);
   assert.equal(telegramCalls.length, 1);
   assert.equal(telegramCalls[0]?.url, 'https://example.com/api/telegram/send');
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /状态：待取餐/);
-  assert.match(telegramCalls[0]?.body || '', /"text":"取餐"/);
-  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /送达/);
+  const telegramPayload = readCallJson(telegramCalls[0]);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  const inlineKeyboard = readTelegramInlineKeyboard(telegramCalls[0]);
+  assert.equal(telegramPayload.message_id, 7788);
+  assert.match(telegramText, /状态：待取餐/);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('取餐'), true);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('callback_data'), true);
+  assert.notDeepEqual(inlineKeyboard, []);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('送达'), false);
+});
+
+test('accept 成功时 admin orders 未授权且回退 rider orders 仍保留取餐导航', async (t) => {
+  useTestEnv(t);
+  const currentAssignedAt = new Date(Date.now() - 60_000).toISOString();
+  const currentExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
+  const existingRemarksJson = createRemarksJson({
+    currentAssignedAt,
+    currentExpiresAt,
+    telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+  });
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({ riders: [] });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse({ success: false, error: 'unauthorized' }, 401);
+    }
+
+    if (url.pathname === '/api/rider/orders') {
+      return jsonResponse({
+        success: true,
+        orders: [
+          {
+            ...createOrderRow({
+              status: 'awaiting_courier',
+              remarksJson: existingRemarksJson,
+            }),
+            shopAddress: '',
+            restaurantAddress: 'Bulevar 1',
+            shopMapUrl: 'https://maps.example.com/shop-a',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('accept', Date.now() + 60_000)));
+  const body = await readJson(response);
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(calls.some((call) => call.url.includes('/api/rider/orders?phone=')), true);
+  assert.equal(telegramCalls.length, 1);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  const inlineKeyboard = readTelegramInlineKeyboard(telegramCalls[0]);
+  assert.match(telegramText, /状态：待取餐/);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('取餐导航'), true);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('送餐导航'), true);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('https://maps.example.com/shop-a'), true);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('取餐'), true);
 });
 
 test('accept update_status 调用会透传 cookie 和 authorization 头', async (t) => {
@@ -1087,5 +1352,73 @@ test('accept update_status 调用会透传 cookie 和 authorization 头', async 
   assert.ok(updateCall);
   assert.equal(updateCall.headers.get('cookie'), 'admin_session=abc123');
   assert.equal(updateCall.headers.get('authorization'), 'Bearer test-token');
+});
+
+test('accept 编辑原消息遇到 telegram 502 html 时会去掉 reply_markup 重试一次', async (t) => {
+  useTestEnv(t);
+  const currentAssignedAt = new Date(Date.now() - 60_000).toISOString();
+  const currentExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
+  const existingRemarksJson = createRemarksJson({
+    currentAssignedAt,
+    currentExpiresAt,
+    telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+  });
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({
+        riders: [
+          {
+            id: TEST_RIDER_ID,
+            name: TEST_RIDER_NAME,
+            phone: TEST_RIDER_PHONE,
+            telegramChatId: TEST_CHAT_ID,
+            status: 'available',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse([createOrderRow({
+        status: 'awaiting_courier',
+        remarksJson: existingRemarksJson,
+      })]);
+    }
+
+    if (url.pathname === '/api/admin/orders/remarks') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      const body = await request.clone().text();
+      if (body.includes('reply_markup')) {
+        return new Response('<html>502 Bad Gateway</html>', {
+          status: 502,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await handleTelegramRiderClaim(createRequest(createCallback('accept', Date.now() + 60_000)));
+  const body = await readJson(response);
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(telegramCalls.length, 2);
+  const firstTelegramPayload = readCallJson(telegramCalls[0]);
+  const secondTelegramPayload = readCallJson(telegramCalls[1]);
+  assert.equal(Object.prototype.hasOwnProperty.call(firstTelegramPayload, 'reply_markup'), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(secondTelegramPayload, 'reply_markup'), false);
 });
 

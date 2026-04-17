@@ -1,5 +1,8 @@
 # User Identity Links + Login Fix Implementation Plan
 
+> 状态说明（历史计划）：这份计划反映的是当时围绕 user identity link 的拆分与测试推进方式，文中的 `历史红灯预期：`、旧 worktree 路径与旧测试文件名属于阶段性记录，不应再被直接当作当前实施清单。
+> 若继续处理 user login / bind / history 语义，请先以当前真实前后端代码为准，不要反向恢复这里的历史测试结构。
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix "账号错乱" by treating `login_account` as the canonical identity (sessionToken), adding a proper *binding/alias* mechanism so an ID account (e.g. `888`) can see delivery history stored under a phone key (e.g. `0613083899`), and separating user login from user history.
@@ -20,8 +23,8 @@
 - Modify: `D:/ai/food2/.worktrees/260311/meituanGo/cmd/server/main.go`
 - Modify: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/mobile.go`
 - Create: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/user_identity_links.go`
-- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/user_identity_links_test.go`
-- Modify (tests): `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/mobile_test.go`
+- Test: `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/user_identity_links_test．go（历史文件名）`
+- Modify (tests): `D:/ai/food2/.worktrees/260311/meituanGo/internal/handlers/mobile_test．go（历史文件名）`
 
 ### Frontend (meituanAstro)
 - Modify: `D:/ai/food2/.worktrees/260311/meituanAstro/src/lib/user-api-route.ts`
@@ -43,11 +46,11 @@
 **Files:**
 - Modify: `meituanGo/internal/db/migrations.go`
 - Create: `meituanGo/internal/handlers/user_identity_links.go`
-- Test: `meituanGo/internal/handlers/user_identity_links_test.go`
+- Test: `meituanGo/internal/handlers/user_identity_links_test．go（历史文件名）`
 
 - [ ] **Step 1: Write failing test (table + insert works)**
 
-Create `internal/handlers/user_identity_links_test.go`:
+Create `internal/handlers/user_identity_links_test．go（历史文件名）`:
 
 ```go
 package handlers
@@ -86,7 +89,7 @@ func TestUserBindCreatesIdentityLink(t *testing.T) {
 }
 ```
 
-Expected: FAIL because `UserBindIdentity` and/or table don’t exist.
+历史红灯预期： because `UserBindIdentity` and/or table don’t exist.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -127,7 +130,7 @@ Same command as Step 2.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/db/migrations.go internal/handlers/user_identity_links.go internal/handlers/user_identity_links_test.go
+git add internal/db/migrations.go internal/handlers/user_identity_links.go internal/handlers/user_identity_links_test．go（历史文件名）
 
 git commit -m "feat(user): add identity link table and bind endpoint"
 ```
@@ -138,11 +141,11 @@ git commit -m "feat(user): add identity link table and bind endpoint"
 
 **Files:**
 - Modify: `meituanGo/internal/handlers/mobile.go`
-- Modify: `meituanGo/internal/handlers/mobile_test.go`
+- Modify: `meituanGo/internal/handlers/mobile_test．go（历史文件名）`
 
 - [ ] **Step 1: Write failing test (linked alias shows delivery)**
 
-In `mobile_test.go`, add a new test (or replace the existing sessionToken merge test if it’s now conceptually wrong):
+In `mobile_test．go（历史文件名）`, add a new test (or replace the existing sessionToken merge test if it’s now conceptually wrong):
 
 ```go
 func TestUserHistorySessionTokenIncludesLinkedAliasDeliveryOnly(t *testing.T) {
@@ -201,7 +204,7 @@ func TestUserHistorySessionTokenIncludesLinkedAliasDeliveryOnly(t *testing.T) {
 }
 ```
 
-Expected: FAIL because `UserHistory` currently only uses `{token, users.phone}` and doesn’t consult `user_identity_links`.
+历史红灯预期： because `UserHistory` currently only uses `{token, users.phone}` and doesn’t consult `user_identity_links`.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -232,7 +235,7 @@ Same as Step 2.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/handlers/mobile.go internal/handlers/mobile_test.go
+git add internal/handlers/mobile.go internal/handlers/mobile_test．go（历史文件名）
 
 git commit -m "fix(user): merge delivery history via identity links"
 ```
@@ -246,7 +249,7 @@ git commit -m "fix(user): merge delivery history via identity links"
 **Files:**
 - Create/Modify: `meituanGo/internal/handlers/user_login.go` (or extend `user_identity_links.go` if you prefer 1 file; keep it focused)
 - Modify: `meituanGo/cmd/server/main.go`
-- Test: `meituanGo/internal/handlers/user_login_test.go` (or extend `mobile_test.go`)
+- Test: `meituanGo/internal/handlers/user_login_test．go（历史文件名）` (or extend `mobile_test．go（历史文件名）`)
 
 - [ ] **Step 1: Write failing test (login returns canonical sessionToken)**
 
@@ -256,7 +259,7 @@ Test case:
 - call `POST /api/user/login` with `{login_account:"0613083899", password:"secret"}`
 - expect 200 success and `sessionToken:"888"`
 
-Expected: FAIL (endpoint missing).
+历史红灯预期： (endpoint missing).
 
 - [ ] **Step 2: Run test to verify it fails**
 

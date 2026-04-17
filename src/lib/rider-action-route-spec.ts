@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
 
 import { readDispatchMetaFromRemarks, buildDispatchMetaRemarks } from './rider-dispatch.ts';
-import { POST as riderActionPost } from '../pages/api/rider/action.ts';
+import { POST as riderActionPost, handleRiderProgressActionTransition } from '../pages/api/rider/action.ts';
 
 const TEST_API_BASE = 'https://api.example.com';
 const TEST_SECRET = 'test-secret';
@@ -124,6 +124,66 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
   return JSON.parse(await response.text()) as Record<string, unknown>;
 }
 
+function readCallJson(call: { body: string } | undefined): Record<string, unknown> {
+  assert.ok(call, 'expected mocked fetch call');
+  return JSON.parse(call.body) as Record<string, unknown>;
+}
+
+function readTelegramText(call: { body: string } | undefined): string {
+  return String(readCallJson(call).text || '');
+}
+
+function readTelegramInlineKeyboard(call: { body: string } | undefined): unknown[][] {
+  const replyMarkup = readCallJson(call).reply_markup as { inline_keyboard?: unknown[][] } | undefined;
+  if (!Array.isArray(replyMarkup?.inline_keyboard)) return [];
+  return replyMarkup.inline_keyboard
+    .filter((row): row is unknown[] => Array.isArray(row))
+    .map((row) => row.filter((button) => {
+      if (!button || typeof button !== 'object') return false;
+      const candidate = button as { text?: unknown; callback_data?: unknown; url?: unknown };
+      return typeof candidate.text === 'string'
+        && (typeof candidate.callback_data === 'string' || typeof candidate.url === 'string');
+    }))
+    .filter((row) => row.length > 0);
+}
+
+test('readTelegramInlineKeyboard 过滤 rider action 非法按钮项', () => {
+  const inlineKeyboard = readTelegramInlineKeyboard({
+    body: JSON.stringify({
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '取餐', callback_data: 'pickup' },
+            null,
+            'invalid-button',
+          ],
+        ],
+      },
+    }),
+  });
+
+  assert.deepEqual(inlineKeyboard, [
+    [{ text: '取餐', callback_data: 'pickup' }],
+  ]);
+});
+
+test('readTelegramInlineKeyboard 会丢弃过滤后为空的按钮行', () => {
+  const inlineKeyboard = readTelegramInlineKeyboard({
+    body: JSON.stringify({
+      reply_markup: {
+        inline_keyboard: [
+          [null, 'invalid-button'],
+          [{ text: '送达', callback_data: 'complete' }],
+        ],
+      },
+    }),
+  });
+
+  assert.deepEqual(inlineKeyboard, [
+    [{ text: '送达', callback_data: 'complete' }],
+  ]);
+});
+
 function createActionRequest(body: Record<string, unknown>): Request {
   return new Request('https://example.com/api/rider/action', {
     method: 'POST',
@@ -188,6 +248,47 @@ function createFetchHandler(
   };
 }
 
+test('handleRiderProgressActionTransition 统一处理 complete 分支的同步与回包', async (t) => {
+  useTestEnv(t);
+  const acceptedAt = '2026-04-14T10:03:00.000Z';
+  const pickedUpAt = '2026-04-14T10:19:00.000Z';
+  const calls = useMockFetch(t, createFetchHandler({
+    status: 'picked_up',
+    remarksJson: createRemarksJson({
+      acceptedAt,
+      pickedUpAt,
+      telegramMessageRef: { chatId: '123456789', messageId: 7788 },
+    }),
+  }));
+
+  const response = await handleRiderProgressActionTransition({
+    request: createActionRequest({ action: 'complete' }),
+    action: 'complete',
+    upstream: jsonResponse({ success: true }),
+    text: JSON.stringify({ success: true }),
+    orderId: String(TEST_ORDER_ID),
+    riderId: String(TEST_RIDER_ID),
+    riderName: TEST_RIDER_NAME,
+    riderPhone: TEST_RIDER_PHONE,
+    nextRemarksJson: createRemarksJson({
+      acceptedAt,
+      pickedUpAt,
+      completedAt: '2026-04-14T10:55:00.000Z',
+      telegramMessageRef: { chatId: '123456789', messageId: 7788 },
+    }),
+    fallbackShopSlug: '',
+  });
+  const body = await readJson(response);
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'complete');
+  assert.equal(telegramCalls.length, 1);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  assert.match(telegramText, /状态：已送达/);
+});
+
 test('accept 主链路先写 admin remarks 再 update_status，并把 Telegram 原消息切到待取餐', async (t) => {
   useTestEnv(t);
   const currentAssignedAt = new Date(Date.now() - 60_000).toISOString();
@@ -247,12 +348,15 @@ test('accept 主链路先写 admin remarks 再 update_status，并把 Telegram �
   assert.equal(updatePayload.status, 'delivering');
   assert.equal(telegramCalls.length, 1);
   assert.equal(telegramCalls[0]?.url, 'https://example.com/api/telegram/send');
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /状态：待取餐/);
-  assert.match(telegramCalls[0]?.body || '', /"text":"取餐"/);
-  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /送达/);
+  const telegramPayload = readCallJson(telegramCalls[0]);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  const inlineKeyboard = readTelegramInlineKeyboard(telegramCalls[0]);
+  assert.equal(telegramPayload.message_id, 7788);
+  assert.match(telegramText, /状态：待取餐/);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('取餐'), true);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('callback_data'), true);
+  assert.notDeepEqual(inlineKeyboard, []);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('送达'), false);
 });
 
 test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达按钮', async (t) => {
@@ -286,7 +390,7 @@ test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达�
   assert.equal(body.action, 'picked_up');
   assert.ok(updateCall);
 
-  const updatePayload = JSON.parse(updateCall.body) as { id?: unknown; remarksJson?: string };
+  const updatePayload = readCallJson(updateCall) as { id?: unknown; remarksJson?: string };
   assert.equal(updatePayload.id, TEST_ORDER_ID);
   const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
   assert.equal(nextMeta.acceptedAt, acceptedAt);
@@ -295,15 +399,18 @@ test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达�
   assert.deepEqual(nextMeta.telegramMessageRef, { chatId: '123456789', messageId: 7788 });
 
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
-  assert.match(telegramCalls[0]?.body || '', /"shopSlug":"real-shop"/);
-  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：2026-04-14T10:03:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：2026-04-14T10:25:30.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /送达/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /已送达/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+  const telegramPayload = readCallJson(telegramCalls[0]);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  const inlineKeyboard = readTelegramInlineKeyboard(telegramCalls[0]);
+  assert.equal(telegramPayload.message_id, 7788);
+  assert.equal(telegramPayload.chat_id, '123456789');
+  assert.equal(telegramPayload.shopSlug, 'real-shop');
+  assert.match(telegramText, /状态：配送中/);
+  assert.match(telegramText, /接单时间：12:03/);
+  assert.match(telegramText, /取餐时间：12:25/);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('送达'), true);
+  assert.equal(telegramText.includes('已送达'), false);
+  assert.notDeepEqual(inlineKeyboard, []);
 });
 
 test('picked_up 缺少订单 shopSlug 时使用请求体回退 shop slug 保留送达按钮', async (t) => {
@@ -337,10 +444,13 @@ test('picked_up 缺少订单 shopSlug 时使用请求体回退 shop slug 保留�
   assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"shopSlug":"dashboard-shop"/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：2026-04-14T10:40:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /送达/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+  const telegramPayload = readCallJson(telegramCalls[0]);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  const inlineKeyboard = readTelegramInlineKeyboard(telegramCalls[0]);
+  assert.equal(telegramPayload.shopSlug, 'dashboard-shop');
+  assert.match(telegramText, /取餐时间：12:40/);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('送达'), true);
+  assert.notDeepEqual(inlineKeyboard, []);
 });
 
 test('complete 写入 completedAt 并同步编辑 telegram 原消息为只读送达态', async (t) => {
@@ -376,7 +486,7 @@ test('complete 写入 completedAt 并同步编辑 telegram 原消息为只读送
   assert.equal(body.action, 'complete');
   assert.ok(updateCall);
 
-  const updatePayload = JSON.parse(updateCall.body) as { remarksJson?: string };
+  const updatePayload = readCallJson(updateCall) as { remarksJson?: string };
   const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
   assert.equal(nextMeta.acceptedAt, acceptedAt);
   assert.equal(nextMeta.pickedUpAt, pickedUpAt);
@@ -384,14 +494,18 @@ test('complete 写入 completedAt 并同步编辑 telegram 原消息为只读送
   assert.deepEqual(nextMeta.telegramMessageRef, { chatId: '123456789', messageId: 7788 });
 
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
-  assert.match(telegramCalls[0]?.body || '', /状态：已送达/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：2026-04-14T10:03:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：2026-04-14T10:19:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /送达时间：2026-04-14T10:55:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"callback_data":/);
+  const telegramPayload = readCallJson(telegramCalls[0]);
+  const telegramText = readTelegramText(telegramCalls[0]);
+  const inlineKeyboard = readTelegramInlineKeyboard(telegramCalls[0]);
+  assert.equal(telegramPayload.message_id, 7788);
+  assert.equal(telegramPayload.chat_id, '123456789');
+  assert.match(telegramText, /状态：已送达/);
+  assert.match(telegramText, /接单时间：12:03/);
+  assert.match(telegramText, /取餐时间：12:19/);
+  assert.match(telegramText, /送达时间：12:55/);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('送餐导航'), true);
+  assert.notDeepEqual(inlineKeyboard, []);
+  assert.equal(JSON.stringify(inlineKeyboard).includes('callback_data'), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
 });
 
@@ -420,7 +534,7 @@ test('decline 主链路只走 update_status + remarksJson', async (t) => {
   assert.ok(updateCall);
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
 
-  const updatePayload = JSON.parse(updateCall.body) as {
+  const updatePayload = readCallJson(updateCall) as {
     expectedCurrentStatus?: string;
     status?: string;
     remarksJson?: string;
@@ -441,6 +555,62 @@ test('decline 主链路只走 update_status + remarksJson', async (t) => {
   assert.deepEqual(nextMeta.declinedRiderIds, ['404', String(TEST_RIDER_ID)]);
   assert.deepEqual(nextMeta.invalidatedRiderIds, [String(TEST_RIDER_ID)]);
   assert.equal(nextMeta.lastInvalidationReason, 'declined');
+});
+
+test('picked_up 遇到 telegram 502 html 时会去掉 reply_markup 重试一次', async (t) => {
+  useTestEnv(t);
+  const acceptedAt = '2026-04-14T10:03:00.000Z';
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse([createOrderRow({
+        status: 'delivering',
+        remarksJson: createRemarksJson({
+          acceptedAt,
+          telegramMessageRef: { chatId: '123456789', messageId: 7788 },
+        }),
+      })]);
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      const body = await request.clone().text();
+      if (body.includes('reply_markup')) {
+        return new Response('<html>502 Bad Gateway</html>', {
+          status: 502,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await riderActionPost({
+    request: createActionRequest({
+      action: 'picked_up',
+      orderId: String(TEST_ORDER_ID),
+      riderId: String(TEST_RIDER_ID),
+      riderName: TEST_RIDER_NAME,
+      riderPhone: TEST_RIDER_PHONE,
+    }),
+  } as never);
+  const body = await readJson(response);
+  const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'picked_up');
+  assert.equal(telegramCalls.length, 2);
+  const firstTelegramPayload = readCallJson(telegramCalls[0]);
+  const secondTelegramPayload = readCallJson(telegramCalls[1]);
+  assert.equal(Object.prototype.hasOwnProperty.call(firstTelegramPayload, 'reply_markup'), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(secondTelegramPayload, 'reply_markup'), false);
 });
 
 test('无效入参返回 400 invalid_rider_action', async (t) => {

@@ -3,7 +3,7 @@ import Layout from '../../../layouts/Layout.astro';
 import { API_BASE_URL, APP_VERSION } from '../../../config';
 import { isHallLikeZoneName, isPlaceholderZoneName } from '../../../lib/table-config';
 import { orderMatchesAnyConfiguredTable } from '../../../lib/admin-table-ref';
-import { asObject, parseMaybeJSON, normalizeJSONString, normalizeRemarkJSONString, resolveTableConfig, buildTableCards, isActiveDineInOrder } from '../../../lib/admin-dashboard-utils';
+import { asObject, parseMaybeJSON, normalizeAdminOrderItemsJSONString, normalizeRemarkJSONString, resolveTableConfig, buildTableCards, isActiveDineInOrder } from '../../../lib/admin-dashboard-utils';
 import { fetchJSON } from '../../../lib/admin-fetch-json';
 import { buildAdminOrderChannelBillingView } from '../../../lib/admin-order-channel-billing-view.ts';
 import { buildDineInBillingState } from '../../../lib/dine-in-billing.ts';
@@ -220,7 +220,7 @@ const orders = rawOrders.map((o: any) => ({
   orderType: String(o?.orderType || (String(o?.tableInfo || '').trim() ? 'dine_in' : '')),
   status: String(o?.status || (String(o?.tableInfo || '').trim() ? 'pending' : '')),
   totalAmount: Number(o?.totalAmount ?? 0),
-  itemsJson: normalizeJSONString(o?.itemsJson, '{}'),
+  itemsJson: normalizeAdminOrderItemsJSONString(o?.itemsJson),
   remarksJson: normalizeRemarkJSONString(o?.remarksJson),
   tableInfo: String(o?.tableInfo || ''),
   userPhone: String(o?.userPhone || ''),

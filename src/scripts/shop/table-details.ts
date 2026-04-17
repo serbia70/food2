@@ -1,3 +1,5 @@
+import { buildOrderItemSummaryShared } from '../../lib/order-items-shared.ts';
+
 type TableDetailsDeps = {
   shopSlug: string;
   buildTableLookupKeys: (tableValue: string) => string[];
@@ -154,25 +156,7 @@ export const createTableDetails = (deps: TableDetailsDeps) => {
           const raw = String((o && o.createdAt) || '').replace(' ', 'T');
           const d = new Date(raw.endsWith('Z') ? raw : `${raw}Z`);
           const t = Number.isNaN(d.getTime()) ? String((o && o.createdAt) || '--') : fmt.format(d);
-          let itemText = '';
-          try {
-            const parsed = JSON.parse(String((o && o.itemsJson) || '[]'));
-            const arr = Array.isArray(parsed)
-              ? parsed
-              : parsed && typeof parsed === 'object'
-                ? Object.values(parsed)
-                : [];
-            itemText = arr
-              .map((it: any) => {
-                const n = String((it && (it.name || it.productName)) || '').trim();
-                const sub = String((it && (it.subName)) || '').trim();
-                const q = Number((it && (it.quantity || it.qty)) || 1);
-                if (!n) return '';
-                return `${n}${sub ? `(${sub})` : ''}x${q}`;
-              })
-              .filter(Boolean)
-              .join('、');
-          } catch {}
+          const itemText = buildOrderItemSummaryShared(o && o.itemsJson);
 
           const base = `${idx + 1}. #${(o && (o.orderNo || o.id)) || ''} | ${(o && o.totalAmount) || 0} RSD | ${t}`;
           return itemText ? `${base}\n   菜品: ${itemText}` : base;

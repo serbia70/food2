@@ -1,5 +1,11 @@
 # 2026-04-11 骑手三端统一动作与同步设计
 
+> 状态说明（已过期）：这份设计是中间方案，里面“新增 rider web 专用 action route”“Telegram 发送第二条阶段消息（历史方案）推进阶段”等决策已被后续实现否定。
+> 当前应以 `docs/superpowers/specs/2026-04-15-dispatch-telegram-rider-admin-cleanup-design.md` 与 `src/lib/rider-dispatch.ts` / `src/lib/telegram-dispatch.ts` 为准：
+> - rider dashboard 继续走现有 `src/pages/api/rider/action.ts`
+> - Telegram 对单订单保留单条可编辑消息，不再以发送第二条阶段消息（历史方案）作为当前规则
+> - 导航、状态词、动作词都从共享 helper 输出，页面与消息层不再各自猜
+
 ## 背景
 当前骑手侧同时存在三个会影响配送状态的面：
 - admin 派单与改派；
@@ -147,15 +153,15 @@ admin 不需要和 Telegram/rider web 共用同一个外部接口，但必须共
 当任一端动作成功：
 - admin 当前订单列表立即刷新；
 - rider dashboard 当前订单列表立即刷新；
-- Telegram 按阶段补发一条新消息。
+- Telegram 在当时方案中按阶段追加一条历史消息；当前规则已改为单条可编辑消息。
 
 同时保留短轮询兜底，防止：
 - 页面长时间停留；
 - Telegram 之外的状态变化未立刻可见；
 - 某个入口的本地 UI 未及时重绘。
 
-### 3. Telegram 补发新消息策略
-采用“补发新消息（推荐）”作为 Telegram 同步方式：
+### 3. Telegram 历史阶段消息方案（已被后续实现替代）
+这里记录的是当时采用“发送第二条阶段消息”的中间方案，不代表当前规则：
 - 派单/改派/自动续派：发新的待接单消息，带 `accept / decline`；
 - 接单成功：发新的已接单消息，带 `picked_up`；
 - 已取餐成功：发新的配送中消息，带 `complete`；
@@ -310,7 +316,7 @@ rider dashboard 的价值是“看得更全、看得更清楚、必要时可补�
 1. 根因：线上存在 `remarksJson` 缺失但 `courierPhone` 已绑定的真实配送订单，旧逻辑因此误判“已改派”；
 2. 结论：`src/pages/api/order/update_status.ts` 只是薄代理，不适合作为骑手业务语义接口；
 3. 决策：Telegram 继续为主入口，rider dashboard 退回辅助总览面；
-4. 决策：三端共享动作判定，Telegram 用补发新消息推进阶段；
+4. 决策：三端共享动作判定，Telegram 用发送第二条阶段消息（历史方案）推进阶段；
 5. 清理原则：删除已被共享动作层覆盖的前端猜测代码，避免以后修改继续靠猜。
 
 ## 最终结论
@@ -318,7 +324,7 @@ rider dashboard 的价值是“看得更全、看得更清楚、必要时可补�
 - 服务端订单状态、`dispatch_meta` 与 `courierPhone` 共同构成骑手动作真相；
 - `accept / decline / picked_up / complete` 四个动作共享同一套服务端判定；
 - Telegram 与 rider dashboard 不必强行共用同一个外部接口，但必须共用同一个动作核心；
-- Telegram 作为主入口，采用补发新消息同步阶段；
+- Telegram 作为主入口，采用发送第二条阶段消息（历史方案）同步阶段；
 - rider dashboard 改为可滚动、可总览、字段统一的辅助工作台；
 - 地图、店铺名、配送地址等骑手关键字段全部从共享展示模型输出；
 - 清理已失效的前端猜测逻辑后，后续修改只需围绕共享核心与薄适配层推进，不再满项目猜代码。

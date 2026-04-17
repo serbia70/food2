@@ -1,10 +1,13 @@
 # Rider Sync Implementation Plan
 
+> 状态说明（已过期）：这份计划对应的是中间阶段方案，文中的 `历史红灯预期：`、新增 rider web action route、Telegram 阶段补消息等表述都不应再被当作当前实现基线。
+> 当前应优先以 `docs/superpowers/specs/2026-04-15-dispatch-telegram-rider-admin-cleanup-design.md`、`src/lib/rider-dispatch.ts`、`src/lib/telegram-dispatch.ts`、`src/pages/api/telegram/rider-claim.ts` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让 Telegram、rider dashboard、admin 围绕同一套骑手动作判定、同步语义和骑手展示字段工作，同时清理 rider dashboard 里已经失效的前端猜测逻辑。
 
-**Architecture:** 先把四个骑手动作的服务端判定与骑手展示字段收口到 `src/lib/rider-dispatch.ts` 一侧，再让 Telegram route 与新的 rider web action route 作为两层薄适配。rider dashboard 只消费共享动作结果和共享展示字段，不再直连薄 `update_status` 路由拼接业务语义；Telegram 继续走 callback，但只负责解析、鉴权与补发阶段消息。
+**Architecture:** 先把四个骑手动作的服务端判定与骑手展示字段收口到 `src/lib/rider-dispatch.ts` 一侧，再让 Telegram route 与新的 rider web action route 作为两层薄适配。rider dashboard 只消费共享动作结果和共享展示字段，不再直连薄 `update_status` 路由拼接业务语义；Telegram 继续走 callback，但只负责解析、鉴权与追加阶段消息（历史方案）。
 
 **Tech Stack:** Astro, TypeScript, Node test runner, existing Telegram callback flow, existing admin/rider BFF routes.
 
@@ -19,9 +22,9 @@
 - Modify: `src/lib/telegram-dispatch.ts`
   - 复用共享展示字段生成 Telegram 各阶段消息，补店铺名与地图链接。
 - Modify: `src/lib/telegram-rider-claim-route-spec.ts`
-  - 锁定 Telegram 接单/取餐/送达时补发的新消息内容与 `reply_markup` 结构。
+  - 锁定 Telegram 接单/取餐/送达时历史追加消息内容与 `reply_markup` 结构。
 - Modify: `src/pages/api/telegram/rider-claim.ts`
-  - 改为调用共享动作核心，保留 Telegram 专属 callback 解析与阶段补发消息。
+  - 改为调用共享动作核心，保留 Telegram 专属 callback 解析与阶段历史阶段消息。
 - Create: `src/pages/api/rider/action.ts`
   - rider web 专用动作路由，读取 rider 身份并调用同一套共享动作核心。
 - Modify: `src/pages/api/rider/orders.ts`
@@ -102,7 +105,7 @@ test('getRiderActionFlags and dispatch state stay aligned for picked_up orders',
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-Expected: FAIL，提示 `buildRiderOrderView` 未定义，或 `picked_up` 文案仍不是 `配送中`。
+历史红灯预期：，提示 `buildRiderOrderView` 未定义，或 `picked_up` 文案仍不是 `配送中`。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -209,7 +212,7 @@ test('picked_up follow-up message includes shop name and delivery map link', asy
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
-Expected: FAIL，当前补发消息不带店铺名和地图链接。
+历史红灯预期：，当前历史阶段消息不带店铺名和地图链接。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -245,7 +248,7 @@ export function buildRiderPickedUpTelegramMessage(input: RiderPickedUpTelegramIn
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
-Expected: PASS，Telegram 补发消息中出现店铺名、到店地图和送达导航。
+Expected: PASS，Telegram 历史阶段消息中出现店铺名、到店地图和送达导航。
 
 - [ ] **Step 5: Commit**
 
@@ -295,7 +298,7 @@ test('decline uses shared action decision and writes dispatch meta through one p
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
-Expected: FAIL，当前 decline 仍然在 route 内自己拼 meta，动作判定没有统一出口。
+历史红灯预期：，当前 decline 仍然在 route 内自己拼 meta，动作判定没有统一出口。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -313,7 +316,7 @@ export function resolveRiderOrderAction(input: {
 然后在 `handleTelegramRiderClaim()` 中：
 - 用 `resolveRiderOrderAction()` 统一生成 `updatePayload`；
 - `decline` 时不再在 route 内单独组装 `buildDispatchMetaRemarks(...)`；
-- 只保留 Telegram callback 解析、上游 fetch、补发消息这三块 Telegram 专属逻辑。
+- 只保留 Telegram callback 解析、上游 fetch、历史阶段消息这三块 Telegram 专属逻辑。
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -363,7 +366,7 @@ test('rider action route completes picked_up order through shared action decisio
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/telegram-rider-claim-route-spec.ts`
-Expected: FAIL，`src/pages/api/rider/action.ts` 不存在。
+历史红灯预期：，`src/pages/api/rider/action.ts` 不存在。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -441,7 +444,7 @@ test('dashboard script calls rider action route instead of update_status and ren
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-Expected: FAIL，页面里还在调用 `/api/order/update_status`，也还在前端手拼 `buildDispatchMetaRemarks(...)`。
+历史红灯预期：，页面里还在调用 `/api/order/update_status`，也还在前端手拼 `buildDispatchMetaRemarks(...)`。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -523,7 +526,7 @@ test('shared rider order view prefers explicit shop map url before falling back 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts && node --test src/lib/telegram-rider-claim-route-spec.ts`
-Expected: FAIL，地图来源仍分散，admin 派单消息没有统一共享字段。
+历史红灯预期：，地图来源仍分散，admin 派单消息没有统一共享字段。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -582,7 +585,7 @@ test('admin order list uses 配送中 and 已完成 as primary rider states', as
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts`
-Expected: FAIL，当前 helper 仍返回 `骑手已接单 / 骑手已取餐`。
+历史红灯预期：，当前 helper 仍返回 `骑手已接单 / 骑手已取餐`。
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -648,7 +651,7 @@ test('dashboard source no longer contains guessed rider-side dispatch meta write
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test src/lib/rider-dispatch-spec.ts && node --test src/lib/telegram-rider-claim-route-spec.ts`
-Expected: FAIL，页面源码里仍含旧直调逻辑或旧变量名。
+历史红灯预期：，页面源码里仍含旧直调逻辑或旧变量名。
 
 - [ ] **Step 3: Write minimal implementation**
 

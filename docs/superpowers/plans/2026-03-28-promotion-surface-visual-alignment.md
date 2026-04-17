@@ -1,5 +1,7 @@
 # Promotion Surface Visual Alignment Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是 promotion surface 视觉收口时的实施步骤；文中的 `历史红灯预期：` 只代表当时源码断言阶段，不应直接当作当前实现状态。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 调整菜单页顶部促销展示，让满减活动变成单行规则条，并把今日特价改成一组复用普通菜单样式的前置商品列表，仅在存在特价商品时显示。
@@ -51,7 +53,7 @@ Run:
 node --test src/pages/menu-list-promotions.test.ts
 ```
 
-Expected: FAIL，因为当前实现如果还未更新到单行规则条，就不会满足新的源码断言。
+历史红灯预期：，因为当前实现如果还未更新到单行规则条，就不会满足新的源码断言。
 
 - [ ] **Step 3: 用最小改动实现单行规则条**
 
@@ -132,7 +134,7 @@ Run:
 node --test src/pages/menu-list-promotions.test.ts
 ```
 
-Expected: FAIL，因为当前实现仍然保留独立 `今日特价` 标题模块和专用卡片结构。
+历史红灯预期：，因为当前实现仍然保留独立 `今日特价` 标题模块和专用卡片结构。
 
 - [ ] **Step 3: 用最小改动实现前置菜单项结构**
 

@@ -1,5 +1,8 @@
 # Go Minimalization + Astro-Only Entrypoints Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是当时的迁移步骤与测试推进方式，文中的 `历史红灯预期：`、旧路径与旧测试文件名属于阶段性实施语境，不应再被当作当前仓库状态直接照搬。
+> 继续处理 Astro 单入口与 Go 收口时，应先读取当前真实代码与现行设计，再决定哪些步骤仍值得复用。
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove all Go-served browser entrypoints and enforce proxy-only access so browsers only use the Cloudflare (Astro) origin.
@@ -139,7 +142,7 @@ cd meituanAstro
 pnpm run test:security
 ```
 
-Expected: FAIL, same reason.
+历史红灯预期：, same reason.
 
 - [ ] **Step 5: Commit**
 
@@ -264,7 +267,7 @@ cd meituanAstro
 node --test scripts/check-no-go-static-entrypoints.test.mjs
 ```
 
-Expected: FAIL.
+历史红灯预期：.
 
 - [ ] **Step 2: Ensure explicit 404 handlers for legacy HTML paths**
 

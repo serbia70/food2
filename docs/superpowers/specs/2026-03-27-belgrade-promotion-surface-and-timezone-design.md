@@ -1,5 +1,7 @@
 # Belgrade 时区统一与前台促销展示 Design
 
+> 状态说明（历史设计）：这份设计记录的是当时围绕 Belgrade 时区与前台促销展示的收口方案；文中的旧测试文件名与实施拆分应按历史语境理解，不应直接当作当前仓库状态。
+
 **Goal:** 统一 special promotion 与相关统计的 Europe/Belgrade 时间语义，并在前台店铺页增加“今日特价”集中展示与明确的促销价格表现。
 
 **Why:** 用户已确认当前活动时间存在 1 小时偏差，统计口径也可能受同类时区问题影响；同时当前菜单卡片虽然会显示活动价，但没有原价对比和促销标识，顾客容易误以为活动价就是日常价格。此次设计同时解决“时间统一”和“促销可感知”两个问题，但不扩展到多时区或新的营销体系。
@@ -51,7 +53,7 @@
 - Test: `src/lib/cart-store-promotions.test.ts`
 - Test: `src/pages/menu-list-promotions.test.ts`
 - Test: 新增店铺页“今日特价”模块相关前端测试
-- Test: `foos2Go/internal/handlers/master_stats_test.go`
+- Test: `foos2Go/internal/handlers/master_stats_test．go（历史文件名）`
 
 ## Design
 

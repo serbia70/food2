@@ -1,5 +1,8 @@
 # Aggressive Cleanup + Unification (Batch A: API boundary) Implementation Plan
 
+> 状态说明（历史计划）：这份计划记录的是当时 API boundary 收口的批次化实施方式，文中的 `历史红灯预期：`、旧测试文件名与阶段性辅助文件属于历史推进语境，不应再直接当作当前仓库基线。
+> 若继续处理 admin/master proxy 边界，请先以当前真实 `src/pages/api/**` 与共享 helper 为准，不要反向恢复这里的旧拆分步骤。
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Unify API route auth/proxy boundaries (admin + master) and remove duplicated route glue code while keeping all existing route paths, status codes, headers, and response body semantics unchanged (except fixing an obvious runtime bug).
@@ -233,7 +236,7 @@ test('proxyAdminRequest: allows caller Authorization header to override computed
 
 Run: `node --test src/lib/admin-api-route.test.ts`
 
-Expected: FAIL (import error / `readAdminAuth` not exported).
+历史红灯预期： (import error / `readAdminAuth` not exported).
 
 - [ ] **Step 3: Implement `readAdminAuth()` and refactor `buildAdminAuthHeader()`**
 
@@ -330,7 +333,7 @@ test('admin reservations checkin route: uses params.id and does not crash', asyn
 
 Run: `node --test scripts/admin-reservation-checkin-route.test.ts`
 
-Expected: FAIL due to the current bug (`params` is not defined in the route).
+历史红灯预期： due to the current bug (`params` is not defined in the route).
 
 - [ ] **Step 3: Fix route signature to include `params`**
 
@@ -485,7 +488,7 @@ test('admin api routes: should not hand-roll auth parsing; should use proxyAdmin
 
 Run: `node --test scripts/check-admin-api-routes-use-proxyAdminRequest.test.mjs`
 
-Expected: FAIL with a list of violating files.
+历史红灯预期： with a list of violating files.
 
 (Do not commit yet; make it pass in the next tasks, then commit together.)
 
@@ -936,7 +939,7 @@ test('proxyMasterRequest: should NOT allow fallback token unless explicitly enab
 
 Run: `node --test src/lib/master-api-route.test.ts`
 
-Expected: FAIL because `src/lib/master-api-route.ts` does not exist.
+历史红灯预期： because `src/lib/master-api-route.ts` does not exist.
 
 - [ ] **Step 3: Implement `proxyMasterRequest()` matching existing master route semantics**
 
@@ -1093,7 +1096,7 @@ test('master api routes: should use proxyMasterRequest helper', async () => {
 
 Run: `node --test scripts/check-master-api-routes-use-proxyMasterRequest.test.mjs`
 
-Expected: FAIL with list of master routes.
+历史红灯预期： with list of master routes.
 
 - [ ] **Step 3: Migrate each master proxy route to `proxyMasterRequest()`**
 

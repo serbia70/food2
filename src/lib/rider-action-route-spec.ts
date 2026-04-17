@@ -299,8 +299,9 @@ test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达�
   assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
   assert.match(telegramCalls[0]?.body || '', /"shopSlug":"real-shop"/);
   assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：2026-04-14T10:03:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：2026-04-14T10:25:30.000Z/);
+  assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
+  assert.match(telegramCalls[0]?.body || '', /取餐时间：12:25/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
   assert.match(telegramCalls[0]?.body || '', /送达/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /已送达/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
@@ -338,7 +339,8 @@ test('picked_up 缺少订单 shopSlug 时使用请求体回退 shop slug 保留�
   assert.equal(body.action, 'picked_up');
   assert.equal(telegramCalls.length, 1);
   assert.match(telegramCalls[0]?.body || '', /"shopSlug":"dashboard-shop"/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：2026-04-14T10:40:00.000Z/);
+  assert.match(telegramCalls[0]?.body || '', /取餐时间：12:40/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
   assert.match(telegramCalls[0]?.body || '', /送达/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
 });
@@ -387,10 +389,11 @@ test('complete 写入 completedAt 并同步编辑 telegram 原消息为只读送
   assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
   assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
   assert.match(telegramCalls[0]?.body || '', /状态：已送达/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：2026-04-14T10:03:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：2026-04-14T10:19:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /送达时间：2026-04-14T10:55:00.000Z/);
-  assert.match(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+  assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
+  assert.match(telegramCalls[0]?.body || '', /取餐时间：12:19/);
+  assert.match(telegramCalls[0]?.body || '', /送达时间：12:55/);
+  assert.doesNotMatch(telegramCalls[0]?.body || '', /送达时间：\d{4}-\d{2}-\d{2}T/);
+  assert.match(telegramCalls[0]?.body || '', /送餐导航/);
   assert.doesNotMatch(telegramCalls[0]?.body || '', /"callback_data":/);
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
 });

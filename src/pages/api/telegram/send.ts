@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
+import { fetchProtectedAdminMasterSettings } from '../../../lib/admin-master-settings.ts';
 
 export const prerender = false;
 
@@ -258,40 +259,16 @@ async function loadTelegramBotToken(request: Request, shopSlug: string, inlineTo
   const cookie = request.headers.get('cookie') || '';
   const adminAuthorization = String(request.headers.get('authorization') || '').trim();
   if (adminAuthorization || cookie) {
-    const adminMasterHeaders: Record<string, string> = {};
-    if (adminAuthorization) adminMasterHeaders.authorization = adminAuthorization;
-    if (cookie) adminMasterHeaders.cookie = cookie;
-
     diagnostics.adminMasterSettings.requested = true;
-    const adminSettingsUrl = new URL('/api/admin/settings/master', request.url).toString();
-    const adminMasterRes = await fetch(adminSettingsUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...adminMasterHeaders,
-      },
-      body: '{}',
+    const adminMasterData = await fetchProtectedAdminMasterSettings({
+      authorization: adminAuthorization,
+      cookie,
     });
-
-    diagnostics.adminMasterSettings.status = adminMasterRes.status;
-    if (adminMasterRes.ok) {
-      const adminMasterText = await adminMasterRes.text();
-      let adminMasterData: unknown = {};
-      if (adminMasterText) {
-        try {
-          adminMasterData = JSON.parse(adminMasterText);
-        } catch {
-          adminMasterData = {};
-        }
-      }
-      const adminMasterToken = readTelegramBotToken(adminMasterData);
-      diagnostics.adminMasterSettings.tokenFound = Boolean(adminMasterToken);
-      if (!adminMasterToken && adminMasterText) {
-        diagnostics.adminMasterSettings.responsePreview = adminMasterText.slice(0, 400);
-      }
-      if (adminMasterToken) {
-        return { token: adminMasterToken, tokenSource: 'admin_master', diagnostics };
-      }
+    const adminMasterToken = readTelegramBotToken(adminMasterData);
+    diagnostics.adminMasterSettings.status = adminMasterToken ? 200 : 204;
+    diagnostics.adminMasterSettings.tokenFound = Boolean(adminMasterToken);
+    if (adminMasterToken) {
+      return { token: adminMasterToken, tokenSource: 'admin_master', diagnostics };
     }
   }
 

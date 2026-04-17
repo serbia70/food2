@@ -1,6 +1,5 @@
 import { useEffect } from "preact/hooks";
 
-import { DEFAULT_USER_PASSWORD } from "../../lib/clientConfig";
 import { SHOP_EVENTS } from "../../lib/events";
 import { getUserInfo } from "../../lib/userStore";
 
@@ -49,7 +48,7 @@ export function useCartProfileSync({
       ...prev,
       name: user.name || "",
       phone: user.phone || "",
-      password: user.password || DEFAULT_USER_PASSWORD,
+      password: "",
     }));
     setHistoryAddrs(user.addresses || []);
 

@@ -89,23 +89,22 @@ async function handleImpersonate(request: Request, cookies: Parameters<APIRoute>
     maxAge: 60 * 60 * 2,
   });
 
-  return new Response(JSON.stringify(createApiSuccess({ slug, token, impersonated: true })), {
+  return new Response(JSON.stringify(createApiSuccess({ slug, impersonated: true })), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
 }
 
-export const GET: APIRoute = async ({ request, cookies }) => {
-  try {
-    const id = Number(new URL(request.url).searchParams.get('id') || 0);
-    return await handleImpersonate(request, cookies, id);
-  } catch {
-    return new Response(JSON.stringify(createApiError('backend_unavailable', 'Backend unavailable')), {
-      status: 503,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-};
+export const GET: APIRoute = async () => new Response(
+  JSON.stringify(createApiError('method_not_allowed', 'Method not allowed')),
+  {
+    status: 405,
+    headers: {
+      'Content-Type': 'application/json',
+      Allow: 'POST',
+    },
+  },
+);
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   try {

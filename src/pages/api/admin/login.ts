@@ -133,7 +133,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
 
     return new Response(
-      JSON.stringify(createApiSuccess(createSessionPayload({ kind: 'admin', token }))),
+      JSON.stringify(createApiSuccess(createSessionPayload({ kind: 'admin' }))),
       {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

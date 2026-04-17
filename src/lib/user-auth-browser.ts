@@ -6,7 +6,7 @@ export type BrowserAuthResult = {
 
 export type BrowserPersistFallback = {
   loginAccount?: string;
-  password: string;
+  password?: string;
   account?: string;
   accountType?: 'phone' | 'email' | 'id';
   name?: string;
@@ -18,6 +18,7 @@ export type BrowserGoogleUser = {
   email: string;
   avatar: string;
   phone?: string;
+  sessionToken?: string;
 };
 
 type StorageLike = {
@@ -31,8 +32,8 @@ declare global {
     __userAuthBrowser?: {
       loginUser: (payload: { loginAccount: string; password: string }) => Promise<any>;
       registerUser: (payload: { accountType: 'phone' | 'email' | 'id'; account: string; password: string; name: string }) => Promise<any>;
-      persistUserAuth: (result: BrowserAuthResult, fallback: BrowserPersistFallback) => { user: any; sessionToken: string };
-      persistGoogleUserAuth: (user: BrowserGoogleUser) => { user: any; sessionToken: string };
+      persistUserAuth: (result: BrowserAuthResult, fallback: BrowserPersistFallback) => { user: any; sessionToken: string | null };
+      persistGoogleUserAuth: (user: BrowserGoogleUser) => { user: any; sessionToken: string | null };
     };
   }
 }
@@ -47,7 +48,8 @@ function readStoredUser(storage: StorageLike) {
 }
 
 function saveStoredUser(storage: StorageLike, nextUser: Record<string, unknown>) {
-  const serialized = JSON.stringify(nextUser);
+  const { password: _password, ...safeUser } = nextUser;
+  const serialized = JSON.stringify(safeUser);
   storage.setItem('food_order_user', serialized);
   storage.setItem('user_info', serialized);
 }
@@ -93,7 +95,6 @@ export function persistUserAuthWithStorage(
     ...user,
     name: resolvedName,
     phone: resolvedPhone,
-    password: fallback.password || current.password || '',
     login_account: resolvedLoginAccount,
     addresses: Array.isArray(user.addresses) ? user.addresses : current.addresses || [],
     email: user.email || current.email,
@@ -102,12 +103,14 @@ export function persistUserAuthWithStorage(
 
   saveStoredUser(storage, nextUser);
 
-  const sessionToken = String(result?.sessionToken || resolvedLoginAccount || resolvedPhone).trim();
+  const sessionToken = String(result?.sessionToken || '').trim();
   if (sessionToken) {
     storage.setItem('user_session', sessionToken);
+  } else {
+    storage.removeItem?.('user_session');
   }
 
-  return { user: nextUser, sessionToken };
+  return { user: nextUser, sessionToken: sessionToken || null };
 }
 
 export function persistGoogleUserAuthWithStorage(storage: StorageLike, user: BrowserGoogleUser) {
@@ -123,12 +126,14 @@ export function persistGoogleUserAuthWithStorage(storage: StorageLike, user: Bro
 
   saveStoredUser(storage, nextUser);
 
-  const sessionToken = String(user.email || user.phone || user.id || '').trim();
+  const sessionToken = String(user.sessionToken || '').trim();
   if (sessionToken) {
     storage.setItem('user_session', sessionToken);
+  } else {
+    storage.removeItem?.('user_session');
   }
 
-  return { user: nextUser, sessionToken };
+  return { user: nextUser, sessionToken: sessionToken || null };
 }
 
 export function persistUserAuth(result: BrowserAuthResult, fallback: BrowserPersistFallback) {

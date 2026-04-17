@@ -1,5 +1,3 @@
-import { API_BASE_URL } from '../config.ts';
-
 type ShopSummary = {
   id?: unknown;
   name?: unknown;
@@ -14,6 +12,13 @@ type RiderSummary = {
   status?: RiderStatus | string;
 };
 
+type CanonicalImpersonateResponse = {
+  ok?: unknown;
+  data?: {
+    slug?: unknown;
+    impersonated?: unknown;
+  };
+};
 
 type MasterRiderStatusPayload = {
   summary: {
@@ -103,6 +108,52 @@ function buildRiderDedupKey(rider: RiderSummary): string {
   return `ephemeral:${crypto.randomUUID()}`;
 }
 
+function extractSetCookieValues(headers: Headers): string[] {
+  const getSetCookie = (headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+  if (typeof getSetCookie === 'function') {
+    return getSetCookie.call(headers).filter((value) => value.trim());
+  }
+
+  const combined = headers.get('set-cookie') || '';
+  return combined ? [combined] : [];
+}
+
+function mergeCookieHeaders(baseCookieHeader: string, responseHeaders: Headers): string {
+  const merged = new Map<string, string>();
+
+  for (const chunk of baseCookieHeader.split(';')) {
+    const trimmed = chunk.trim();
+    if (!trimmed) continue;
+    const separatorIndex = trimmed.indexOf('=');
+    if (separatorIndex <= 0) continue;
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const value = trimmed.slice(separatorIndex + 1).trim();
+    if (!key || !value) continue;
+    merged.set(key, value);
+  }
+
+  for (const setCookieValue of extractSetCookieValues(responseHeaders)) {
+    const firstSegment = setCookieValue.split(';', 1)[0]?.trim() || '';
+    const separatorIndex = firstSegment.indexOf('=');
+    if (separatorIndex <= 0) continue;
+    const key = firstSegment.slice(0, separatorIndex).trim();
+    const value = firstSegment.slice(separatorIndex + 1).trim();
+    if (!key || !value) continue;
+    merged.set(key, value);
+  }
+
+  return Array.from(merged.entries()).map(([key, value]) => `${key}=${value}`).join('; ');
+}
+
+function isCanonicalImpersonateSuccess(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') return false;
+  const record = payload as CanonicalImpersonateResponse;
+  const data = record.data && typeof record.data === 'object' ? record.data : null;
+  return record.ok === true
+    && data?.impersonated === true
+    && String(data?.slug ?? '').trim().length > 0;
+}
+
 async function fetchJsonWithRetry(url: string | URL, init: RequestInit, attempts = 2): Promise<{ res: Response; data: unknown }> {
   let lastError: unknown = null;
 
@@ -122,43 +173,29 @@ async function fetchJsonWithRetry(url: string | URL, init: RequestInit, attempts
   throw lastError instanceof Error ? lastError : new Error('fetch_failed');
 }
 
-async function findFirstAdminAuthHeader(
-  shopRows: ShopSummary[],
+async function buildAdminCookieHeaderForShop(
+  shopId: number,
   requestUrl: URL,
   authHeader: string,
+  cookieHeader: string,
 ): Promise<string> {
-  for (const shop of shopRows) {
-    const shopId = Number(shop?.id || 0);
-    if (!shopId) continue;
-
-    try {
-      const impersonateUrl = new URL(`/api/master/impersonate-shop?id=${encodeURIComponent(String(shopId))}`, requestUrl);
-      const { res: impersonateRes, data: impersonateData } = await fetchJsonWithRetry(impersonateUrl, {
-        method: 'GET',
-        headers: {
-          Authorization: authHeader,
-        },
-      });
-      const impersonateRecord = impersonateData as {
-        ok?: unknown;
-        data?: unknown;
-      };
-      const nestedImpersonate = impersonateRecord.data && typeof impersonateRecord.data === 'object'
-        ? (impersonateRecord.data as { token?: unknown; slug?: unknown; impersonated?: unknown })
-        : null;
-      const adminToken = String(nestedImpersonate?.token ?? '').trim();
-      const isCanonicalImpersonate = impersonateRecord.ok === true
-        && nestedImpersonate?.impersonated === true
-        && String(nestedImpersonate?.slug ?? '').trim().length > 0
-        && adminToken.length > 0;
-      if (!impersonateRes.ok || !isCanonicalImpersonate) continue;
-      return adminToken.startsWith('Bearer ') ? adminToken : `Bearer ${adminToken}`;
-    } catch {
-      continue;
-    }
+  try {
+    const impersonateUrl = new URL('/api/master/impersonate-shop', requestUrl);
+    const { res: impersonateRes, data: impersonateData } = await fetchJsonWithRetry(impersonateUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/json',
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
+      },
+      body: JSON.stringify({ id: shopId }),
+    });
+    if (!impersonateRes.ok || !isCanonicalImpersonateSuccess(impersonateData)) return '';
+    const mergedCookieHeader = mergeCookieHeaders(cookieHeader, impersonateRes.headers);
+    return mergedCookieHeader.includes('admin_token=') ? mergedCookieHeader : '';
+  } catch {
+    return '';
   }
-
-  return '';
 }
 
 export async function loadMasterRiderStatusData({
@@ -181,35 +218,30 @@ export async function loadMasterRiderStatusData({
   };
 
   try {
-    const adminAuthHeader = await findFirstAdminAuthHeader(shopRows, requestUrl, authHeader);
-    if (!adminAuthHeader) {
-      return {
-        payload: EMPTY_MASTER_RIDER_STATUS_PAYLOAD,
-        error: '',
-      };
-    }
-
-    const ridersProxyUrl = new URL('/api/admin/riders', requestUrl);
-    const { res: ridersRes, data: ridersData } = await fetchJsonWithRetry(ridersProxyUrl, {
-      method: 'GET',
-      headers: {
-        Authorization: adminAuthHeader,
-        ...(cookieHeader ? { cookie: cookieHeader } : {}),
-      },
-    });
-    if (!ridersRes.ok) {
-      return {
-        payload: EMPTY_MASTER_RIDER_STATUS_PAYLOAD,
-        error: '',
-      };
-    }
-
     const seenRiders = new Set<string>();
-    for (const rider of normalizeRiderRows(ridersData)) {
-      const dedupKey = buildRiderDedupKey(rider);
-      if (seenRiders.has(dedupKey)) continue;
-      seenRiders.add(dedupKey);
-      groups[normalizeStatus(rider?.status)].push(rider);
+
+    for (const shop of shopRows) {
+      const shopId = Number(shop?.id || 0);
+      if (!shopId) continue;
+
+      const adminCookieHeader = await buildAdminCookieHeaderForShop(shopId, requestUrl, authHeader, cookieHeader || '');
+      if (!adminCookieHeader) continue;
+
+      const ridersProxyUrl = new URL('/api/admin/riders', requestUrl);
+      const { res: ridersRes, data: ridersData } = await fetchJsonWithRetry(ridersProxyUrl, {
+        method: 'GET',
+        headers: {
+          cookie: adminCookieHeader,
+        },
+      });
+      if (!ridersRes.ok) continue;
+
+      for (const rider of normalizeRiderRows(ridersData)) {
+        const dedupKey = buildRiderDedupKey(rider);
+        if (seenRiders.has(dedupKey)) continue;
+        seenRiders.add(dedupKey);
+        groups[normalizeStatus(rider?.status)].push(rider);
+      }
     }
 
     return {

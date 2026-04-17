@@ -1,5 +1,4 @@
 import { atom, map } from "nanostores";
-import { DEFAULT_USER_PASSWORD } from "./clientConfig.ts";
 
 const KEY_USER = "food_order_user";
 const KEY_LEGACY_USER = "user_info";
@@ -21,7 +20,6 @@ export interface UserState {
 const defaultState: UserState = {
   name: "",
   phone: "",
-  password: DEFAULT_USER_PASSWORD,
   addresses: [],
 };
 
@@ -55,11 +53,10 @@ if (typeof localStorage !== "undefined") {
     }
 
     if (parsedUser) {
-      const data = parsedUser;
+      const { password: _password, ...data } = parsedUser;
       $userStore.set({
         ...defaultState,
         ...data,
-        password: data.password || DEFAULT_USER_PASSWORD,
       });
     }
 
@@ -75,7 +72,8 @@ if (typeof localStorage !== "undefined") {
 // Subscribe to changes and persist to localStorage
 if (typeof localStorage !== "undefined") {
   $userStore.subscribe((value) => {
-    localStorage.setItem(KEY_USER, JSON.stringify(value));
+    const { password: _password, ...persistedValue } = value;
+    localStorage.setItem(KEY_USER, JSON.stringify(persistedValue));
   });
 
   $sessionToken.subscribe((value) => {
@@ -95,7 +93,7 @@ export const getUserInfo = (): UserState => {
 export const saveUserInfo = (
   name: string,
   phone: string,
-  password?: string,
+  _password?: string,
   newAddress?: string,
   extra: Partial<UserState> = {},
 ) => {
@@ -107,13 +105,14 @@ export const saveUserInfo = (
     addrs = addrs.slice(0, 3);
   }
 
+  const { password: _extraPassword, ...safeExtra } = extra;
+
   $userStore.set({
     ...current,
     name: name || current.name,
     phone: phone || current.phone,
-    password: password || current.password,
     addresses: addrs,
-    ...extra,
+    ...safeExtra,
   });
 };
 

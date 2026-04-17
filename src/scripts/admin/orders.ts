@@ -339,7 +339,7 @@ export async function loadOrders() {
   renderAdminOrderList(rows);
 }
 
-export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number; riderTelegramChatId?: string; telegramBotToken?: string } = {}) {
+export async function assignRider(orderId: string, riderId: string, input: { shopSlug?: string; pickupEtaMinutes?: number; riderTelegramChatId?: string } = {}) {
   window.__adminAssignInFlight = true;
   window.__adminPendingOrderRefresh = false;
 
@@ -359,7 +359,6 @@ export async function assignRider(orderId: string, riderId: string, input: { sho
         shopSlug: input.shopSlug || '',
         pickupEtaMinutes: Number(input.pickupEtaMinutes || 0),
         riderTelegramChatId: String(input.riderTelegramChatId || '').trim(),
-        telegramBotToken: String(input.telegramBotToken || '').trim(),
       }),
       signal: controller.signal,
     }).finally(() => clearTimeout(timeoutId));

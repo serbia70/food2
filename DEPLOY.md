@@ -15,8 +15,8 @@ This frontend now builds with `@astrojs/cloudflare` (`output: server`).
 ## 2) Build command
 Use one package manager consistently. Recommended now:
 ```bash
-npm ci
-npm run build
+pnpm install --frozen-lockfile
+pnpm build
 ```
 
 ## 3) Deploy options
@@ -28,8 +28,8 @@ npm run build
 ## 4) Local run
 ```bash
 cp .env.example .env
-npm install
-npm run dev -- --port 3000
+pnpm install
+pnpm dev -- --port 3000
 ```
 
 ## Important

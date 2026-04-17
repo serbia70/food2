@@ -8,7 +8,7 @@ let speakQueue: string[] = [];
 let isSpeaking = false;
 let lastSpeakTime = 0;
 
-export function initMqtt(shopSlug: string, mqttSecret: string, brokerIp: string, settings: any) {
+export function initMqtt(shopSlug: string, brokerIp: string) {
   if (window.__adminMqttInitInFlight) return;
   if (mqttClient && (mqttClient.connected || mqttClient.connecting)) return;
   if (typeof window.Paho === 'undefined') return;
@@ -31,7 +31,7 @@ export function initMqtt(shopSlug: string, mqttSecret: string, brokerIp: string,
     window.__adminMqttInitInFlight = false;
     if (res.errorCode !== 0) {
       updateMqttStatus('disconnected');
-      setTimeout(() => initMqtt(shopSlug, mqttSecret, brokerIp, settings), 2000);
+      setTimeout(() => initMqtt(shopSlug, brokerIp), 2000);
     }
   };
 
@@ -50,17 +50,17 @@ export function initMqtt(shopSlug: string, mqttSecret: string, brokerIp: string,
       window.__adminMqttInitInFlight = false;
       updateMqttStatus('connected');
       mqttClient.connected = true;
-      const topic = `restaurant/${shopSlug}/${mqttSecret || 'default'}/order`;
-      mqttClient.subscribe(topic);
-      mqttClient.subscribe(topic.replace('/order', '/status'));
       const shopId = getAdminRuntimeState().shopId;
       if (shopId) mqttClient.subscribe(`shop/${shopId}/orders`);
       if (shopId) mqttClient.subscribe(`shop/${shopId}/chat/+`);
+      if (!shopId && shopSlug) {
+        updateMqttStatus('connected');
+      }
     },
     onFailure: () => {
       window.__adminMqttInitInFlight = false;
       updateMqttStatus('failed');
-      setTimeout(() => initMqtt(shopSlug, mqttSecret, brokerIp, settings), 2000);
+      setTimeout(() => initMqtt(shopSlug, brokerIp), 2000);
     }
   };
   mqttClient.connect(options);

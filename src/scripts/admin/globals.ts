@@ -2,10 +2,8 @@ type AdminRuntimeState = {
   shopId?: number | string;
   shopSlug?: string;
   tableConfig?: unknown;
-  currentSettings?: any;
+  currentSettings?: Record<string, unknown>;
   brokerIp?: string;
-  mqttSecret?: string;
-  shop?: unknown;
 };
 
 declare global {

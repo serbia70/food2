@@ -8,7 +8,7 @@
     "dev:reset": "node -e \"const fs=require('node:fs');for (const p of ['node_modules/.vite','node_modules/.astro']) fs.rmSync(p,{recursive:true,force:true});\" && astro dev --force",
     "build": "astro build",
     "preview": "astro preview",
-    "test:security": "node --test src/lib/admin-rider-dispatch-route-spec.ts src/lib/rider-action-route-spec.ts src/lib/rider-dispatch-spec.ts src/lib/telegram-dispatch-spec.ts src/lib/telegram-rider-claim-route-spec.ts src/lib/telegram-webhook-route-spec.ts"
+    "test:security": "node --test src/lib/admin-rider-dispatch-route-spec.ts src/lib/auth-session-response-spec.ts src/lib/master-rider-status-loader.test.ts src/lib/rider-action-route-spec.ts src/lib/rider-dispatch-spec.ts src/lib/telegram-dispatch-spec.ts src/lib/telegram-rider-claim-route-spec.ts src/lib/telegram-webhook-route-spec.ts src/lib/user-auth-browser-spec.ts"
   },
   "dependencies": {
     "@astrojs/preact": "^4.1.3",

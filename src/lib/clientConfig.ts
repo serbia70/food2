@@ -1,4 +1,3 @@
-const DEFAULT_USER_PASSWORD_FALLBACK = "8888";
 const CART_SUPPRESS_RELOAD_MS_FALLBACK = 8000;
 const API_PROXY_TIMEOUT_MS_FALLBACK = 8000;
 
@@ -11,9 +10,9 @@ function readPositiveInt(value: string | undefined, fallback: number): number {
 
 // IMPORTANT: Vite's module runner requires static property access.
 // Do NOT alias import.meta.env into a local variable.
-export const DEFAULT_USER_PASSWORD =
-  String((import.meta as any).env?.PUBLIC_DEFAULT_USER_PASSWORD || "").trim() ||
-  DEFAULT_USER_PASSWORD_FALLBACK;
+export const DEFAULT_USER_PASSWORD = String(
+  (import.meta as any).env?.PUBLIC_DEFAULT_USER_PASSWORD || "",
+).trim();
 
 export const CART_SUPPRESS_RELOAD_MS = readPositiveInt(
   (import.meta as any).env?.PUBLIC_CART_SUPPRESS_RELOAD_MS,

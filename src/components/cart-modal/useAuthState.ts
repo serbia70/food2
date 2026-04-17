@@ -1,7 +1,5 @@
 import { useState } from "preact/hooks";
-import { DEFAULT_USER_PASSWORD } from "../../lib/clientConfig";
-import { loginUser, persistGoogleUserAuth, persistUserAuth, registerUser } from "../../lib/user-auth";
-import { saveUserInfo } from "../../lib/userStore";
+import { loginUser, persistUserAuth, registerUser } from "../../lib/user-auth";
 
 export interface GoogleUser {
   id: string;
@@ -109,8 +107,7 @@ export function useAuthState({
   };
 
   const handleGoogleSuccess = (user: GoogleUser) => {
-    const auth = persistGoogleUserAuth(user);
-    onProfileUpdate({ name: auth.user.name, phone: auth.user.phone });
+    onProfileUpdate({ name: user.name, phone: user.phone || "" });
     onGoogleSuccess?.();
   };
 

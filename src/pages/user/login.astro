@@ -95,7 +95,8 @@ import Layout from '../../layouts/Layout.astro';
   }
 
   function saveStoredUser(nextUser) {
-    const serialized = JSON.stringify(nextUser);
+    const { password: _password, ...safeUser } = nextUser;
+    const serialized = JSON.stringify(safeUser);
     localStorage.setItem('food_order_user', serialized);
     localStorage.setItem('user_info', serialized);
   }
@@ -121,7 +122,6 @@ import Layout from '../../layouts/Layout.astro';
       ...user,
       name: resolvedName,
       phone: resolvedPhone,
-      password: fallback.password || current.password || '',
       login_account: resolvedLoginAccount,
       addresses: Array.isArray(user.addresses) ? user.addresses : current.addresses || [],
       email: user.email || current.email,
@@ -130,9 +130,13 @@ import Layout from '../../layouts/Layout.astro';
 
     saveStoredUser(nextUser);
     const sessionTokenValue = result && result.sessionToken ? result.sessionToken : '';
-    const sessionToken = String(sessionTokenValue || resolvedLoginAccount || resolvedPhone).trim();
-    if (sessionToken) localStorage.setItem('user_session', sessionToken);
-    return { user: nextUser, sessionToken };
+    const sessionToken = String(sessionTokenValue || '').trim();
+    if (sessionToken) {
+      localStorage.setItem('user_session', sessionToken);
+    } else {
+      localStorage.removeItem('user_session');
+    }
+    return { user: nextUser, sessionToken: sessionToken || null };
   }
 
   function persistGoogleUserAuth(user) {
@@ -146,9 +150,13 @@ import Layout from '../../layouts/Layout.astro';
       google_id: user.id,
     };
     saveStoredUser(nextUser);
-    const sessionToken = String(user.email || user.phone || user.id || '').trim();
-    if (sessionToken) localStorage.setItem('user_session', sessionToken);
-    return { user: nextUser, sessionToken };
+    const sessionToken = String(user.sessionToken || '').trim();
+    if (sessionToken) {
+      localStorage.setItem('user_session', sessionToken);
+    } else {
+      localStorage.removeItem('user_session');
+    }
+    return { user: nextUser, sessionToken: sessionToken || null };
   }
 
   window.__userAuthBrowser = {
@@ -319,6 +327,7 @@ import Layout from '../../layouts/Layout.astro';
         email: authUser.email || '',
         avatar: authUser.avatar || '',
         phone: authUser.phone || '',
+        sessionToken: typeof data.sessionToken === 'string' ? data.sessionToken : undefined,
       });
 
       window.location.href = '/user';

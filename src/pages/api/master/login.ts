@@ -105,7 +105,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     const session = createSessionPayload({
       kind: 'master',
-      token,
       userId: payload.userId,
       displayName: payload.displayName,
     });

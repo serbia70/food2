@@ -33,7 +33,6 @@ export const GET = async ({ cookies }: APIContext) => {
     return new Response(
       JSON.stringify(createApiSuccess(createSessionPayload({
         kind: 'admin',
-        token,
         userId: Number.isFinite(userId) ? userId : undefined,
       }))),
       {

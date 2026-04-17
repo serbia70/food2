@@ -1,4 +1,6 @@
 import { getAdminRuntimeState, registerAdminGlobal, showAdminToast } from './globals';
+import { buildAdminBrowserSettings } from '../../lib/admin-browser-runtime.ts';
+import { buildAdminSensitiveSettingsPatch } from '../../lib/admin-sensitive-settings.ts';
 import { buildTableConfigPayloadFromDOM } from './table-config-payload';
 
 type SettingsSubmitOptions = {
@@ -72,12 +74,12 @@ export function initSettingsUI(onSaved: () => void) {
       const res = await fetch('/api/admin/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(mergedPayload),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
       const saveSucceeded = Boolean(data && (data.success || data.ok === true));
       if (saveSucceeded) {
-        runtime.currentSettings = mergedPayload;
+        runtime.currentSettings = buildAdminBrowserSettings(mergedPayload);
         onSaved();
         showAdminToast(options.successMessage || '保存成功');
         if (options.reload !== false) {
@@ -242,9 +244,12 @@ export function initSettingsUI(onSaved: () => void) {
 
   registerAdminGlobal('update-mqtt-secret', async () => {
     const mqttSecretNode = document.getElementById('mqttSecretInput') as HTMLInputElement | null;
-    await submitPayload({
-      mqttSecret: mqttSecretNode?.value || '',
-    }, { successMessage: '打印机 Secret 已保存' });
+    await submitPayload(
+      buildAdminSensitiveSettingsPatch({
+        mqttSecret: mqttSecretNode?.value || '',
+      }),
+      { successMessage: '打印机 Secret 已保存' },
+    );
   });
 
   registerAdminGlobal('save-payment-settings', async () => {
@@ -287,17 +292,18 @@ export function initSettingsUI(onSaved: () => void) {
     const form = document.getElementById('settings-form') as HTMLFormElement | null;
     const tokenNode = form?.querySelector('input[name="tg_token"]') as HTMLInputElement | null;
     const chatIdNode = form?.querySelector('input[name="tg_chatId"]') as HTMLInputElement | null;
-    await submitPayload({
-      telegram: {
-        token: tokenNode?.value || '',
-        chatId: chatIdNode?.value || '',
-      },
-    }, { successMessage: 'Telegram 设置已保存' });
+    await submitPayload(
+      buildAdminSensitiveSettingsPatch({
+        telegramToken: tokenNode?.value || '',
+        telegramChatId: chatIdNode?.value || '',
+      }),
+      { successMessage: 'Telegram 设置已保存' },
+    );
   });
 
   registerAdminGlobal('save-delivery-type', async () => {
     const feeNode = document.querySelector('input[name="fee"]') as HTMLInputElement | null;
-    const freeThresholdNode = document.querySelector('input[name="free_threshold"]') as HTMLInputElement | null;
+    const freeThresholdNode = document.querySelector('input[name="freeThreshold"]') as HTMLInputElement | null;
     const zonesNode = document.querySelector('textarea[name="zones"]') as HTMLTextAreaElement | null;
     const deliveryTypeNode = document.getElementById('delivery-type') as HTMLSelectElement | null;
     await submitPayload({

@@ -28,11 +28,12 @@ export type GoogleAuthUser = {
   email: string;
   avatar: string;
   phone?: string;
+  sessionToken?: string;
 };
 
 type PersistFallback = {
   loginAccount?: string;
-  password: string;
+  password?: string;
   account?: string;
   accountType?: 'phone' | 'email' | 'id';
   name?: string;
@@ -76,7 +77,7 @@ export function persistUserAuth(result: AuthResponse, fallback: PersistFallback)
   saveUserInfo(
     resolvedName,
     resolvedPhone,
-    fallback.password,
+    undefined,
     resolvedAddress,
     {
       email: user.email,
@@ -86,7 +87,7 @@ export function persistUserAuth(result: AuthResponse, fallback: PersistFallback)
     },
   );
 
-  const sessionToken = String(result.sessionToken || resolvedLoginAccount || resolvedPhone).trim();
+  const sessionToken = String(result.sessionToken || '').trim();
   setSessionToken(sessionToken || null);
 
   return {
@@ -98,7 +99,7 @@ export function persistUserAuth(result: AuthResponse, fallback: PersistFallback)
       last_address: resolvedAddress,
       addresses: Array.isArray(user.addresses) ? user.addresses : [],
     },
-    sessionToken,
+    sessionToken: sessionToken || null,
   };
 }
 
@@ -109,7 +110,7 @@ export function persistGoogleUserAuth(user: GoogleAuthUser) {
     google_id: user.id,
   });
 
-  const sessionToken = String(user.email || user.phone || user.id || '').trim();
+  const sessionToken = String(user.sessionToken || '').trim();
   setSessionToken(sessionToken || null);
 
   return {
@@ -120,6 +121,6 @@ export function persistGoogleUserAuth(user: GoogleAuthUser) {
       avatar: user.avatar,
       google_id: user.id,
     },
-    sessionToken,
+    sessionToken: sessionToken || null,
   };
 }

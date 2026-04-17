@@ -10,6 +10,8 @@ import { buildDineInBillingState } from '../../../lib/dine-in-billing.ts';
 import { buildAdminTabVisibility, resolveShopTier, type ShopTierView } from '../../../lib/shop-tier.ts';
 import { resolveShopDisplaySettings } from '../../../lib/shop-display-settings';
 import { isAdminActiveDeliveryStatus } from '../../../lib/rider-dispatch.ts';
+import { buildAdminBrowserSettings } from '../../../lib/admin-browser-runtime.ts';
+import { fetchProtectedAdminMasterSettings } from '../../../lib/admin-master-settings.ts';
 import AdminHeader from '../../../components/admin/AdminHeader.astro';
 import AdminTabs from '../../../components/admin/AdminTabs.astro';
 import TabOrders from '../../../components/admin/TabOrders.astro';
@@ -42,36 +44,10 @@ if (!token) {
 const authHeaders = { Authorization: `Bearer ${token}` };
 
 async function loadProtectedMasterSettings(): Promise<Record<string, unknown>> {
-  const cookie = Astro.request.headers.get('cookie') || '';
-  const adminMasterHeaders: Record<string, string> = { Authorization: `Bearer ${token}` };
-  if (cookie) adminMasterHeaders.cookie = cookie;
-
-  const adminSettingsUrl = new URL('/api/admin/settings/master', Astro.url);
-  const adminMasterRes = await fetch(adminSettingsUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...adminMasterHeaders,
-    },
-    body: '{}',
-  }).catch(() => null);
-
-  if (!adminMasterRes?.ok) return {};
-  const adminMasterText = await adminMasterRes.text().catch(() => '');
-  let adminMasterRaw: unknown = {};
-  if (adminMasterText) {
-    try {
-      adminMasterRaw = JSON.parse(adminMasterText);
-    } catch {
-      adminMasterRaw = {};
-    }
-  }
-  const adminMasterData = asObject(
-    adminMasterRaw && typeof adminMasterRaw === 'object' && 'success' in adminMasterRaw && (adminMasterRaw as { success?: unknown }).success === true
-      ? (adminMasterRaw as { data?: unknown; settings?: unknown }).data || (adminMasterRaw as { data?: unknown; settings?: unknown }).settings || adminMasterRaw
-      : adminMasterRaw,
-  );
-  return asObject(adminMasterData.settings || adminMasterData);
+  return fetchProtectedAdminMasterSettings({
+    authorization: `Bearer ${token}`,
+    cookie: Astro.request.headers.get('cookie') || '',
+  });
 }
 
 const ordersApiUrl = new URL(`/api/admin/orders?_=${Date.now()}`, Astro.url);
@@ -139,6 +115,7 @@ const mergedAdminSettings = {
   },
 };
 const resolvedDisplaySettings = resolveShopDisplaySettings(shop, settings, masterSettings);
+const adminBrowserSettings = buildAdminBrowserSettings(mergedAdminSettings);
 
 const billingPlanTier = String(rawShop?.billingPlanType || rawShop?.billing_plan_type || '').trim();
 const hasTierMode = String(rawShop?.shopTierMode ?? '').trim() !== '';
@@ -424,9 +401,8 @@ const cities = {
     shopId={shop.id}
     shopSlug={shop.slug}
     tableConfig={tableConfig}
-    settings={mergedAdminSettings}
+    settings={adminBrowserSettings}
     brokerIp={brokerIp}
-    shop={shop}
   />
 
   {import.meta.env.DEV ? (

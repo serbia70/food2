@@ -65,7 +65,7 @@ export const initAdminPage = () => {
     const lastTab = localStorage.getItem('adminLastTab') || 'orders';
     showTab(lastTab);
     const runtime = getAdminRuntimeState();
-    initMqtt(String(runtime.shopSlug || ''), String(runtime.mqttSecret || 'default'), String(runtime.brokerIp || ''), runtime.currentSettings);
+    initMqtt(String(runtime.shopSlug || ''), String(runtime.brokerIp || ''));
     initAdminChatUI();
     const orderEditUI = initOrderEditUI({
       getCurrentOrderId: () => currentOrderId,

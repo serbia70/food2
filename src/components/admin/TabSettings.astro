@@ -1,6 +1,14 @@
 ---
+import { buildAdminSensitiveSettingsView } from '../../lib/admin-sensitive-settings.ts';
+
 const props: any = Astro.props;
 const { shop, settings, shopCategories, brokerIp, cities, resolvedDisplaySettings } = props;
+const sensitiveSettingsView = buildAdminSensitiveSettingsView({
+  shopSlug: shop?.slug,
+  mqttSecret: settings?.mqttSecret || shop?.mqttSecret,
+  telegramToken: settings?.telegram?.token || shop?.telegramToken,
+  telegramChatId: settings?.telegram?.chatId || shop?.telegramChatId,
+});
 ---
 <div id="tab-settings" class="tab-content" style="margin-top:0;">
   <form id="settings-form">
@@ -123,10 +131,10 @@ const { shop, settings, shopCategories, brokerIp, cities, resolvedDisplaySetting
       <h3>🖨️ 打印机配置</h3>
       <div style="background:#f8f9fa; padding:15px; border-radius:6px; font-size:13px; color:#555;">
         <p><strong>Broker:</strong> {brokerIp}</p>
-        <p><strong>Topic:</strong> <code style="background:#eee; padding:2px 5px; color:#d63384;">restaurant/{shop?.slug || 'default'}/{settings?.mqttSecret || shop?.mqttSecret || 'default'}/order</code></p>
+        <p><strong>Topic:</strong> <code style="background:#eee; padding:2px 5px; color:#d63384;">{sensitiveSettingsView.mqttTopicPreview}</code></p>
 
         <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
-          <input type="text" id="mqttSecretInput" value={settings?.mqttSecret || shop?.mqttSecret || ''} placeholder="设置新的 Secret" style="padding:5px; border:1px solid #ddd; border-radius:4px;" />
+          <input type="text" id="mqttSecretInput" value={sensitiveSettingsView.mqttSecretValue} placeholder={sensitiveSettingsView.mqttSecretPlaceholder} style="padding:5px; border:1px solid #ddd; border-radius:4px;" />
           <button type="button" data-admin-action="update-mqtt-secret" style="padding:5px 10px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer;">修改 Secret</button>
         </div>
       </div>
@@ -148,11 +156,11 @@ const { shop, settings, shopCategories, brokerIp, cities, resolvedDisplaySetting
       <h3>🤖 Telegram 通知</h3>
       <div class="form-group">
         <label>Bot Token</label>
-        <input name="tg_token" value={settings.telegram?.token || shop.telegramToken || ''} placeholder="123456:ABC-DEF..." />
+        <input name="tg_token" value={sensitiveSettingsView.telegramTokenValue} placeholder={sensitiveSettingsView.telegramTokenPlaceholder} />
       </div>
       <div class="form-group">
         <label>Chat ID</label>
-        <input name="tg_chatId" value={settings.telegram?.chatId || shop.telegramChatId || ''} placeholder="-100xxxxxx" />
+        <input name="tg_chatId" value={sensitiveSettingsView.telegramChatIdValue} placeholder="-100xxxxxx" />
       </div>
       <button type="button" class="btn-save" data-admin-action="save-telegram-settings">保存 Telegram 设置</button>
     </div>

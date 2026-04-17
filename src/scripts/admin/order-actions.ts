@@ -20,33 +20,11 @@ function readAssignContext(orderId: string) {
   const runtime = (window as typeof window & {
     __adminRuntime?: {
       shopSlug?: string;
-      shopId?: string | number;
-      shopName?: string;
-      name?: string;
-      currentSettings?: {
-        telegramBotToken?: string;
-        telegram_bot_token?: string;
-        telegram?: { token?: string; telegramBotToken?: string };
-        server?: { telegramBotToken?: string; telegram_bot_token?: string };
-      };
     };
   }).__adminRuntime;
-  const shopSlug = String(runtime?.shopSlug || '').trim();
-  const telegramBotToken = String(
-    runtime?.currentSettings?.telegramBotToken
-      || runtime?.currentSettings?.telegram_bot_token
-      || runtime?.currentSettings?.telegram?.token
-      || runtime?.currentSettings?.telegram?.telegramBotToken
-      || runtime?.currentSettings?.server?.telegramBotToken
-      || runtime?.currentSettings?.server?.telegram_bot_token
-      || '',
-  ).trim();
   return {
     hidden,
-    shopSlug,
-    shopId: String(runtime?.shopId || '').trim(),
-    shopName: String(runtime?.shopName || runtime?.name || '').trim(),
-    telegramBotToken,
+    shopSlug: String(runtime?.shopSlug || '').trim(),
   };
 }
 
@@ -86,12 +64,11 @@ registerAdminGlobal('assign-rider', async (el: HTMLElement) => {
       return;
     }
 
-    const { shopSlug, telegramBotToken } = readAssignContext(orderId);
+    const { shopSlug } = readAssignContext(orderId);
     await assignRider(orderId, String(target.id || ''), {
       shopSlug,
       pickupEtaMinutes,
       riderTelegramChatId: String((target as { telegramChatId?: string }).telegramChatId || '').trim(),
-      telegramBotToken,
     });
   } catch (error) {
     showAdminToast(getErrorMessage(error, '指派骑手失败'));

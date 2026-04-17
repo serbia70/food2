@@ -238,7 +238,7 @@ export default function UserModal({ specialPromotionMap = {} }: UserModalProps) 
           saveUserInfo(
             data.user.name,
             data.user.phone,
-            data.user.password,
+            undefined,
             data.user.last_address,
           );
           setUserInfo(data.user);

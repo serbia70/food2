@@ -13,10 +13,7 @@ import {
   type SpendDiscountPromotion,
 } from "../store/cartStore";
 import { getUserInfo, saveUserInfo } from "../lib/userStore";
-import {
-  CART_SUPPRESS_RELOAD_MS,
-  DEFAULT_USER_PASSWORD,
-} from "../lib/clientConfig";
+import { CART_SUPPRESS_RELOAD_MS } from "../lib/clientConfig";
 import { SHOP_EVENTS } from "../lib/events";
 import {
   buildTableButtonLabel,
@@ -128,7 +125,7 @@ export default function CartModal({
   const [form, setForm] = useState<OrderForm>({
     name: "",
     phone: "",
-    password: DEFAULT_USER_PASSWORD,
+    password: "",
     address: "",
     note: "",
   });

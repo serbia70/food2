@@ -1,8 +1,8 @@
 ---
-const { shopId, shopSlug, tableConfig, settings, brokerIp, shop } = Astro.props;
+const { shopId, shopSlug, tableConfig, settings, brokerIp } = Astro.props;
 ---
 <script src="/vendor/mqttws31.min.js" is:inline></script>
-<script define:vars={{ shopId, shopSlug, tableConfig, settings, brokerIp, shop }} is:inline>
+<script define:vars={{ shopId, shopSlug, tableConfig, settings, brokerIp }} is:inline>
   window.__adminRuntime = {
     ...(window.__adminRuntime || {}),
     shopId,
@@ -10,8 +10,6 @@ const { shopId, shopSlug, tableConfig, settings, brokerIp, shop } = Astro.props;
     tableConfig,
     currentSettings: settings,
     brokerIp,
-    mqttSecret: shop && shop.mqtt_secret ? shop.mqtt_secret : 'default',
-    shop,
   };
 
   // 初始化下拉框选中状态

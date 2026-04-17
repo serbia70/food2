@@ -41,6 +41,7 @@ export default function GoogleLoginButton({ onSuccess, onError }: GoogleLoginBut
                         email: data.user?.email || '',
                         avatar: data.user?.avatar || '',
                         phone: data.user?.phone || '',
+                        sessionToken: typeof data.sessionToken === 'string' ? data.sessionToken : undefined,
                     });
                     onSuccess?.(auth.user);
                     window.location.reload();

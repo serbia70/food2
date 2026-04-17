@@ -487,6 +487,83 @@ test('publish dispatch returns shared upstream error detail when admin orders hy
   assert.equal(body.upstream_body, '{');
 });
 
+test('publish dispatch keeps top-level restaurant fields without degrading to placeholder shop data', async (t) => {
+  useTestEnv(t);
+  let orderReadCount = 0;
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/admin/orders/925/status') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/admin/riders') {
+      return jsonResponse({
+        riders: [
+          { id: '202', name: 'Rider 1', phone: '381641234567', telegramChatId: 'chat-1', status: 'available' },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders' && request.method === 'GET') {
+      orderReadCount += 1;
+      return jsonResponse({
+        success: true,
+        orders: [
+          {
+            id: '925',
+            remarksJson: JSON.stringify(['dispatch_meta:{"currentRiderId":"202","telegramMessageRef":null}']),
+            shopSlug: 'shop-a',
+            status: 'awaiting_courier',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders/remarks') {
+      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true, result: { message_id: 7795 } });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const request = new Request('https://example.com/api/admin/rider-dispatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderId: '925',
+      action: 'publish',
+      shopSlug: 'shop-a',
+      restaurantName: 'Body Sushi',
+      restaurantAddress: 'Bulevar 9',
+      deliveryAddress: 'Body Address',
+      totalAmount: 222,
+      userPhone: '381600000000',
+      pickupEtaMinutes: 12,
+      itemsJson: JSON.stringify([{ name: 'Burger', quantity: 1 }]),
+      status: 'awaiting_courier',
+    }),
+  });
+
+  const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
+  const body = JSON.parse(await response.text()) as { success?: boolean };
+  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
+  const telegramText = readTelegramText(telegramCall);
+  const buttons = readTelegramInlineKeyboard(telegramCall).flat();
+  const pickupButton = buttons.find((button) => button.text === '取餐导航');
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(orderReadCount, 1);
+  assert.match(telegramText, /Body Sushi有新单/);
+  assert.doesNotMatch(telegramText, /店铺有新单/);
+  assert.equal(String(pickupButton?.url || ''), 'https://www.google.com/maps/search/?api=1&query=Bulevar%209');
+});
+
 test('publish dispatch uses fetched order summary when body snapshot misses restaurant fields', async (t) => {
   useTestEnv(t);
   const calls = useMockFetch(t, async (request) => {
@@ -1054,6 +1131,85 @@ test('manual assign 会并发读取 riders 和订单详情', async (t) => {
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(overlapped, true);
+});
+
+test('manual assign falls back to body summary when fetched summary would degrade to placeholder fields', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/admin/riders') {
+      return jsonResponse({
+        riders: [
+          { id: '202', name: 'Rider 1', phone: '381641234567', telegramChatId: 'chat-1', status: 'available' },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders' && request.method === 'GET') {
+      return jsonResponse({
+        success: true,
+        orders: [
+          {
+            id: '910',
+            remarksJson: JSON.stringify(['dispatch_meta:{"currentRiderId":"202","telegramMessageRef":null}']),
+            shopSlug: 'shop-a',
+            status: 'awaiting_courier',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders/910/status') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true, message_id: 7790 });
+    }
+
+    if (url.pathname === '/api/admin/orders/remarks') {
+      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const request = new Request('https://example.com/api/admin/rider-assign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'manual_assign',
+      orderId: '910',
+      riderId: '202',
+      shopSlug: 'shop-a',
+      pickupEtaMinutes: 12,
+      orderSummary: {
+        orderNo: '910',
+        shopName: 'Body Shop',
+        deliveryAddress: 'Body Address',
+        userPhone: '381600000000',
+        totalAmount: 321,
+        items: [{ name: 'Burger', quantity: 1 }],
+      },
+    }),
+  });
+
+  const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
+  const body = JSON.parse(await response.text()) as { success?: boolean };
+  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
+  const telegramText = readTelegramText(telegramCall);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.match(telegramText, /店铺：Body Shop/);
+  assert.match(telegramText, /地址：Body Address/);
+  assert.match(telegramText, /电话：381600000000/);
+  assert.match(telegramText, /金额：321 RSD/);
+  assert.doesNotMatch(telegramText, /店铺：店铺/);
+  assert.doesNotMatch(telegramText, /地址：未提供地址/);
+  assert.doesNotMatch(telegramText, /电话：-/);
+  assert.doesNotMatch(telegramText, /金额：0 RSD/);
 });
 
 test('manual assign telegram uses restaurantName from fetched order row when shopName is missing', async (t) => {

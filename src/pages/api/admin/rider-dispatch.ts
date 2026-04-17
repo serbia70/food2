@@ -105,18 +105,33 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
   const directOrder = extractDispatchOrder(payload, orderId);
   if (directOrder) return directOrder;
 
-  const shopSlug = String(payload.shopSlug || '').trim();
-  const shopId = String(payload.shopId || '').trim();
-  const shopName = String(payload.shopName || '').trim();
-  const shopAddress = String(payload.shopAddress || '').trim();
-  const shopMapUrl = String(payload.shopMapUrl || '').trim();
-  const tableInfo = String(payload.tableInfo || '').trim();
-  const deliveryAddress = String(payload.deliveryAddress || '').trim();
-  const deliveryMapUrl = String(payload.deliveryMapUrl || '').trim();
-  const totalAmount = String(payload.totalAmount || '').trim();
-  const userPhone = String(payload.userPhone || '').trim();
-  const status = String(payload.status || '').trim();
-  const hasSnapshotFields = !!(shopSlug || shopId || shopName || shopAddress || shopMapUrl || tableInfo || deliveryAddress || deliveryMapUrl || totalAmount || userPhone);
+  const shopSlug = String(readDispatchBodyValue(payload, 'shopSlug', 'shop_slug') || '').trim();
+  const shopId = String(readDispatchBodyValue(payload, 'shopId', 'shop_id') || '').trim();
+  const shopName = String(readDispatchBodyValue(payload, 'shopName', 'shop_name') || '').trim();
+  const restaurantName = String(readDispatchBodyValue(payload, 'restaurantName', 'restaurant_name') || '').trim();
+  const shopAddress = String(readDispatchBodyValue(payload, 'shopAddress', 'shop_address') || '').trim();
+  const restaurantAddress = String(readDispatchBodyValue(payload, 'restaurantAddress', 'restaurant_address') || '').trim();
+  const shopMapUrl = String(readDispatchBodyValue(payload, 'shopMapUrl', 'shop_map_url') || '').trim();
+  const tableInfo = String(readDispatchBodyValue(payload, 'tableInfo', 'table_info') || '').trim();
+  const deliveryAddress = String(readDispatchBodyValue(payload, 'deliveryAddress', 'delivery_address') || '').trim();
+  const deliveryMapUrl = String(readDispatchBodyValue(payload, 'deliveryMapUrl', 'delivery_map_url') || '').trim();
+  const totalAmount = String(readDispatchBodyValue(payload, 'totalAmount', 'total_amount') || '').trim();
+  const userPhone = String(readDispatchBodyValue(payload, 'userPhone', 'user_phone') || '').trim();
+  const status = String(readDispatchBodyValue(payload, 'status', 'status') || '').trim();
+  const hasSnapshotFields = !!(
+    shopSlug
+    || shopId
+    || shopName
+    || restaurantName
+    || shopAddress
+    || restaurantAddress
+    || shopMapUrl
+    || tableInfo
+    || deliveryAddress
+    || deliveryMapUrl
+    || totalAmount
+    || userPhone
+  );
   if (!hasSnapshotFields) return null;
 
   return {
@@ -124,7 +139,9 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
     shopSlug: shopSlug || undefined,
     shopId: shopId || undefined,
     shopName: shopName || undefined,
+    restaurantName: restaurantName || undefined,
     shopAddress: shopAddress || undefined,
+    restaurantAddress: restaurantAddress || undefined,
     shopMapUrl: shopMapUrl || undefined,
     tableInfo: tableInfo || undefined,
     deliveryAddress: deliveryAddress || undefined,
@@ -132,18 +149,41 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
     totalAmount: totalAmount || undefined,
     userPhone: userPhone || undefined,
     items: payload.items,
-    itemsJson: payload.itemsJson,
-    items_json: payload.items_json,
+    itemsJson: payload.itemsJson ?? payload.items_json,
+    items_json: payload.items_json ?? payload.itemsJson,
     status: status || undefined,
-    pickupEtaMinutes: payload.pickupEtaMinutes != null ? String(payload.pickupEtaMinutes) : undefined,
-    pickupReadyAt: String(payload.pickupReadyAt || '').trim() || undefined,
-    riderBroadcastedAt: String(payload.riderBroadcastedAt || '').trim() || undefined,
-    riderRemindCount: payload.riderRemindCount != null ? String(payload.riderRemindCount) : undefined,
-    riderLastRemindedAt: String(payload.riderLastRemindedAt || '').trim() || undefined,
+    pickupEtaMinutes: readDispatchBodyValue(payload, 'pickupEtaMinutes', 'pickup_eta_minutes') != null
+      ? String(readDispatchBodyValue(payload, 'pickupEtaMinutes', 'pickup_eta_minutes'))
+      : undefined,
+    pickupReadyAt: String(readDispatchBodyValue(payload, 'pickupReadyAt', 'pickup_ready_at') || '').trim() || undefined,
+    riderBroadcastedAt: String(readDispatchBodyValue(payload, 'riderBroadcastedAt', 'rider_broadcasted_at') || '').trim() || undefined,
+    riderRemindCount: readDispatchBodyValue(payload, 'riderRemindCount', 'rider_remind_count') != null
+      ? String(readDispatchBodyValue(payload, 'riderRemindCount', 'rider_remind_count'))
+      : undefined,
+    riderLastRemindedAt: String(readDispatchBodyValue(payload, 'riderLastRemindedAt', 'rider_last_reminded_at') || '').trim() || undefined,
   };
 }
 
 function shouldHydratePublishOrderSummary(order: DispatchOrderSnapshot, remarksJsonHint = ''): boolean {
+  const shopName = String((order as { shopName?: unknown; restaurantName?: unknown }).shopName || (order as { restaurantName?: unknown }).restaurantName || '').trim();
+  if (!shopName) return true;
+
+  const hasPickupLocation = !!String(order.shopMapUrl || order.shopAddress || order.restaurantAddress || '').trim();
+  const hasDeliveryAddress = !!String(order.tableInfo || order.deliveryAddress || '').trim();
+  const hasPhone = !!String(order.userPhone || '').trim();
+  const hasPositiveAmount = Number(order.totalAmount || 0) > 0;
+  const hasItemSummary = order.items != null
+    || !!String(order.itemsJson || order.items_json || '').trim();
+  const hasRemarksSnapshot = !!String(remarksJsonHint || order.remarksJson || '').trim();
+
+  if (!hasDeliveryAddress || !hasPhone || !hasPositiveAmount) {
+    return true;
+  }
+
+  return !hasRemarksSnapshot && !hasPickupLocation && !hasItemSummary;
+}
+
+function shouldHydrateNonPublishOrderSummary(order: DispatchOrderSnapshot, remarksJsonHint = ''): boolean {
   const shopName = String((order as { shopName?: unknown; restaurantName?: unknown }).shopName || (order as { restaurantName?: unknown }).restaurantName || '').trim();
   if (!shopName) return true;
 
@@ -501,7 +541,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   if (action === 'publish' || action === 'remind' || action === 'republish_on_timeout') {
     let order = readDispatchOrderFromBody(parsedBody, orderId);
 
-    if (!order || shouldHydratePublishOrderSummary(order, String(readDispatchBodyValue(parsedBody, 'remarksJson', 'remarks_json') || '').trim())) {
+    const remarksJsonHint = String(readDispatchBodyValue(parsedBody, 'remarksJson', 'remarks_json') || '').trim();
+    const shouldHydrateOrderSummary = !order
+      ? true
+      : action === 'publish'
+        ? shouldHydratePublishOrderSummary(order, remarksJsonHint)
+        : shouldHydrateNonPublishOrderSummary(order, remarksJsonHint);
+
+    if (shouldHydrateOrderSummary) {
       const snapshotResult = await fetchDispatchOrderSnapshot({
         request,
         cookies,

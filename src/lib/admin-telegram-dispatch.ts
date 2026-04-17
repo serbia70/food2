@@ -64,10 +64,47 @@ function readTelegramMessageId(parsedResponse: Record<string, unknown> | null): 
   );
 }
 
-export function readAdminOrderSummary(body: Record<string, unknown>, orderId: string): AdminOrderSummary {
-  const raw = (body.orderSummary && typeof body.orderSummary === 'object')
+function readRawOrderSummary(body: Record<string, unknown>): OrderSummaryInput {
+  return (body.orderSummary && typeof body.orderSummary === 'object')
     ? body.orderSummary as OrderSummaryInput
     : {};
+}
+
+function pickNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    const candidate = String(value ?? '').trim();
+    if (candidate) return candidate;
+  }
+  return '';
+}
+
+function pickPositiveNumberValue(...values: unknown[]): unknown {
+  for (const value of values) {
+    const candidate = Number(value);
+    if (Number.isFinite(candidate) && candidate > 0) return value;
+  }
+  return undefined;
+}
+
+function pickNonEmptyItemsValue(...values: unknown[]): unknown {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      if (value.length > 0) return value;
+      continue;
+    }
+    if (typeof value === 'string') {
+      if (value.trim()) return value;
+      continue;
+    }
+    if (value && typeof value === 'object') {
+      if (Object.keys(value).length > 0) return value;
+    }
+  }
+  return undefined;
+}
+
+export function readAdminOrderSummary(body: Record<string, unknown>, orderId: string): AdminOrderSummary {
+  const raw = readRawOrderSummary(body);
   const itemSummary = buildOrderItemTextLinesShared(raw.items ?? raw.itemsJson ?? raw.items_json)
     .map((line) => line.replace(/^•\s*/, ''));
 
@@ -158,6 +195,54 @@ export function readAdminOrderShopSlug(payload: unknown, orderId: string): strin
   const row = findAdminOrderRow(payload, orderId);
   if (!row) return '';
   return readOrderTelegramShopSlug(row);
+}
+
+export function mergeAdminOrderSummarySources({
+  body,
+  fetchedRow,
+  orderId,
+}: {
+  body: Record<string, unknown>;
+  fetchedRow: Record<string, unknown> | null;
+  orderId: string;
+}): AdminOrderSummary {
+  const bodyRaw = readRawOrderSummary(body);
+  const fetchedRaw = fetchedRow && typeof fetchedRow === 'object'
+    ? fetchedRow as OrderSummaryInput
+    : {};
+
+  return readAdminOrderSummary({
+    orderSummary: {
+      ...bodyRaw,
+      orderNo: pickNonEmptyString(fetchedRaw.orderNo, fetchedRaw.order_no, bodyRaw.orderNo, bodyRaw.order_no, orderId),
+      order_no: undefined,
+      shopName: pickNonEmptyString(fetchedRaw.shopName, fetchedRaw.shop_name, bodyRaw.shopName, bodyRaw.shop_name),
+      shop_name: undefined,
+      restaurantName: pickNonEmptyString(fetchedRaw.restaurantName, fetchedRaw.restaurant_name, bodyRaw.restaurantName, bodyRaw.restaurant_name),
+      restaurant_name: undefined,
+      shopAddress: pickNonEmptyString(fetchedRaw.shopAddress, fetchedRaw.shop_address, bodyRaw.shopAddress, bodyRaw.shop_address),
+      shop_address: undefined,
+      restaurantAddress: pickNonEmptyString(fetchedRaw.restaurantAddress, fetchedRaw.restaurant_address, bodyRaw.restaurantAddress, bodyRaw.restaurant_address),
+      restaurant_address: undefined,
+      shopMapUrl: pickNonEmptyString(fetchedRaw.shopMapUrl, fetchedRaw.shop_map_url, bodyRaw.shopMapUrl, bodyRaw.shop_map_url),
+      shop_map_url: undefined,
+      tableInfo: pickNonEmptyString(fetchedRaw.tableInfo, fetchedRaw.table_info, bodyRaw.tableInfo, bodyRaw.table_info),
+      table_info: undefined,
+      deliveryAddress: pickNonEmptyString(fetchedRaw.deliveryAddress, fetchedRaw.delivery_address, bodyRaw.deliveryAddress, bodyRaw.delivery_address),
+      delivery_address: undefined,
+      deliveryMapUrl: pickNonEmptyString(fetchedRaw.deliveryMapUrl, fetchedRaw.delivery_map_url, bodyRaw.deliveryMapUrl, bodyRaw.delivery_map_url),
+      delivery_map_url: undefined,
+      userPhone: pickNonEmptyString(fetchedRaw.userPhone, fetchedRaw.user_phone, bodyRaw.userPhone, bodyRaw.user_phone),
+      user_phone: undefined,
+      totalAmount: pickPositiveNumberValue(fetchedRaw.totalAmount, fetchedRaw.total_amount, bodyRaw.totalAmount, bodyRaw.total_amount),
+      total_amount: undefined,
+      scheduledFor: pickNonEmptyString(fetchedRaw.scheduledFor, fetchedRaw.scheduled_for, bodyRaw.scheduledFor, bodyRaw.scheduled_for),
+      scheduled_for: undefined,
+      items: pickNonEmptyItemsValue(fetchedRaw.items, bodyRaw.items),
+      itemsJson: pickNonEmptyItemsValue(fetchedRaw.itemsJson, fetchedRaw.items_json, bodyRaw.itemsJson, bodyRaw.items_json),
+      items_json: undefined,
+    },
+  }, orderId);
 }
 
 export function readAdminOrderSummaryFromRow(row: Record<string, unknown>, orderId: string): AdminOrderSummary {

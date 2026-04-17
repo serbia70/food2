@@ -17,6 +17,7 @@ import {
 } from '../../../lib/telegram-dispatch.ts';
 import {
   fetchAdminOrderDetails,
+  mergeAdminOrderSummarySources,
   persistTelegramMessageRef,
   readAdminOrderSummary,
   sendTelegramDispatchMessage,
@@ -328,7 +329,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   const bodyOrderSummary = readAdminOrderSummary(body, orderId);
   const notifyShopSlug = readTelegramSendShopSlug(providedShopSlug) || fetchedOrderDetails.shopSlug;
-  const orderSummary = fetchedOrderDetails.orderSummary ?? bodyOrderSummary;
+  const orderSummary = fetchedOrderDetails.orderRow
+    ? mergeAdminOrderSummarySources({ body, fetchedRow: fetchedOrderDetails.orderRow, orderId })
+    : (fetchedOrderDetails.orderSummary ?? bodyOrderSummary);
   const telegramNotification = await notifyAssignedRider({
     request,
     rider: target,

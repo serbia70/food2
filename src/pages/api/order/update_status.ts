@@ -49,12 +49,19 @@ function readTelegramMessageRefFromResponse(body: Record<string, unknown>, fallb
   return chatId && Number.isInteger(messageId) && messageId > 0 ? { chatId, messageId } : null;
 }
 
+type RiderLookupRow = {
+  id?: string | number;
+  phone?: string;
+  telegramChatId?: string;
+  telegram_chat_id?: string;
+};
+
 async function readMatchedAvailableRider(
   request: Request,
   apiBaseUrl: string,
   riderPhone: string,
   riderIdText: string,
-): Promise<ReturnType<typeof readOnlineRiders>[number] | null> {
+): Promise<RiderLookupRow | null> {
   const upstream = await fetch(`${apiBaseUrl}/api/rider/status?action=list_available`, {
     headers: buildForwardHeaders(request),
   });
@@ -65,6 +72,33 @@ async function readMatchedAvailableRider(
   return riders.find((row) => String(row.phone || '').trim() === riderPhone)
     || riders.find((row) => String(row.id || '').trim() === riderIdText)
     || null;
+}
+
+async function readRiderByPhone(
+  request: Request,
+  apiBaseUrl: string,
+  riderPhone: string,
+): Promise<RiderLookupRow | null> {
+  const phone = String(riderPhone || '').trim();
+  if (!phone) return null;
+
+  const upstream = await fetch(`${apiBaseUrl}/api/rider/status?phone=${encodeURIComponent(phone)}`, {
+    headers: buildForwardHeaders(request),
+  });
+  const text = await upstream.text();
+  if (!upstream.ok || !text) return null;
+
+  const parsed = JSON.parse(text) as unknown;
+  const root = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  const rider = root?.rider && typeof root.rider === 'object' ? root.rider as Record<string, unknown> : null;
+  if (!rider) return null;
+
+  return {
+    id: typeof rider.id === 'string' || typeof rider.id === 'number' ? rider.id : undefined,
+    phone: String(rider.phone || '').trim() || undefined,
+    telegramChatId: String(rider.telegramChatId || '').trim() || undefined,
+    telegram_chat_id: String(rider.telegram_chat_id || '').trim() || undefined,
+  };
 }
 
 async function syncTelegramRiderMessageAfterStatusUpdate(
@@ -99,8 +133,9 @@ async function syncTelegramRiderMessageAfterStatusUpdate(
   let riderId = Number.isInteger(initialRiderId) && initialRiderId > 0 ? initialRiderId : 0;
   let riderIdText = riderId > 0 ? String(riderId) : '';
   const matchedAvailableRider = await readMatchedAvailableRider(request, apiBaseUrl, riderPhone, riderIdText);
+  const matchedRider = matchedAvailableRider || await readRiderByPhone(request, apiBaseUrl, riderPhone);
   if (riderId <= 0) {
-    const fallbackRiderId = Number(matchedAvailableRider?.id || 0);
+    const fallbackRiderId = Number(matchedRider?.id || 0);
     if (Number.isInteger(fallbackRiderId) && fallbackRiderId > 0) {
       riderId = fallbackRiderId;
       riderIdText = String(fallbackRiderId);
@@ -108,7 +143,7 @@ async function syncTelegramRiderMessageAfterStatusUpdate(
   }
   const shopSlug = readOrderShopSlug(order, payload.shopSlug || payload.shop_slug);
   const messageRef = meta.telegramMessageRef;
-  const targetChatId = messageRef?.chatId || String(matchedAvailableRider?.telegramChatId || matchedAvailableRider?.telegram_chat_id || '').trim();
+  const targetChatId = messageRef?.chatId || String(matchedRider?.telegramChatId || matchedRider?.telegram_chat_id || '').trim();
   if (!targetChatId) return;
 
   const orderView = buildRiderOrderView({

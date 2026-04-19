@@ -449,3 +449,83 @@ test('forwardOrderUpdateStatus keeps delivered action button when order lacks ri
   assert.match(telegramCall?.body || '', /"text":"送达"/);
   assert.match(telegramCall?.body || '', /callback_data/);
 });
+
+test('forwardOrderUpdateStatus keeps delivered action button when rider is no longer available but rider status lookup matches by phone', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/order/update_status/104') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse([
+        {
+          id: 104,
+          orderNo: '104',
+          status: 'picked_up',
+          shopSlug: 'real-shop',
+          courierId: null,
+          courierPhone: '0613083999',
+          courierName: '骑手999',
+          userPhone: '0613000002',
+          shopName: '104',
+          tableInfo: 'ruma2',
+          deliveryAddress: 'ruma2',
+          deliveryMapUrl: 'https://maps.example.com/customer-2',
+          shopMapUrl: 'https://maps.example.com/shop-2',
+          remarksJson: JSON.stringify([
+            'dispatch_meta:{"currentRiderId":"","acceptedAt":"","pickedUpAt":"","completedAt":"","telegramMessageRef":{"chatId":"1033472999","messageId":406}}',
+          ]),
+          itemsJson: JSON.stringify([{ name: '鱼香肉丝', quantity: 1 }]),
+        },
+      ]);
+    }
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({ success: true, riders: [] });
+    }
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('phone') === '0613083999') {
+      return jsonResponse({
+        success: true,
+        rider: {
+          id: 9,
+          name: '骑手999',
+          phone: '0613083999',
+          status: 'busy',
+          telegramChatId: '1033472999',
+          telegram_chat_id: '1033472999',
+        },
+      });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await forwardOrderUpdateStatus(new Request('https://example.com/api/order/update_status', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      cookie: 'admin_session=abc123',
+    },
+    body: JSON.stringify({
+      id: '104',
+      expectedCurrentStatus: 'delivering',
+      status: 'picked_up',
+    }),
+  }));
+
+  assert.equal(response.status, 200);
+  const telegramCall = calls.find((call) => call.url === 'https://example.com/api/telegram/send');
+  assert.ok(telegramCall);
+  assert.match(telegramCall?.body || '', /"message_id":406/);
+  assert.match(telegramCall?.body || '', /状态：配送中/);
+  assert.match(telegramCall?.body || '', /"text":"送达"/);
+  assert.match(telegramCall?.body || '', /callback_data/);
+});

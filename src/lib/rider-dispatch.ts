@@ -491,9 +491,14 @@ export function resolveRiderUnifiedStatus(input: {
   const status = String(input.status || '').trim();
   const remarksJson = readOrderRemarksJson(input);
   const meta = readDispatchMetaFromRemarks(remarksJson);
+  const effectiveStatus = meta.completedAt
+    ? 'completed'
+    : (status === 'picked_up' || (status === 'delivering' && !!meta.pickedUpAt))
+      ? 'picked_up'
+      : status;
   const state = resolveRiderDashboardActionState({
     order: {
-      status,
+      status: effectiveStatus,
       remarksJson,
       courierPhone: readOrderCourierPhone(input),
     },
@@ -502,7 +507,7 @@ export function resolveRiderUnifiedStatus(input: {
     nowIso: rider.nowIso,
   });
 
-  if (status === 'awaiting_courier') {
+  if (effectiveStatus === 'awaiting_courier') {
     return {
       statusLabel: '待接单',
       primaryAction: state.canAccept ? '接单' : '',
@@ -513,7 +518,7 @@ export function resolveRiderUnifiedStatus(input: {
     };
   }
 
-  if (status === 'delivering') {
+  if (effectiveStatus === 'delivering') {
     return {
       statusLabel: '待取餐',
       primaryAction: state.canPickUp ? '取餐' : '',
@@ -524,7 +529,7 @@ export function resolveRiderUnifiedStatus(input: {
     };
   }
 
-  if (status === 'picked_up') {
+  if (effectiveStatus === 'picked_up') {
     return {
       statusLabel: '配送中',
       primaryAction: state.canComplete ? '送达' : '',

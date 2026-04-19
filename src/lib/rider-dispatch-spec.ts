@@ -563,3 +563,34 @@ test('rider dashboard source uses belgrade time and unified action copy', () => 
   assert.doesNotMatch(riderDashboardSource, /replace\('T', ' '\)\.slice\(5, 16\)/);
 });
 
+test('resolveRiderUnifiedStatus keeps complete action when dispatch meta already has pickedUpAt but order status is still delivering', () => {
+  assert.deepEqual(resolveRiderUnifiedStatus({
+    status: 'delivering',
+    courierPhone: '381641234567',
+    remarksJson: JSON.stringify(buildDispatchMetaRemarks('', {
+      lastRiderDecision: null,
+      declinedRiderIds: [],
+      currentRiderId: '202',
+      currentAssignedAt: '2026-04-14T10:00:00.000Z',
+      currentExpiresAt: '2026-04-14T10:10:00.000Z',
+      invalidatedRiderIds: [],
+      lastInvalidationReason: null,
+      acceptedAt: '2026-04-14T10:03:00.000Z',
+      pickedUpAt: '2026-04-14T10:19:00.000Z',
+      completedAt: '',
+      telegramMessageRef: null,
+    })),
+  }, {
+    riderId: '202',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-14T10:20:00.000Z',
+  }), {
+    statusLabel: '配送中',
+    primaryAction: '送达',
+    secondaryAction: '',
+    acceptedAt: '2026-04-14T10:03:00.000Z',
+    pickedUpAt: '2026-04-14T10:19:00.000Z',
+    completedAt: '',
+  });
+});
+

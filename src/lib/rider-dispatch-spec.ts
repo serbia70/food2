@@ -594,3 +594,24 @@ test('resolveRiderUnifiedStatus keeps complete action when dispatch meta already
   });
 });
 
+test('rider-dispatch module still imports when Intl timezone formatter is unavailable', async () => {
+  const OriginalDateTimeFormat = Intl.DateTimeFormat;
+  Intl.DateTimeFormat = class extends OriginalDateTimeFormat {
+    constructor(locales?: string | string[], options?: Intl.DateTimeFormatOptions) {
+      if (options?.timeZone === 'Europe/Belgrade') {
+        throw new RangeError('Invalid time zone specified: Europe/Belgrade');
+      }
+      super(locales, options);
+    }
+  } as typeof Intl.DateTimeFormat;
+
+  const moduleUrl = new URL(`./rider-dispatch.ts?intl-fallback=${Date.now()}`, import.meta.url).href;
+
+  try {
+    const imported = await import(moduleUrl);
+    assert.equal(typeof imported.filterRiderDashboardOrders, 'function');
+  } finally {
+    Intl.DateTimeFormat = OriginalDateTimeFormat;
+  }
+});
+

@@ -947,16 +947,28 @@ function readRiderOrderCompletedTimestamp(order: {
   );
 }
 
-const belgradeDayFormatter = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Europe/Belgrade',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
+let belgradeDayFormatter: Intl.DateTimeFormat | null | undefined;
+
+function readBelgradeDayFormatter(): Intl.DateTimeFormat | null {
+  if (belgradeDayFormatter !== undefined) return belgradeDayFormatter;
+  try {
+    belgradeDayFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Belgrade',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  } catch {
+    belgradeDayFormatter = null;
+  }
+  return belgradeDayFormatter;
+}
 
 function readBelgradeDayKey(timestamp: number): string {
   if (timestamp <= 0) return '';
-  const parts = belgradeDayFormatter.formatToParts(new Date(timestamp));
+  const formatter = readBelgradeDayFormatter();
+  if (!formatter) return '';
+  const parts = formatter.formatToParts(new Date(timestamp));
   const year = parts.find((part) => part.type === 'year')?.value || '';
   const month = parts.find((part) => part.type === 'month')?.value || '';
   const day = parts.find((part) => part.type === 'day')?.value || '';

@@ -84,7 +84,7 @@ function readOrderSummaryItems(raw: OrderSummaryInput): OrderSummaryItem[] {
   }
 }
 
-function readOrderSummary(body: Record<string, unknown>, orderId: string): {
+function readOrderSummary(body: Record<string, unknown>): {
   orderNo: string;
   shopName: string;
   shopAddress: string;
@@ -117,7 +117,7 @@ function readOrderSummary(body: Record<string, unknown>, orderId: string): {
   });
 
   return {
-    orderNo: String(raw.orderNo ?? raw.order_no ?? orderId ?? '').trim(),
+    orderNo: String(raw.orderNo ?? raw.order_no ?? '').trim(),
     shopName: orderView.shopName,
     shopAddress: orderView.shopAddress,
     shopMapUrl: orderView.shopMapUrl,
@@ -202,7 +202,7 @@ function readOrderShopSlug(payload: unknown, orderId: string): string {
   return normalizeNotifyShopSlug(row.shopSlug || row.shop_slug || row.restaurantSlug || row.restaurant_slug || '');
 }
 
-function readOrderSummaryFromRow(row: Record<string, unknown>, orderId: string): {
+function readOrderSummaryFromRow(row: Record<string, unknown>): {
   orderNo: string;
   shopName: string;
   shopAddress: string;
@@ -214,7 +214,7 @@ function readOrderSummaryFromRow(row: Record<string, unknown>, orderId: string):
   scheduledFor: string;
   itemSummary: string[];
 } {
-  return readOrderSummary({ orderSummary: row }, orderId);
+  return readOrderSummary({ orderSummary: row });
 }
 
 async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies'], orderId: string): Promise<{
@@ -251,7 +251,7 @@ async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute[
     found: Boolean(row),
     shopSlug: readOrderShopSlug(parsed, orderId),
     remarksJson: row && typeof row === 'object' ? String(row.remarksJson || '').trim() : '',
-    orderSummary: row ? readOrderSummaryFromRow(row, orderId) : null,
+    orderSummary: row ? readOrderSummaryFromRow(row) : null,
   };
 }
 
@@ -361,25 +361,14 @@ async function notifyAssignedRider({
 }): Promise<
   | {
     success: true;
-    chatId: string;
-    chatIdSource: 'rider' | 'request';
-    shopSlug: string;
-    hasReplyMarkup: boolean;
-    inlineKeyboardRows: number;
-    inlineKeyboardButtons: number;
-    callbackDataLength: number;
     messageRef?: NonNullable<DispatchMeta['telegramMessageRef']>;
-    upstreamHasReplyMarkup?: boolean;
-    upstreamInlineKeyboardRows?: number;
-    upstreamInlineKeyboardButtons?: number;
   }
-  | { success: false; error: string; chatId?: string; chatIdSource?: 'rider' | 'request' | 'missing'; shopSlug: string }
+  | { success: false; error: string }
 > {
   const riderChatId = String(readRiderChatId(rider) || '').trim();
   const requestChatId = String(fallbackChatId || '').trim();
   const chatId = String(riderChatId || requestChatId).trim();
-  const chatIdSource = riderChatId ? 'rider' : requestChatId ? 'request' : 'missing';
-  if (!chatId) return { success: false, error: 'telegram_chat_id_missing', chatIdSource, shopSlug };
+  if (!chatId) return { success: false, error: 'telegram_chat_id_missing' };
 
   try {
     let claimCallbackData = '';
@@ -404,9 +393,6 @@ async function notifyAssignedRider({
       return {
         success: false,
         error: 'telegram_callback_buttons_unavailable',
-        chatId,
-        chatIdSource,
-        shopSlug,
       };
     }
 
@@ -439,18 +425,6 @@ async function notifyAssignedRider({
       text: message.text,
       reply_markup: message.replyMarkup,
     };
-    const inlineKeyboardRows = Array.isArray(message.replyMarkup?.inline_keyboard)
-      ? message.replyMarkup.inline_keyboard.length
-      : 0;
-    const inlineKeyboardButtons = Array.isArray(message.replyMarkup?.inline_keyboard)
-      ? message.replyMarkup.inline_keyboard.reduce((sum, row) => sum + row.length, 0)
-      : 0;
-    const callbackData = Array.isArray(message.replyMarkup?.inline_keyboard)
-      ? message.replyMarkup.inline_keyboard
-        .flat()
-        .map((button) => String((button as { callback_data?: unknown })?.callback_data || '').trim())
-        .find(Boolean) || ''
-      : '';
 
     const sendTelegram = async (payload: Record<string, unknown>) => {
       const response = await fetch(new URL('/api/telegram/send', request.url), {
@@ -486,9 +460,6 @@ async function notifyAssignedRider({
       return {
         success: false,
         error: responseText.trim() || `telegram_send_http_${response.status}`,
-        chatId,
-        chatIdSource,
-        shopSlug,
       };
     }
 
@@ -503,17 +474,7 @@ async function notifyAssignedRider({
 
     return {
       success: true,
-      chatId,
-      chatIdSource,
-      shopSlug,
-      hasReplyMarkup: inlineKeyboardRows > 0,
-      inlineKeyboardRows,
-      inlineKeyboardButtons,
-      callbackDataLength: callbackData.length,
       ...(messageId > 0 ? { messageRef: { chatId, messageId } } : {}),
-      ...(typeof parsedResponse?.hasReplyMarkup === 'boolean' ? { upstreamHasReplyMarkup: parsedResponse.hasReplyMarkup } : {}),
-      ...(Number.isFinite(Number(parsedResponse?.inlineKeyboardRows)) ? { upstreamInlineKeyboardRows: Number(parsedResponse?.inlineKeyboardRows) } : {}),
-      ...(Number.isFinite(Number(parsedResponse?.inlineKeyboardButtons)) ? { upstreamInlineKeyboardButtons: Number(parsedResponse?.inlineKeyboardButtons) } : {}),
     };
   } catch (error) {
     const errorMessage = error instanceof Error
@@ -524,9 +485,6 @@ async function notifyAssignedRider({
     return {
       success: false,
       error: errorMessage || 'telegram_send_failed',
-      chatId,
-      chatIdSource,
-      shopSlug,
     };
   }
 }
@@ -638,7 +596,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     inlineTelegramBotToken,
   });
 
-  let nextRemarksJson = fetchedOrderDetails.remarksJson;
   let warning: { code: string; upstream_status?: number; upstream_body?: string } | undefined;
   if (telegramNotification.success && telegramNotification.messageRef) {
     const latestOrderDetails = await fetchOrderDetails(request, cookies, orderId);
@@ -664,22 +621,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
           upstream_status: remarksResult.status,
           upstream_body: remarksResult.upstreamBody,
         };
-      } else {
-        nextRemarksJson = remarksResult.remarksJson;
       }
     }
   }
 
   return new Response(JSON.stringify({
     success: true,
-    rider: {
-      id: target.id,
-      name: target.name,
-      phone: target.phone,
-    },
-    order: {
-      remarksJson: nextRemarksJson,
-    },
     ...(warning ? { warning } : {}),
     ...(!telegramNotification.success ? { telegram_notification: telegramNotification } : {}),
   }), {

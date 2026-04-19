@@ -18,9 +18,6 @@ import { getAdminHandler } from './globals.ts';
 type TelegramNotificationDiagnostics = {
   success?: boolean;
   error?: unknown;
-  chatId?: unknown;
-  chatIdSource?: unknown;
-  shopSlug?: unknown;
 };
 
 type AdminOrderRow = {

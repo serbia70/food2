@@ -791,6 +791,7 @@ test('decline 通过共享 actionDecision 的单一路径写回 update_status re
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.action, 'decline');
+  assert.equal(body.reassigned, false);
   assert.ok(updateCall);
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
 
@@ -813,6 +814,160 @@ test('decline 通过共享 actionDecision 的单一路径写回 update_status re
   assert.equal(nextMeta.lastInvalidationReason, 'declined');
   assert.doesNotMatch(updateCall.body, /"courierName"/);
   assert.doesNotMatch(updateCall.body, /"courierPhone"/);
+});
+
+test('decline 自动续派在 rider-dispatch 返回 success true 且 telegram_dispatch delivered 时必须返回 reassigned true', async (t) => {
+  useTestEnv(t);
+  const nextRiderId = '303';
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({
+        riders: [
+          {
+            id: TEST_RIDER_ID,
+            name: TEST_RIDER_NAME,
+            phone: TEST_RIDER_PHONE,
+            telegramChatId: TEST_CHAT_ID,
+            status: 'available',
+          },
+          {
+            id: nextRiderId,
+            name: 'Rider 2',
+            phone: '381641111111',
+            telegramChatId: '987654321',
+            status: 'available',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse([createOrderRow({
+        status: 'awaiting_courier',
+        remarksJson: createRemarksJson({ declinedRiderIds: ['404'] }),
+      })]);
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/admin/rider-dispatch') {
+      return jsonResponse({
+        success: true,
+        telegram_dispatch: {
+          deliveredCount: 1,
+          failedCount: 0,
+          skippedReason: '',
+          attempts: [
+            {
+              riderId: nextRiderId,
+              status: 'delivered',
+            },
+          ],
+        },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const declineCallback = buildTelegramShortClaimCallback({
+    orderId: TEST_ORDER_ID,
+    riderId: TEST_RIDER_ID,
+    riderName: TEST_RIDER_NAME,
+    riderPhone: TEST_RIDER_PHONE,
+    restaurantId: 'shop-1',
+    telegramChatId: TEST_CHAT_ID,
+    action: 'decline',
+    expiresAt: Date.now() + 60_000,
+  });
+  const response = await handleTelegramRiderClaim(createRequest(declineCallback));
+  const body = await readJson(response);
+  const redispatchCall = calls.find((call) => call.url.endsWith('/api/admin/rider-dispatch'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'decline');
+  assert.equal(body.reassigned, true);
+  assert.ok(redispatchCall);
+  assert.match(redispatchCall.body, new RegExp(`"forceRiderId":"${nextRiderId}"`));
+});
+
+test('decline 自动续派在 rider-dispatch 返回 success true 但 telegram_dispatch 失败时必须保持 reassigned false', async (t) => {
+  useTestEnv(t);
+  const nextRiderId = '303';
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({
+        riders: [
+          {
+            id: TEST_RIDER_ID,
+            name: TEST_RIDER_NAME,
+            phone: TEST_RIDER_PHONE,
+            telegramChatId: TEST_CHAT_ID,
+            status: 'available',
+          },
+          {
+            id: nextRiderId,
+            name: 'Rider 2',
+            phone: '381641111111',
+            telegramChatId: '987654321',
+            status: 'available',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse([createOrderRow({
+        status: 'awaiting_courier',
+        remarksJson: createRemarksJson({ declinedRiderIds: ['404'] }),
+      })]);
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/admin/rider-dispatch') {
+      return jsonResponse({
+        success: true,
+        telegram_dispatch: {
+          deliveredCount: 0,
+          failedCount: 1,
+          skippedReason: 'no_telegram_bound_riders',
+        },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const declineCallback = buildTelegramShortClaimCallback({
+    orderId: TEST_ORDER_ID,
+    riderId: TEST_RIDER_ID,
+    riderName: TEST_RIDER_NAME,
+    riderPhone: TEST_RIDER_PHONE,
+    restaurantId: 'shop-1',
+    telegramChatId: TEST_CHAT_ID,
+    action: 'decline',
+    expiresAt: Date.now() + 60_000,
+  });
+  const response = await handleTelegramRiderClaim(createRequest(declineCallback));
+  const body = await readJson(response);
+  const redispatchCall = calls.find((call) => call.url.endsWith('/api/admin/rider-dispatch'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'decline');
+  assert.equal(body.reassigned, false);
+  assert.ok(redispatchCall);
+  assert.match(redispatchCall.body, new RegExp(`"forceRiderId":"${nextRiderId}"`));
 });
 
 test('decline update_status 调用会透传 cookie 和 authorization 头', async (t) => {

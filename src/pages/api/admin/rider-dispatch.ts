@@ -39,6 +39,7 @@ interface TelegramRiderRow {
   name?: string | null;
   phone?: string | null;
   telegramChatId?: string | null;
+  telegram_chat_id?: string | null;
 }
 
 interface TelegramDispatchAttempt {
@@ -60,6 +61,12 @@ interface TelegramDispatchSummary {
   telegramMessageRef?: NonNullable<DispatchMeta['telegramMessageRef']>;
   attempts: TelegramDispatchAttempt[];
 }
+
+type AvailableRidersReadResult = Awaited<ReturnType<typeof readAdminAssignableRiders>>;
+type AvailableRidersReadFailure = Extract<AvailableRidersReadResult, { success: false }>;
+type TelegramDispatchResult =
+  | { ok: true; summary: TelegramDispatchSummary }
+  | { ok: false; error: string; upstreamStatus: number; upstreamBody?: string };
 
 function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: string): DispatchOrderSnapshot | null {
   const directOrder = payload.order && typeof payload.order === 'object'
@@ -102,13 +109,31 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
   };
 }
 
-async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies']) {
-  const result = await readAdminAssignableRiders({
+async function fetchAvailableRiders(
+  request: Request,
+  cookies: Parameters<APIRoute['POST']>[0]['cookies'],
+): Promise<AvailableRidersReadResult> {
+  return readAdminAssignableRiders({
     request,
     cookies,
     apiBaseUrl: API_BASE_URL,
   });
-  return result.success ? result.riders : [] as TelegramRiderRow[];
+}
+
+function readAvailableRidersErrorHttpStatus(result: AvailableRidersReadFailure): number {
+  return result.status >= 200 && result.status < 300 ? 502 : result.status;
+}
+
+function buildAvailableRidersErrorResponse(result: AvailableRidersReadFailure): Response {
+  return new Response(JSON.stringify({
+    success: false,
+    error: result.error,
+    upstream_status: result.status,
+    ...(result.upstreamBody ? { upstream_body: result.upstreamBody } : {}),
+  }), {
+    status: readAvailableRidersErrorHttpStatus(result),
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 function readForcedRiderId(value: unknown): string {
@@ -221,9 +246,19 @@ async function notifyTelegramRecipients(
   cookies: Parameters<APIRoute['POST']>[0]['cookies'],
   order: DispatchOrderSnapshot,
   riderFilter?: (rider: TelegramRiderRow) => boolean,
-): Promise<TelegramDispatchSummary> {
-  const riders = await fetchAvailableRiders(request, cookies);
-  const readRiderChatId = (rider: TelegramRiderRow) => String(rider.telegramChatId || '').trim();
+): Promise<TelegramDispatchResult> {
+  const ridersResult = await fetchAvailableRiders(request, cookies);
+  if (!ridersResult.success) {
+    return {
+      ok: false,
+      error: ridersResult.error,
+      upstreamStatus: ridersResult.status,
+      ...(ridersResult.upstreamBody ? { upstreamBody: ridersResult.upstreamBody } : {}),
+    };
+  }
+
+  const riders = ridersResult.riders;
+  const readRiderChatId = (rider: TelegramRiderRow) => String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
   const scopedRiders = riderFilter ? riders.filter(riderFilter) : riders;
   const availableRiderCount = scopedRiders.length;
   const telegramRiders = scopedRiders.filter((rider) => readRiderChatId(rider) !== '');
@@ -246,30 +281,39 @@ async function notifyTelegramRecipients(
 
   if (availableRiderCount === 0) {
     return {
-      ...baseSummary,
-      skippedReason: 'no_available_riders',
+      ok: true,
+      summary: {
+        ...baseSummary,
+        skippedReason: 'no_available_riders',
+      },
     };
   }
 
   if (telegramBoundCount === 0) {
     return {
-      ...baseSummary,
-      failedCount: availableRiderCount,
-      skippedReason: 'no_telegram_bound_riders',
+      ok: true,
+      summary: {
+        ...baseSummary,
+        failedCount: availableRiderCount,
+        skippedReason: 'no_telegram_bound_riders',
+      },
     };
   }
 
   const restaurantId = String(order.shopSlug || order.shopId || '').trim();
   if (!restaurantId) {
     return {
-      ...baseSummary,
-      failedCount: telegramBoundCount,
-      skippedReason: 'missing_restaurant_id',
-      attempts: baseSummary.attempts.map((attempt) => (
-        attempt.telegramChatIdBound
-          ? { ...attempt, error: 'missing_restaurant_id' }
-          : attempt
-      )),
+      ok: true,
+      summary: {
+        ...baseSummary,
+        failedCount: telegramBoundCount,
+        skippedReason: 'missing_restaurant_id',
+        attempts: baseSummary.attempts.map((attempt) => (
+          attempt.telegramChatIdBound
+            ? { ...attempt, error: 'missing_restaurant_id' }
+            : attempt
+        )),
+      },
     };
   }
 
@@ -391,12 +435,15 @@ async function notifyTelegramRecipients(
   const firstDeliveredMessageRef = mergedAttempts.find((attempt) => attempt.delivered && attempt.messageRef)?.messageRef;
 
   return {
-    availableRiderCount,
-    telegramBoundCount,
-    deliveredCount,
-    failedCount,
-    ...(firstDeliveredMessageRef ? { telegramMessageRef: firstDeliveredMessageRef } : {}),
-    attempts: mergedAttempts,
+    ok: true,
+    summary: {
+      availableRiderCount,
+      telegramBoundCount,
+      deliveredCount,
+      failedCount,
+      ...(firstDeliveredMessageRef ? { telegramMessageRef: firstDeliveredMessageRef } : {}),
+      attempts: mergedAttempts,
+    },
   };
 }
 
@@ -528,10 +575,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       if (currentStatus !== 'awaiting_courier') {
         return new Response(JSON.stringify({
           success: true,
-          action,
-          skipped: true,
-          reason: 'order_status_changed',
-          order: mergedOrderBase,
           telegram_dispatch: {
             failedCount: 0,
             skippedReason: 'order_status_changed',
@@ -543,7 +586,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         });
       }
 
-      const riders = readOnlineRiders({ riders: await fetchAvailableRiders(request, cookies) });
+      const ridersResult = await fetchAvailableRiders(request, cookies);
+      if (!ridersResult.success) {
+        return buildAvailableRidersErrorResponse(ridersResult);
+      }
+
+      const riders = readOnlineRiders({ riders: ridersResult.riders });
       const currentRiderId = String(existingMeta.currentRiderId || '').trim();
       const nextRider = pickNextRiderOnTimeout({
         riders,
@@ -598,10 +646,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       if (!nextRider) {
         return new Response(JSON.stringify({
           success: true,
-          action,
-          skipped: true,
-          reason: 'no_next_rider',
-          order: mergedOrder,
+          telegram_dispatch: {
+            failedCount: 0,
+            skippedReason: 'no_next_rider',
+            attempts: [],
+          },
         }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -609,19 +658,24 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       }
 
       const nextRiderId = String(nextRider.id || '').trim();
-      const telegram_dispatch = await notifyTelegramRecipients(
+      const telegramDispatchResult = await notifyTelegramRecipients(
         request,
         cookies,
         mergedOrder,
         (rider) => String(rider.id || '').trim() === nextRiderId,
       );
+      if (!telegramDispatchResult.ok) {
+        return buildAvailableRidersErrorResponse({
+          success: false,
+          status: telegramDispatchResult.upstreamStatus,
+          error: telegramDispatchResult.error,
+          ...(telegramDispatchResult.upstreamBody ? { upstreamBody: telegramDispatchResult.upstreamBody } : {}),
+        });
+      }
 
       return new Response(JSON.stringify({
         success: true,
-        action,
-        skipped: false,
-        order: mergedOrder,
-        telegram_dispatch,
+        telegram_dispatch: telegramDispatchResult.summary,
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -632,8 +686,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     let riderFilter: ((rider: TelegramRiderRow) => boolean) | undefined;
 
     if (action === 'publish') {
-      const riders = await fetchAvailableRiders(request, cookies);
-      const scopedRiders = selectRiderForPublish({ riders, forcedRiderId });
+      const ridersResult = await fetchAvailableRiders(request, cookies);
+      if (!ridersResult.success) {
+        return buildAvailableRidersErrorResponse(ridersResult);
+      }
+
+      const scopedRiders = selectRiderForPublish({ riders: ridersResult.riders, forcedRiderId });
       const selectedRiderId = String((scopedRiders[0]?.id || '')).trim();
       if (forcedRiderId && !selectedRiderId) {
         return new Response(JSON.stringify({
@@ -682,8 +740,17 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       }
     }
 
-    const telegram_dispatch = await notifyTelegramRecipients(request, cookies, mergedOrder, riderFilter);
+    const telegramDispatchResult = await notifyTelegramRecipients(request, cookies, mergedOrder, riderFilter);
+    if (!telegramDispatchResult.ok) {
+      return buildAvailableRidersErrorResponse({
+        success: false,
+        status: telegramDispatchResult.upstreamStatus,
+        error: telegramDispatchResult.error,
+        ...(telegramDispatchResult.upstreamBody ? { upstreamBody: telegramDispatchResult.upstreamBody } : {}),
+      });
+    }
 
+    const telegram_dispatch = telegramDispatchResult.summary;
     let warning: { code: string; upstream_status?: number; upstream_body?: string } | undefined;
 
     if (action === 'publish' && telegram_dispatch.telegramMessageRef) {
@@ -712,8 +779,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     return new Response(JSON.stringify({
       success: true,
-      action,
-      order: mergedOrder,
       telegram_dispatch,
       ...(warning ? { warning } : {}),
     }), {

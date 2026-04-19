@@ -96,6 +96,18 @@ function parseJsonValue(text: string): unknown {
   }
 }
 
+function hasRecognizableRiderList(payload: Record<string, unknown>): boolean {
+  if (Array.isArray(payload.riders) || Array.isArray(payload.rows) || Array.isArray(payload.items)) {
+    return true;
+  }
+
+  const data = payload.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+
+  const nested = data as Record<string, unknown>;
+  return Array.isArray(nested.riders) || Array.isArray(nested.rows) || Array.isArray(nested.items);
+}
+
 function readOrderId(row: Record<string, unknown>): string {
   return String(row.id || row.orderId || row.order_id || '').trim();
 }
@@ -255,8 +267,9 @@ export async function readAdminAssignableRiders({
   });
   const text = await upstream.text();
   const parsed = readJsonObject(text);
+  const payloadInvalid = !parsed || !hasRecognizableRiderList(parsed);
 
-  if (!upstream.ok) {
+  if (!upstream.ok || payloadInvalid || parsed.success === false) {
     const error = typeof parsed?.error === 'string' && parsed.error.trim() ? parsed.error.trim() : 'riders_upstream_failed';
     return {
       success: false,

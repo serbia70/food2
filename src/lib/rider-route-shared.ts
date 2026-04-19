@@ -96,18 +96,6 @@ function parseJsonValue(text: string): unknown {
   }
 }
 
-function hasRecognizableRiderList(payload: Record<string, unknown>): boolean {
-  if (Array.isArray(payload.riders) || Array.isArray(payload.rows) || Array.isArray(payload.items)) {
-    return true;
-  }
-
-  const data = payload.data;
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
-
-  const nested = data as Record<string, unknown>;
-  return Array.isArray(nested.riders) || Array.isArray(nested.rows) || Array.isArray(nested.items);
-}
-
 function readOrderId(row: Record<string, unknown>): string {
   return String(row.id || row.orderId || row.order_id || '').trim();
 }
@@ -131,9 +119,6 @@ function readOrderRows(payload: unknown): Record<string, unknown>[] {
   const direct = pickMatchingOrderRow(root, '');
   if (direct) return [direct];
 
-  const directOrder = pickMatchingOrderRow(root.order, '');
-  if (directOrder) return [directOrder];
-
   const directOrders = Array.isArray(root.orders) ? root.orders : [];
   if (directOrders.length > 0) {
     return directOrders.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
@@ -148,9 +133,6 @@ function readOrderRows(payload: unknown): Record<string, unknown>[] {
     const nested = data as Record<string, unknown>;
     const nestedDirect = pickMatchingOrderRow(nested, '');
     if (nestedDirect) return [nestedDirect];
-
-    const nestedOrder = pickMatchingOrderRow(nested.order, '');
-    if (nestedOrder) return [nestedOrder];
 
     const nestedOrders = Array.isArray(nested.orders)
       ? nested.orders as unknown[]
@@ -273,9 +255,8 @@ export async function readAdminAssignableRiders({
   });
   const text = await upstream.text();
   const parsed = readJsonObject(text);
-  const payloadInvalid = !parsed || !hasRecognizableRiderList(parsed);
 
-  if (!upstream.ok || payloadInvalid || parsed.success === false) {
+  if (!upstream.ok) {
     const error = typeof parsed?.error === 'string' && parsed.error.trim() ? parsed.error.trim() : 'riders_upstream_failed';
     return {
       success: false,
@@ -310,11 +291,8 @@ export async function readAdminOrderById({
   });
   const rawText = await upstream.text();
   const parsed = parseJsonValue(rawText);
-  const parsedObject = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-    ? parsed as Record<string, unknown>
-    : null;
 
-  if (!upstream.ok || parsedObject == null || parsedObject.success === false) {
+  if (!upstream.ok || parsed == null) {
     return {
       ok: false,
       status: upstream.status || 502,
@@ -322,7 +300,7 @@ export async function readAdminOrderById({
     };
   }
 
-  const order = findAdminOrderRow(parsedObject, orderId);
+  const order = findAdminOrderRow(parsed, orderId);
   return {
     ok: true,
     found: Boolean(order),

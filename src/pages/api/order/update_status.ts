@@ -1,8 +1,9 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
-import { buildRiderOrderView, readDispatchMetaFromRemarks, resolveRiderUnifiedStatus } from '../../../lib/rider-dispatch.ts';
+import { readOnlineRiders } from '../../../lib/rider-assignment.ts';
+import { buildDispatchMetaRemarks, buildRiderOrderView, readDispatchMetaFromRemarks, resolveRiderUnifiedStatus } from '../../../lib/rider-dispatch.ts';
 import { buildRiderSingleMessageTelegram, buildTelegramEditMessagePayload, buildTelegramShortClaimCallback } from '../../../lib/telegram-dispatch.ts';
-import { buildForwardHeaders, readOrderDetail, readTelegramItemSummaryFromOrder } from '../../../lib/rider-route-shared.ts';
+import { buildForwardHeaders, readOrderDetail, readTelegramItemSummaryFromOrder, writeOrderDispatchRemarks } from '../../../lib/rider-route-shared.ts';
 
 export const prerender = false;
 
@@ -27,6 +28,40 @@ function readOrderShopSlug(order: Record<string, unknown>, fallback?: unknown): 
     || readTelegramSendShopSlug(fallback);
 }
 
+function readTelegramMessageRefFromResponse(body: Record<string, unknown>, fallbackChatId = ''): { chatId: string; messageId: number } | null {
+  const result = body.result && typeof body.result === 'object' ? body.result as Record<string, unknown> : null;
+  const chatId = String(
+    body.chatId
+      || body.chat_id
+      || result?.chatId
+      || result?.chat_id
+      || (result?.chat && typeof result.chat === 'object' ? (result.chat as Record<string, unknown>).id : '')
+      || fallbackChatId
+      || '',
+  ).trim();
+  const messageId = Number(
+    body.messageId
+      || body.message_id
+      || result?.messageId
+      || result?.message_id
+      || 0,
+  );
+  return chatId && Number.isInteger(messageId) && messageId > 0 ? { chatId, messageId } : null;
+}
+
+async function readRiderTelegramChatId(request: Request, apiBaseUrl: string, riderPhone: string, riderIdText: string): Promise<string> {
+  const upstream = await fetch(`${apiBaseUrl}/api/rider/status?action=list_available`, {
+    headers: buildForwardHeaders(request),
+  });
+  const text = await upstream.text();
+  if (!upstream.ok || !text) return '';
+  const parsed = JSON.parse(text) as unknown;
+  const riders = readOnlineRiders(parsed);
+  const matched = riders.find((row) => String(row.phone || '').trim() === riderPhone)
+    || riders.find((row) => String(row.id || '').trim() === riderIdText);
+  return String(matched?.telegramChatId || matched?.telegram_chat_id || '').trim();
+}
+
 async function syncTelegramRiderMessageAfterStatusUpdate(
   request: Request,
   orderId: string,
@@ -35,25 +70,19 @@ async function syncTelegramRiderMessageAfterStatusUpdate(
   const nextStatus = String(payload.status || '').trim();
   if (nextStatus !== 'picked_up' && nextStatus !== 'completed') return;
 
-  const riderPhone = String(payload.courierPhone || payload.courier_phone || '').trim();
-  const riderName = String(payload.courierName || payload.courier_name || '').trim();
-  if (!riderPhone || !riderName) return;
+  const payloadRiderPhone = String(payload.courierPhone || payload.courier_phone || '').trim();
+  const payloadRiderName = String(payload.courierName || payload.courier_name || '').trim();
 
   const apiBaseUrl = readApiBaseUrl();
-  const order = await readOrderDetail(request, apiBaseUrl, orderId, riderPhone);
+  const order = await readOrderDetail(request, apiBaseUrl, orderId, payloadRiderPhone);
   if (!order) return;
+
+  const riderPhone = payloadRiderPhone || String(order.courierPhone || order.courier_phone || '').trim();
+  const riderName = payloadRiderName || String(order.courierName || order.courier_name || '').trim();
+  if (!riderPhone || !riderName) return;
 
   const remarksJson = String(order.remarksJson || order.remarks_json || '').trim();
   const meta = readDispatchMetaFromRemarks(remarksJson);
-  const messageRef = meta.telegramMessageRef;
-  if (!messageRef) return;
-
-  const orderView = buildRiderOrderView({
-    ...order,
-    status: nextStatus,
-    remarksJson,
-    courierPhone: riderPhone,
-  });
   const riderId = Number(
     payload.riderId
       || payload.rider_id
@@ -62,16 +91,27 @@ async function syncTelegramRiderMessageAfterStatusUpdate(
       || meta.currentRiderId
       || 0,
   );
+  const riderIdText = Number.isInteger(riderId) && riderId > 0 ? String(riderId) : '';
+  const shopSlug = readOrderShopSlug(order, payload.shopSlug || payload.shop_slug);
+  const messageRef = meta.telegramMessageRef;
+  const targetChatId = messageRef?.chatId || await readRiderTelegramChatId(request, apiBaseUrl, riderPhone, riderIdText);
+  if (!targetChatId) return;
+
+  const orderView = buildRiderOrderView({
+    ...order,
+    status: nextStatus,
+    remarksJson,
+    courierPhone: riderPhone,
+  });
   const unifiedStatus = resolveRiderUnifiedStatus({
     ...order,
     status: nextStatus,
     remarksJson,
     courierPhone: riderPhone,
   }, {
-    riderId: Number.isInteger(riderId) && riderId > 0 ? String(riderId) : '',
+    riderId: riderIdText,
     riderPhone,
   });
-  const shopSlug = readOrderShopSlug(order, payload.shopSlug || payload.shop_slug);
   const action = unifiedStatus.primaryAction === '送达' ? 'complete' : 'picked_up';
   const primaryCallbackData = unifiedStatus.primaryAction && shopSlug && Number.isInteger(riderId) && riderId > 0
     ? buildTelegramShortClaimCallback({
@@ -80,7 +120,7 @@ async function syncTelegramRiderMessageAfterStatusUpdate(
         riderName,
         riderPhone,
         restaurantId: shopSlug,
-        telegramChatId: messageRef.chatId,
+        telegramChatId: targetChatId,
         action,
       })
     : '';
@@ -103,22 +143,41 @@ async function syncTelegramRiderMessageAfterStatusUpdate(
     secondaryAction: null,
   });
 
-  await fetch(new URL('/api/telegram/send', request.url), {
+  const telegramResponse = await fetch(new URL('/api/telegram/send', request.url), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...buildForwardHeaders(request),
     },
-    body: JSON.stringify({
-      ...(shopSlug ? { shopSlug } : {}),
-      ...buildTelegramEditMessagePayload({
-        chatId: messageRef.chatId,
-        messageId: messageRef.messageId,
-        text: message.text,
-        replyMarkup: message.replyMarkup,
-      }),
-    }),
+    body: JSON.stringify(messageRef
+      ? {
+          ...(shopSlug ? { shopSlug } : {}),
+          ...buildTelegramEditMessagePayload({
+            chatId: messageRef.chatId,
+            messageId: messageRef.messageId,
+            text: message.text,
+            replyMarkup: message.replyMarkup,
+          }),
+        }
+      : {
+          ...(shopSlug ? { shopSlug } : {}),
+          chatId: targetChatId,
+          text: message.text,
+          replyMarkup: message.replyMarkup,
+        }),
   });
+
+  if (messageRef) return;
+
+  const telegramText = await telegramResponse.text();
+  if (!telegramResponse.ok || !telegramText) return;
+  const nextMessageRef = readTelegramMessageRefFromResponse(JSON.parse(telegramText) as Record<string, unknown>, targetChatId);
+  if (!nextMessageRef) return;
+
+  await writeOrderDispatchRemarks(request, apiBaseUrl, orderId, JSON.stringify(buildDispatchMetaRemarks(remarksJson, {
+    ...meta,
+    telegramMessageRef: nextMessageRef,
+  })));
 }
 
 export async function forwardOrderUpdateStatus(request: Request, routeId?: string): Promise<Response> {

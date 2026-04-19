@@ -1,0 +1,276 @@
+- generic [ref=e1]:
+  - generic [ref=e3]: "MQTT: 已连接"
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - heading "⚙️ 103 v6.0" [level=2] [ref=e8]
+        - generic [ref=e9] [cursor=pointer]: 🔇 声音未激活 (点此开启)
+        - button "🔊 测试" [ref=e10] [cursor=pointer]
+        - button "🔄 刷新页面" [ref=e11] [cursor=pointer]
+        - button "重启" [ref=e13] [cursor=pointer]:
+          - img [ref=e14]
+          - text: 重启
+        - button "关机" [ref=e16] [cursor=pointer]:
+          - img [ref=e17]
+          - text: 关机
+      - generic [ref=e19]:
+        - combobox [ref=e20]:
+          - option "🗣️ 语音播报" [selected]
+          - option "🔔 叮咚提示音"
+        - link "预览 >" [ref=e21] [cursor=pointer]:
+          - /url: /103
+        - button "退出" [ref=e22]
+    - generic [ref=e24]:
+      - button "📱 订单 (Active)" [active] [ref=e25]
+      - button "📅 预约" [ref=e26]
+      - button "📜 历史 (History)" [ref=e27]
+      - button "🍔 菜单" [ref=e28]
+      - button "🛠️ 设置" [ref=e29]
+      - button "📊 统计" [ref=e30]
+      - button "🎯 营销" [ref=e31]
+      - button "👥 客户" [ref=e32]
+      - button "🔑 密码" [ref=e33]
+      - button "💰 费用" [ref=e34]
+    - generic [ref=e1039]:
+      - generic [ref=e1041]:
+        - generic [ref=e1042]:
+          - strong [ref=e1043]: 堂食订阅
+          - generic [ref=e1044]: 商务版
+        - generic [ref=e1045]:
+          - generic [ref=e1046]:
+            - text: 到期日期：
+            - strong [ref=e1047]: 2027-05-01
+          - generic [ref=e1048]:
+            - text: 宽限截止：
+            - strong [ref=e1049]: 2027-05-06
+      - generic [ref=e1050]: 🍽️ 堂食区域 (Dine-in)
+      - generic [ref=e1051]:
+        - generic [ref=e1052]:
+          - generic [ref=e1053]:
+            - generic [ref=e1055]: 1号桌
+            - generic [ref=e1056]: 空闲
+          - generic [ref=e1057]:
+            - button "📝 点餐" [ref=e1058] [cursor=pointer]
+            - button "💰 结账" [disabled] [ref=e1059]
+            - button "🏷️ 备注" [disabled] [ref=e1060]
+            - button "🖨️ 打印" [ref=e1061] [cursor=pointer]
+        - generic [ref=e1062]:
+          - generic [ref=e1063]:
+            - generic [ref=e1065]: 2号桌
+            - generic [ref=e1066]: 空闲
+          - generic [ref=e1067]:
+            - button "📝 点餐" [ref=e1068] [cursor=pointer]
+            - button "💰 结账" [disabled] [ref=e1069]
+            - button "🏷️ 备注" [disabled] [ref=e1070]
+            - button "🖨️ 打印" [ref=e1071] [cursor=pointer]
+        - generic [ref=e1072]:
+          - generic [ref=e1073]:
+            - generic [ref=e1075]: 3号桌
+            - generic [ref=e1076]: 空闲
+          - generic [ref=e1077]:
+            - button "📝 点餐" [ref=e1078] [cursor=pointer]
+            - button "💰 结账" [disabled] [ref=e1079]
+            - button "🏷️ 备注" [disabled] [ref=e1080]
+            - button "🖨️ 打印" [ref=e1081] [cursor=pointer]
+        - generic [ref=e1082]:
+          - generic [ref=e1083]:
+            - generic [ref=e1085]: 4号桌
+            - generic [ref=e1086]: 空闲
+          - generic [ref=e1087]:
+            - button "📝 点餐" [ref=e1088] [cursor=pointer]
+            - button "💰 结账" [disabled] [ref=e1089]
+            - button "🏷️ 备注" [disabled] [ref=e1090]
+            - button "🖨️ 打印" [ref=e1091] [cursor=pointer]
+        - generic [ref=e1092]:
+          - generic [ref=e1093]:
+            - generic [ref=e1095]: 5号桌
+            - generic [ref=e1096]: 空闲
+          - generic [ref=e1097]:
+            - button "📝 点餐" [ref=e1098] [cursor=pointer]
+            - button "💰 结账" [disabled] [ref=e1099]
+            - button "🏷️ 备注" [disabled] [ref=e1100]
+            - button "🖨️ 打印" [ref=e1101] [cursor=pointer]
+        - generic [ref=e1102]:
+          - generic [ref=e1103]:
+            - generic [ref=e1105]: 6号桌
+            - generic [ref=e1106]: 空闲
+          - generic [ref=e1107]:
+            - button "📝 点餐" [ref=e1108] [cursor=pointer]
+            - button "💰 结账" [disabled] [ref=e1109]
+            - button "🏷️ 备注" [disabled] [ref=e1110]
+            - button "🖨️ 打印" [ref=e1111] [cursor=pointer]
+        - generic [ref=e1112]:
+          - generic [ref=e1113]:
+            - generic [ref=e1115]: 7号桌
+            - generic [ref=e1116]: 空闲
+          - generic [ref=e1117]:
+            - button "📝 点餐" [ref=e1118] [cursor=pointer]
+            - button "💰 结账" [disabled] [ref=e1119]
+            - button "🏷️ 备注" [disabled] [ref=e1120]
+            - button "🖨️ 打印" [ref=e1121] [cursor=pointer]
+        - generic [ref=e1122]:
+          - generic [ref=e1123]:
+            - generic [ref=e1125]: 8号桌
+            - generic [ref=e1126]: 空闲
+          - generic [ref=e1127]:
+            - button "📝 点餐" [ref=e1128] [cursor=pointer]
+            - button "💰 结账" [disabled] [ref=e1129]
+            - button "🏷️ 备注" [disabled] [ref=e1130]
+            - button "🖨️ 打印" [ref=e1131] [cursor=pointer]
+        - generic [ref=e1132]:
+          - generic [ref=e1133]:
+            - generic [ref=e1135]: 9号桌
+            - generic [ref=e1136]: 空闲
+          - generic [ref=e1137]:
+            - button "📝 点餐" [ref=e1138] [cursor=pointer]
+            - button "💰 结账" [disabled] [ref=e1139]
+            - button "🏷️ 备注" [disabled] [ref=e1140]
+            - button "🖨️ 打印" [ref=e1141] [cursor=pointer]
+        - generic [ref=e1142]:
+          - generic [ref=e1143]:
+            - generic [ref=e1145]: 10号桌
+            - generic [ref=e1146]: 空闲
+          - generic [ref=e1147]:
+            - button "📝 点餐" [ref=e1148] [cursor=pointer]
+            - button "💰 结账" [disabled] [ref=e1149]
+            - button "🏷️ 备注" [disabled] [ref=e1150]
+            - button "🖨️ 打印" [ref=e1151] [cursor=pointer]
+      - generic [ref=e1152]:
+        - generic [ref=e1153]: 🛵 外卖 / 待处理 (Delivery & Pending)
+        - generic [ref=e1154]: 按时间倒序排列
+      - generic [ref=e1155]:
+        - generic [ref=e1156]:
+          - generic [ref=e1157]:
+            - generic [ref=e1158]: 外卖
+            - generic [ref=e1159]: "#260419002"
+            - generic [ref=e1160]: "取餐号: 002"
+            - generic [ref=e1161]: 11:44
+          - generic [ref=e1162]: "📍 hui, 0613083888, ruma1 [货到付款/Cash] (备注:) (Tel: 0613083888)"
+          - generic [ref=e1164]: Aromaticno-ljuti rak (香辣蟹) x1
+          - generic [ref=e1165]:
+            - generic [ref=e1166]:
+              - generic [ref=e1167]: 配送中
+              - button "✅ 确认送达" [ref=e1168] [cursor=pointer]
+              - generic [ref=e1169]: 已指派骑手：骑手888
+              - button "💬" [ref=e1170] [cursor=pointer]
+              - button "🖨️" [ref=e1171] [cursor=pointer]
+            - generic [ref=e1172]: 905 RSD
+        - generic [ref=e1173]:
+          - generic [ref=e1174]:
+            - generic [ref=e1175]: 外卖
+            - generic [ref=e1176]: "#260419001"
+            - generic [ref=e1177]: "取餐号: 001"
+            - generic [ref=e1178]: 11:43
+          - generic [ref=e1179]: "📍 hui chen, 0613083889, veljka dugosevica 197 [货到付款/Cash] (备注:) (Tel: 0613083889)"
+          - generic [ref=e1181]: Riba sa kiselim kupusom (酸菜鱼) x1
+          - generic [ref=e1182]:
+            - generic [ref=e1183]:
+              - generic [ref=e1184]: 待处理
+              - button "👤 指派骑手" [ref=e1185] [cursor=pointer]
+              - button "🔁 自动派单" [ref=e1186] [cursor=pointer]
+              - button "💰 结账" [ref=e1187] [cursor=pointer]
+              - button "❌ 拒绝" [ref=e1188] [cursor=pointer]
+              - button "💬" [ref=e1189] [cursor=pointer]
+              - button "✏️" [ref=e1190] [cursor=pointer]
+              - button "🖨️" [ref=e1191] [cursor=pointer]
+            - generic [ref=e1192]: 930 RSD
+        - generic [ref=e1193]:
+          - generic [ref=e1194]:
+            - generic [ref=e1195]: 外卖
+            - generic [ref=e1196]: "#260417014"
+            - generic [ref=e1197]: "取餐号: 014"
+            - generic [ref=e1198]: 23:38
+          - generic [ref=e1199]: "📍 hui, 0613083888, ruma1 [货到付款/Cash] (备注:) (Tel: 0613083888)"
+          - generic [ref=e1201]: Aromaticno-ljuti rak (香辣蟹) x1
+          - generic [ref=e1202]:
+            - generic [ref=e1203]:
+              - generic [ref=e1204]: 配送中
+              - button "✅ 确认送达" [ref=e1205] [cursor=pointer]
+              - generic [ref=e1206]: 已指派骑手：骑手888
+              - button "💬" [ref=e1207] [cursor=pointer]
+              - button "🖨️" [ref=e1208] [cursor=pointer]
+            - generic [ref=e1209]: 905 RSD
+        - generic [ref=e1210]:
+          - generic [ref=e1211]:
+            - generic [ref=e1212]: 外卖
+            - generic [ref=e1213]: "#260417013"
+            - generic [ref=e1214]: "取餐号: 013"
+            - generic [ref=e1215]: 23:11
+          - generic [ref=e1216]: "📍 hui, 0613083888, ruma1 [货到付款/Cash] (备注:) (Tel: 0613083888)"
+          - generic [ref=e1218]: Turbot na pari (清蒸多宝鱼) x1
+          - generic [ref=e1219]:
+            - generic [ref=e1220]:
+              - generic [ref=e1221]: 配送中
+              - button "✅ 确认送达" [ref=e1222] [cursor=pointer]
+              - generic [ref=e1223]: 已指派骑手：骑手888
+              - button "💬" [ref=e1224] [cursor=pointer]
+              - button "🖨️" [ref=e1225] [cursor=pointer]
+            - generic [ref=e1226]: 556 RSD
+        - generic [ref=e1227]:
+          - generic [ref=e1228]:
+            - generic [ref=e1229]: 外卖
+            - generic [ref=e1230]: "#260417012"
+            - generic [ref=e1231]: "取餐号: 012"
+            - generic [ref=e1232]: 22:55
+          - generic [ref=e1233]: "📍 hui, 0613083888, ruma1 [货到付款/Cash] (备注:) (Tel: 0613083888)"
+          - generic [ref=e1235]: Turbot na pari (清蒸多宝鱼) x1
+          - generic [ref=e1236]:
+            - generic [ref=e1237]:
+              - generic [ref=e1238]: 配送中
+              - button "✅ 确认送达" [ref=e1239] [cursor=pointer]
+              - generic [ref=e1240]: 已指派骑手：骑手888
+              - button "💬" [ref=e1241] [cursor=pointer]
+              - button "🖨️" [ref=e1242] [cursor=pointer]
+            - generic [ref=e1243]: 556 RSD
+        - generic [ref=e1244]:
+          - generic [ref=e1245]:
+            - generic [ref=e1246]: 外卖
+            - generic [ref=e1247]: "#260417005"
+            - generic [ref=e1248]: "取餐号: 005"
+            - generic [ref=e1249]: 16:58
+          - generic [ref=e1250]: "📍 hui, 0613083888, ruma1 [货到付款/Cash] (备注:) (Tel: 0613083888)"
+          - generic [ref=e1252]: Turbot na pari (清蒸多宝鱼) x1
+          - generic [ref=e1253]:
+            - generic [ref=e1254]:
+              - generic [ref=e1255]: 配送中
+              - button "✅ 已取餐" [ref=e1256] [cursor=pointer]
+              - generic [ref=e1257]: 已指派骑手：骑手888
+              - button "💬" [ref=e1258] [cursor=pointer]
+              - button "✏️" [ref=e1259] [cursor=pointer]
+              - button "🖨️" [ref=e1260] [cursor=pointer]
+            - generic [ref=e1261]: 556 RSD
+        - generic [ref=e1262]:
+          - generic [ref=e1263]:
+            - generic [ref=e1264]: 外卖
+            - generic [ref=e1265]: "#260417004"
+            - generic [ref=e1266]: "取餐号: 004"
+            - generic [ref=e1267]: 16:55
+          - generic [ref=e1268]: "📍 hui, 0613083888, ruma1 [货到付款/Cash] (备注:) (Tel: 0613083888)"
+          - generic [ref=e1270]: Aromaticno-ljuti rak (香辣蟹) x1
+          - generic [ref=e1271]:
+            - generic [ref=e1272]:
+              - generic [ref=e1273]: 配送中
+              - button "✅ 已取餐" [ref=e1274] [cursor=pointer]
+              - generic [ref=e1275]: 已指派骑手：骑手888
+              - button "💬" [ref=e1276] [cursor=pointer]
+              - button "✏️" [ref=e1277] [cursor=pointer]
+              - button "🖨️" [ref=e1278] [cursor=pointer]
+            - generic [ref=e1279]: 905 RSD
+        - generic [ref=e1280]:
+          - generic [ref=e1281]:
+            - generic [ref=e1282]: 外卖
+            - generic [ref=e1283]: "#260417003"
+            - generic [ref=e1284]: "取餐号: 003"
+            - generic [ref=e1285]: 16:25
+          - generic [ref=e1286]: "📍 hui, 0613083888, ruma1 [货到付款/Cash] (备注:) (Tel: 0613083888)"
+          - generic [ref=e1288]: Turbot na pari (清蒸多宝鱼) x1
+          - generic [ref=e1289]:
+            - generic [ref=e1290]:
+              - generic [ref=e1291]: 配送中
+              - button "✅ 已取餐" [ref=e1292] [cursor=pointer]
+              - generic [ref=e1293]: 已指派骑手：骑手888
+              - button "💬" [ref=e1294] [cursor=pointer]
+              - button "✏️" [ref=e1295] [cursor=pointer]
+              - button "🖨️" [ref=e1296] [cursor=pointer]
+            - generic [ref=e1297]: 556 RSD
+  - button "💬" [ref=e1038] [cursor=pointer]

@@ -1,0 +1,5 @@
+[     151ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://food2.serbia70.com/admin/103/login:0
+[   10072ms] [LOG] [admin-entry] initialized @ https://food2.serbia70.com/_astro/AdminScripts.astro_astro_type_script_index_0_lang.D80WAUOp.js:0
+[   10116ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "new-password"): (More info: https://goo.gl/9p2vKq) %o @ https://food2.serbia70.com/admin/103:0
+[  173825ms] [LOG] [admin-entry] initialized @ https://food2.serbia70.com/_astro/AdminScripts.astro_astro_type_script_index_0_lang.D80WAUOp.js:0
+[  173835ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "new-password"): (More info: https://goo.gl/9p2vKq) %o @ https://food2.serbia70.com/admin/103:0

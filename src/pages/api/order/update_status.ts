@@ -49,17 +49,22 @@ function readTelegramMessageRefFromResponse(body: Record<string, unknown>, fallb
   return chatId && Number.isInteger(messageId) && messageId > 0 ? { chatId, messageId } : null;
 }
 
-async function readRiderTelegramChatId(request: Request, apiBaseUrl: string, riderPhone: string, riderIdText: string): Promise<string> {
+async function readMatchedAvailableRider(
+  request: Request,
+  apiBaseUrl: string,
+  riderPhone: string,
+  riderIdText: string,
+): Promise<ReturnType<typeof readOnlineRiders>[number] | null> {
   const upstream = await fetch(`${apiBaseUrl}/api/rider/status?action=list_available`, {
     headers: buildForwardHeaders(request),
   });
   const text = await upstream.text();
-  if (!upstream.ok || !text) return '';
+  if (!upstream.ok || !text) return null;
   const parsed = JSON.parse(text) as unknown;
   const riders = readOnlineRiders(parsed);
-  const matched = riders.find((row) => String(row.phone || '').trim() === riderPhone)
-    || riders.find((row) => String(row.id || '').trim() === riderIdText);
-  return String(matched?.telegramChatId || matched?.telegram_chat_id || '').trim();
+  return riders.find((row) => String(row.phone || '').trim() === riderPhone)
+    || riders.find((row) => String(row.id || '').trim() === riderIdText)
+    || null;
 }
 
 async function syncTelegramRiderMessageAfterStatusUpdate(
@@ -83,7 +88,7 @@ async function syncTelegramRiderMessageAfterStatusUpdate(
 
   const remarksJson = String(order.remarksJson || order.remarks_json || '').trim();
   const meta = readDispatchMetaFromRemarks(remarksJson);
-  const riderId = Number(
+  const initialRiderId = Number(
     payload.riderId
       || payload.rider_id
       || order.courierId
@@ -91,10 +96,19 @@ async function syncTelegramRiderMessageAfterStatusUpdate(
       || meta.currentRiderId
       || 0,
   );
-  const riderIdText = Number.isInteger(riderId) && riderId > 0 ? String(riderId) : '';
+  let riderId = Number.isInteger(initialRiderId) && initialRiderId > 0 ? initialRiderId : 0;
+  let riderIdText = riderId > 0 ? String(riderId) : '';
+  const matchedAvailableRider = await readMatchedAvailableRider(request, apiBaseUrl, riderPhone, riderIdText);
+  if (riderId <= 0) {
+    const fallbackRiderId = Number(matchedAvailableRider?.id || 0);
+    if (Number.isInteger(fallbackRiderId) && fallbackRiderId > 0) {
+      riderId = fallbackRiderId;
+      riderIdText = String(fallbackRiderId);
+    }
+  }
   const shopSlug = readOrderShopSlug(order, payload.shopSlug || payload.shop_slug);
   const messageRef = meta.telegramMessageRef;
-  const targetChatId = messageRef?.chatId || await readRiderTelegramChatId(request, apiBaseUrl, riderPhone, riderIdText);
+  const targetChatId = messageRef?.chatId || String(matchedAvailableRider?.telegramChatId || matchedAvailableRider?.telegram_chat_id || '').trim();
   if (!targetChatId) return;
 
   const orderView = buildRiderOrderView({

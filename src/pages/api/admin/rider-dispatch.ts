@@ -8,7 +8,7 @@ import {
   writeAdminDispatchMetaRemarks,
 } from '../../../lib/rider-route-shared.ts';
 import { buildRiderOrderView, readDispatchMetaFromRemarks, type DispatchMeta } from '../../../lib/rider-dispatch.ts';
-import { type AssignableRider } from '../../../lib/rider-assignment.ts';
+import { readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
 import { buildTelegramClaimCallback, buildTelegramDeepLink, buildTelegramDispatchMessage } from '../../../lib/telegram-dispatch.ts';
 
 export const prerender = false;
@@ -32,6 +32,14 @@ interface DispatchOrderSnapshot {
   riderRemindCount?: number | string | null;
   riderLastRemindedAt?: string | null;
   remarksJson?: string | null;
+}
+
+interface TelegramRiderRow {
+  id?: number | string | null;
+  name?: string | null;
+  phone?: string | null;
+  telegramChatId?: string | null;
+  telegram_chat_id?: string | null;
 }
 
 interface TelegramDispatchAttempt {
@@ -324,9 +332,9 @@ function selectRiderForPublish({
   riders,
   forcedRiderId,
 }: {
-  riders: AssignableRider[];
+  riders: TelegramRiderRow[];
   forcedRiderId: string;
-}): AssignableRider[] {
+}): TelegramRiderRow[] {
   if (!forcedRiderId) return riders;
   return riders.filter((rider) => String(rider.id || '').trim() === forcedRiderId);
 }
@@ -558,7 +566,7 @@ async function handleRepublishOnTimeout({
     return buildAvailableRidersErrorResponse(ridersResult);
   }
 
-  const riders = ridersResult.riders;
+  const riders = readOnlineRiders({ riders: ridersResult.riders });
   const currentRiderId = String(existingMeta.currentRiderId || '').trim();
   const nextRider = pickNextRiderOnTimeout({
     riders,
@@ -655,7 +663,7 @@ async function handlePublishOrRemind({
   } = preparedResult.prepared;
 
   let mergedOrder = mergedOrderBase;
-  let riderFilter: ((rider: AssignableRider) => boolean) | undefined;
+  let riderFilter: ((rider: TelegramRiderRow) => boolean) | undefined;
 
   if (action === 'publish') {
     const ridersResult = await fetchAvailableRiders(request, cookies);
@@ -743,7 +751,7 @@ async function notifyTelegramRecipients(
   request: Request,
   cookies: RouteCookies,
   order: DispatchOrderSnapshot,
-  riderFilter?: (rider: AssignableRider) => boolean,
+  riderFilter?: (rider: TelegramRiderRow) => boolean,
 ): Promise<TelegramDispatchResult> {
   const ridersResult = await fetchAvailableRiders(request, cookies);
   if (!ridersResult.success) {
@@ -756,7 +764,7 @@ async function notifyTelegramRecipients(
   }
 
   const riders = ridersResult.riders;
-  const readRiderChatId = (rider: AssignableRider) => String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
+  const readRiderChatId = (rider: TelegramRiderRow) => String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
   const scopedRiders = riderFilter ? riders.filter(riderFilter) : riders;
   const availableRiderCount = scopedRiders.length;
   const telegramRiders = scopedRiders.filter((rider) => readRiderChatId(rider) !== '');

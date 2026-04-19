@@ -2,16 +2,19 @@ import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
 import { proxyAdminRequest } from '../../../lib/admin-api-route.ts';
 import {
+  persistAdminTelegramMessageRef,
+  readAdminAssignableRiders,
+  readAdminOrderById,
+  readJsonObject,
+} from '../../../lib/rider-route-shared.ts';
+import {
   buildAssignedOrderStatusPayload,
   pickNextAvailableRider,
-  readOnlineRiders,
   type AssignableRider,
 } from '../../../lib/rider-assignment.ts';
 import {
-  buildDispatchMetaRemarks,
   buildRiderOrderView,
   filterAvailableRidersForOrder,
-  readDispatchMetaFromRemarks,
   type DispatchMeta,
 } from '../../../lib/rider-dispatch.ts';
 import {
@@ -21,10 +24,6 @@ import {
 
 export const prerender = false;
 
-
-type RiderFetchResult =
-  | { success: true; riders: AssignableRider[] }
-  | { success: false; status: number; error: string; upstreamBody?: string };
 
 type OrderSummaryItem = { name?: unknown; quantity?: unknown };
 type OrderSummaryInput = {
@@ -56,15 +55,6 @@ type OrderSummaryInput = {
   itemsJson?: unknown;
   items_json?: unknown;
 };
-
-function readJsonObject(text: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(text) as unknown;
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
-  } catch {
-    return null;
-  }
-}
 
 function readRiderChatId(rider: AssignableRider): string {
   return String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
@@ -137,67 +127,12 @@ function readOrderSummary(body: Record<string, unknown>): {
   };
 }
 
-function findOrderRow(payload: unknown, orderId: string): Record<string, unknown> | null {
-  const normalizedOrderId = String(orderId || '').trim();
-  if (!payload) return null;
-
-  const pickFromRow = (row: unknown): Record<string, unknown> | null => {
-    if (!row || typeof row !== 'object') return null;
-    const data = row as Record<string, unknown>;
-    const id = String(data.id || data.orderId || data.order_id || '').trim();
-    if (normalizedOrderId) return id === normalizedOrderId ? data : null;
-    return id ? data : null;
-  };
-
-  if (Array.isArray(payload)) {
-    for (const row of payload) {
-      const found = pickFromRow(row);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  if (typeof payload === 'object') {
-    const data = payload as Record<string, unknown>;
-    const direct = pickFromRow(data);
-    if (direct) return direct;
-
-    const nestedData = data.data;
-    if (Array.isArray(nestedData)) {
-      for (const row of nestedData) {
-        const found = pickFromRow(row);
-        if (found) return found;
-      }
-    } else if (nestedData && typeof nestedData === 'object') {
-      const nested = nestedData as Record<string, unknown>;
-      const nestedDirect = pickFromRow(nested);
-      if (nestedDirect) return nestedDirect;
-      if (Array.isArray(nested.orders)) {
-        for (const row of nested.orders) {
-          const found = pickFromRow(row);
-          if (found) return found;
-        }
-      }
-    }
-
-    if (Array.isArray(data.orders)) {
-      for (const row of data.orders) {
-        const found = pickFromRow(row);
-        if (found) return found;
-      }
-    }
-  }
-
-  return null;
-}
-
 function normalizeNotifyShopSlug(value: unknown): string {
   const slug = String(value || '').trim();
   return /^[a-z0-9][a-z0-9-]*$/i.test(slug) ? slug : '';
 }
 
-function readOrderShopSlug(payload: unknown, orderId: string): string {
-  const row = findOrderRow(payload, orderId);
+function readOrderShopSlug(row: Record<string, unknown> | null | undefined): string {
   if (!row) return '';
   return normalizeNotifyShopSlug(row.shopSlug || row.shop_slug || row.restaurantSlug || row.restaurant_slug || '');
 }
@@ -235,97 +170,19 @@ async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute[
     itemSummary: string[];
   } | null;
 }> {
-  const res = await proxyAdminRequest({
+  const result = await readAdminOrderById({
     request,
     cookies,
-    url: `${API_BASE_URL}/api/admin/orders`,
-    method: 'GET',
+    apiBaseUrl: API_BASE_URL,
+    orderId,
   });
-  const text = await res.text();
-  if (!res.ok || !text) return { ok: false, found: false, shopSlug: '', remarksJson: '', orderSummary: null };
-  const parsed = readJsonObject(text);
-  if (!parsed) return { ok: false, found: false, shopSlug: '', remarksJson: '', orderSummary: null };
-  const row = findOrderRow(parsed, orderId);
+  if (!result.ok) return { ok: false, found: false, shopSlug: '', remarksJson: '', orderSummary: null };
   return {
     ok: true,
-    found: Boolean(row),
-    shopSlug: readOrderShopSlug(parsed, orderId),
-    remarksJson: row && typeof row === 'object' ? String(row.remarksJson || '').trim() : '',
-    orderSummary: row ? readOrderSummaryFromRow(row) : null,
-  };
-}
-
-async function fetchAvailableRiders(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies']): Promise<RiderFetchResult> {
-  const res = await proxyAdminRequest({
-    request,
-    cookies,
-    url: `${API_BASE_URL}/api/admin/riders`,
-    method: 'GET',
-  });
-  const text = await res.text();
-  const parsed = readJsonObject(text);
-
-  if (!res.ok) {
-    const error = typeof parsed?.error === 'string' && parsed.error.trim() ? parsed.error.trim() : 'riders_upstream_failed';
-    return {
-      success: false,
-      status: res.status || 502,
-      error,
-      upstreamBody: text || undefined,
-    };
-  }
-
-  return {
-    success: true,
-    riders: readOnlineRiders(parsed),
-  };
-}
-
-async function writeDispatchMetaRemarks({
-  request,
-  cookies,
-  orderId,
-  remarksJson,
-  nextMeta,
-}: {
-  request: Request;
-  cookies: Parameters<APIRoute['POST']>[0]['cookies'];
-  orderId: string;
-  remarksJson: string;
-  nextMeta: DispatchMeta;
-}) {
-  const nextRemarks = buildDispatchMetaRemarks(remarksJson, nextMeta);
-  const remarksRes = await proxyAdminRequest({
-    request,
-    cookies,
-    url: `${API_BASE_URL}/api/admin/orders/remarks`,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      orderId,
-      remarks: nextRemarks,
-    }),
-  });
-  const remarksText = await remarksRes.text();
-
-  let remarksPayload: Record<string, unknown> = {};
-  try {
-    remarksPayload = JSON.parse(remarksText) as Record<string, unknown>;
-  } catch {
-    remarksPayload = {};
-  }
-
-  if (!remarksRes.ok || remarksPayload.success === false) {
-    return {
-      ok: false as const,
-      status: remarksRes.status,
-      upstreamBody: remarksText || JSON.stringify(remarksPayload),
-    };
-  }
-
-  return {
-    ok: true as const,
-    remarksJson: JSON.stringify(nextRemarks),
+    found: result.found,
+    shopSlug: readOrderShopSlug(result.order),
+    remarksJson: result.remarksJson,
+    orderSummary: result.order ? readOrderSummaryFromRow(result.order) : null,
   };
 }
 
@@ -515,7 +372,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  const ridersResult = await fetchAvailableRiders(request, cookies);
+  const ridersResult = await readAdminAssignableRiders({
+    request,
+    cookies,
+    apiBaseUrl: API_BASE_URL,
+  });
   if (!ridersResult.success) {
     return new Response(JSON.stringify({
       success: false,
@@ -582,7 +443,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  const bodyOrderSummary = readOrderSummary(body, orderId);
+  const bodyOrderSummary = readOrderSummary(body);
   const notifyShopSlug = normalizeNotifyShopSlug(providedShopSlug) || fetchedOrderDetails.shopSlug;
   const orderSummary = fetchedOrderDetails.orderSummary ?? bodyOrderSummary;
   const telegramNotification = await notifyAssignedRider({
@@ -598,30 +459,23 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   let warning: { code: string; upstream_status?: number; upstream_body?: string } | undefined;
   if (telegramNotification.success && telegramNotification.messageRef) {
-    const latestOrderDetails = await fetchOrderDetails(request, cookies, orderId);
-    if (!latestOrderDetails.ok || !latestOrderDetails.found) {
+    const persistResult = await persistAdminTelegramMessageRef({
+      request,
+      cookies,
+      apiBaseUrl: API_BASE_URL,
+      orderId,
+      messageRef: telegramNotification.messageRef,
+    });
+    if (!persistResult.ok) {
       warning = {
         code: 'telegram_message_ref_persist_failed',
+        ...(persistResult.code === 'remarks_write_failed' && typeof persistResult.status === 'number'
+          ? { upstream_status: persistResult.status }
+          : {}),
+        ...(persistResult.code === 'remarks_write_failed' && persistResult.upstreamBody
+          ? { upstream_body: persistResult.upstreamBody }
+          : {}),
       };
-    } else {
-      const nextMeta: DispatchMeta = {
-        ...readDispatchMetaFromRemarks(latestOrderDetails.remarksJson),
-        telegramMessageRef: telegramNotification.messageRef,
-      };
-      const remarksResult = await writeDispatchMetaRemarks({
-        request,
-        cookies,
-        orderId,
-        remarksJson: latestOrderDetails.remarksJson,
-        nextMeta,
-      });
-      if (!remarksResult.ok) {
-        warning = {
-          code: 'telegram_message_ref_persist_failed',
-          upstream_status: remarksResult.status,
-          upstream_body: remarksResult.upstreamBody,
-        };
-      }
     }
   }
 

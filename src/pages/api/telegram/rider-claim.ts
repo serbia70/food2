@@ -90,6 +90,23 @@ function resolveTelegramClaimStage(action: TelegramClaimAction): 'delivering' | 
   return null;
 }
 
+function didRedispatchActuallySucceed(status: number, bodyText: string): boolean {
+  if (status < 200 || status >= 300) return false;
+  const body = readJsonObject(bodyText);
+  if (!body || body.success !== true) return false;
+
+  const telegramDispatch = body.telegram_dispatch;
+  if (!telegramDispatch || typeof telegramDispatch !== 'object' || Array.isArray(telegramDispatch)) return false;
+
+  const failedCount = Number(telegramDispatch.failedCount || 0);
+  const skippedReason = String(telegramDispatch.skippedReason || '').trim();
+  const deliveredCount = Number(telegramDispatch.deliveredCount || 0);
+
+  if (failedCount > 0) return false;
+  if (skippedReason) return false;
+  return deliveredCount > 0;
+}
+
 async function editDeliveryProgressMessage(
   request: Request,
   callback: ReturnType<typeof parseTelegramClaimCallback>,
@@ -334,7 +351,7 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
             forceRiderId: String(nextRider.id || '').trim(),
           }),
         });
-        reassigned = redispatch.ok;
+        reassigned = didRedispatchActuallySucceed(redispatch.status, await redispatch.text());
       }
     } catch {
       reassigned = false;

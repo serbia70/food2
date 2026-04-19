@@ -1,8 +1,48 @@
+import type { AstroCookies } from 'astro';
+import { proxyAdminRequest } from './admin-api-route.ts';
+import { type AssignableRider, readOnlineRiders } from './rider-assignment.ts';
+import { buildDispatchMetaRemarks, readDispatchMetaFromRemarks, type DispatchMeta } from './rider-dispatch.ts';
+
 export interface RiderRouteOrderSnapshot {
   status: string;
   remarksJson: string;
   courierPhone: string;
 }
+
+export type AdminRidersReadResult =
+  | { success: true; riders: AssignableRider[] }
+  | { success: false; status: number; error: string; upstreamBody?: string };
+
+export type AdminOrderReadResult =
+  | {
+    ok: true;
+    found: boolean;
+    order: Record<string, unknown> | null;
+    remarksJson: string;
+    rawText: string;
+  }
+  | {
+    ok: false;
+    status: number;
+    upstreamBody: string;
+  };
+
+export type AdminDispatchMetaWriteResult =
+  | { ok: true; remarksJson: string }
+  | { ok: false; status: number; upstreamBody: string };
+
+export type AdminTelegramMessageRefPersistResult =
+  | {
+    ok: true;
+    order: Record<string, unknown>;
+    remarksJson: string;
+  }
+  | {
+    ok: false;
+    code: 'order_read_failed' | 'order_not_found' | 'remarks_write_failed';
+    status?: number;
+    upstreamBody?: string;
+  };
 
 export function readTelegramItemSummaryFromOrder(order: Record<string, unknown> | null | undefined): string[] {
   const raw = order?.itemsJson ?? order?.items_json ?? order?.items;
@@ -56,6 +96,31 @@ function parseJsonValue(text: string): unknown {
   }
 }
 
+function hasRecognizableRiderList(payload: Record<string, unknown>): boolean {
+  if (Array.isArray(payload.riders) || Array.isArray(payload.rows) || Array.isArray(payload.items)) {
+    return true;
+  }
+
+  const data = payload.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+
+  const nested = data as Record<string, unknown>;
+  return Array.isArray(nested.riders) || Array.isArray(nested.rows) || Array.isArray(nested.items);
+}
+
+function readOrderId(row: Record<string, unknown>): string {
+  return String(row.id || row.orderId || row.order_id || '').trim();
+}
+
+function pickMatchingOrderRow(row: unknown, orderId: string): Record<string, unknown> | null {
+  if (!row || typeof row !== 'object') return null;
+  const record = row as Record<string, unknown>;
+  const normalizedOrderId = String(orderId || '').trim();
+  const rowId = readOrderId(record);
+  if (normalizedOrderId) return rowId === normalizedOrderId ? record : null;
+  return rowId ? record : null;
+}
+
 function readOrderRows(payload: unknown): Record<string, unknown>[] {
   if (Array.isArray(payload)) {
     return payload.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
@@ -63,20 +128,45 @@ function readOrderRows(payload: unknown): Record<string, unknown>[] {
   if (!payload || typeof payload !== 'object') return [];
 
   const root = payload as Record<string, unknown>;
+  const direct = pickMatchingOrderRow(root, '');
+  if (direct) return [direct];
+
+  const directOrder = pickMatchingOrderRow(root.order, '');
+  if (directOrder) return [directOrder];
+
   const directOrders = Array.isArray(root.orders) ? root.orders : [];
   if (directOrders.length > 0) {
     return directOrders.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
   }
 
   const data = root.data;
+  if (Array.isArray(data)) {
+    return data.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
+  }
+
   if (data && typeof data === 'object') {
-    const nestedOrders = Array.isArray((data as Record<string, unknown>).orders)
-      ? (data as Record<string, unknown>).orders as unknown[]
+    const nested = data as Record<string, unknown>;
+    const nestedDirect = pickMatchingOrderRow(nested, '');
+    if (nestedDirect) return [nestedDirect];
+
+    const nestedOrder = pickMatchingOrderRow(nested.order, '');
+    if (nestedOrder) return [nestedOrder];
+
+    const nestedOrders = Array.isArray(nested.orders)
+      ? nested.orders as unknown[]
       : [];
-    return nestedOrders.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
+    if (nestedOrders.length > 0) {
+      return nestedOrders.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
+    }
   }
 
   return [];
+}
+
+export function findAdminOrderRow(payload: unknown, orderId: string): Record<string, unknown> | null {
+  const normalizedOrderId = String(orderId || '').trim();
+  if (!normalizedOrderId) return null;
+  return readOrderRows(payload).find((row) => readOrderId(row) === normalizedOrderId) || null;
 }
 
 function readOrderSnapshotRow(row: Record<string, unknown> | null | undefined): RiderRouteOrderSnapshot {
@@ -129,7 +219,7 @@ export async function readOrderDetail(
   });
   const text = await upstream.text();
   if (upstream.ok && text) {
-    const matched = readOrderRows(parseJsonValue(text)).find((row) => String(row.id || '').trim() === orderId);
+    const matched = findAdminOrderRow(parseJsonValue(text), orderId);
     if (matched) return matched;
   }
 
@@ -164,6 +254,191 @@ export async function writeOrderDispatchRemarks(
     body: JSON.stringify({ orderId, remarks }),
   });
   return upstream.ok;
+}
+
+export async function readAdminAssignableRiders({
+  request,
+  cookies,
+  apiBaseUrl,
+}: {
+  request: Request;
+  cookies: AstroCookies;
+  apiBaseUrl: string;
+}): Promise<AdminRidersReadResult> {
+  const upstream = await proxyAdminRequest({
+    request,
+    cookies,
+    url: `${apiBaseUrl}/api/admin/riders`,
+    method: 'GET',
+  });
+  const text = await upstream.text();
+  const parsed = readJsonObject(text);
+  const payloadInvalid = !parsed || !hasRecognizableRiderList(parsed);
+
+  if (!upstream.ok || payloadInvalid || parsed.success === false) {
+    const error = typeof parsed?.error === 'string' && parsed.error.trim() ? parsed.error.trim() : 'riders_upstream_failed';
+    return {
+      success: false,
+      status: upstream.status || 502,
+      error,
+      upstreamBody: text || undefined,
+    };
+  }
+
+  return {
+    success: true,
+    riders: readOnlineRiders(parsed),
+  };
+}
+
+export async function readAdminOrderById({
+  request,
+  cookies,
+  apiBaseUrl,
+  orderId,
+}: {
+  request: Request;
+  cookies: AstroCookies;
+  apiBaseUrl: string;
+  orderId: string;
+}): Promise<AdminOrderReadResult> {
+  const upstream = await proxyAdminRequest({
+    request,
+    cookies,
+    url: `${apiBaseUrl}/api/admin/orders`,
+    method: 'GET',
+  });
+  const rawText = await upstream.text();
+  const parsed = parseJsonValue(rawText);
+  const parsedObject = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : null;
+
+  if (!upstream.ok || parsedObject == null || parsedObject.success === false) {
+    return {
+      ok: false,
+      status: upstream.status || 502,
+      upstreamBody: rawText,
+    };
+  }
+
+  const order = findAdminOrderRow(parsedObject, orderId);
+  return {
+    ok: true,
+    found: Boolean(order),
+    order,
+    remarksJson: order ? String(order.remarksJson || order.remarks_json || '').trim() : '',
+    rawText,
+  };
+}
+
+export async function writeAdminDispatchMetaRemarks({
+  request,
+  cookies,
+  apiBaseUrl,
+  orderId,
+  remarksJson,
+  nextMeta,
+}: {
+  request: Request;
+  cookies: AstroCookies;
+  apiBaseUrl: string;
+  orderId: string;
+  remarksJson: string;
+  nextMeta: DispatchMeta;
+}): Promise<AdminDispatchMetaWriteResult> {
+  const nextRemarks = buildDispatchMetaRemarks(remarksJson, nextMeta);
+  const upstream = await proxyAdminRequest({
+    request,
+    cookies,
+    url: `${apiBaseUrl}/api/admin/orders/remarks`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderId,
+      remarks: nextRemarks,
+    }),
+  });
+  const text = await upstream.text();
+
+  const payload = readJsonObject(text) || {};
+  if (!upstream.ok || payload.success === false) {
+    return {
+      ok: false,
+      status: upstream.status,
+      upstreamBody: text || JSON.stringify(payload),
+    };
+  }
+
+  return {
+    ok: true,
+    remarksJson: JSON.stringify(nextRemarks),
+  };
+}
+
+export async function persistAdminTelegramMessageRef({
+  request,
+  cookies,
+  apiBaseUrl,
+  orderId,
+  messageRef,
+}: {
+  request: Request;
+  cookies: AstroCookies;
+  apiBaseUrl: string;
+  orderId: string;
+  messageRef: NonNullable<DispatchMeta['telegramMessageRef']>;
+}): Promise<AdminTelegramMessageRefPersistResult> {
+  const latestOrderResult = await readAdminOrderById({
+    request,
+    cookies,
+    apiBaseUrl,
+    orderId,
+  });
+
+  if (!latestOrderResult.ok) {
+    return {
+      ok: false,
+      code: 'order_read_failed',
+      status: latestOrderResult.status,
+      upstreamBody: latestOrderResult.upstreamBody,
+    };
+  }
+
+  if (!latestOrderResult.found || !latestOrderResult.order) {
+    return {
+      ok: false,
+      code: 'order_not_found',
+    };
+  }
+
+  const nextMeta: DispatchMeta = {
+    ...readDispatchMetaFromRemarks(latestOrderResult.remarksJson),
+    telegramMessageRef: messageRef,
+  };
+  const remarksResult = await writeAdminDispatchMetaRemarks({
+    request,
+    cookies,
+    apiBaseUrl,
+    orderId,
+    remarksJson: latestOrderResult.remarksJson,
+    nextMeta,
+  });
+
+  if (!remarksResult.ok) {
+    return {
+      ok: false,
+      code: 'remarks_write_failed',
+      status: remarksResult.status,
+      upstreamBody: remarksResult.upstreamBody,
+    };
+  }
+
+  return {
+    ok: true,
+    order: latestOrderResult.order,
+    remarksJson: remarksResult.remarksJson,
+  };
 }
 
 export function buildUpstreamFailureResponse(

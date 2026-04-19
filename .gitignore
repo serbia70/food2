@@ -29,7 +29,8 @@ dev-server.err.log
 # Astro
 .astro/
 meituanGo
-
+.playwright-cli
+docs
 # git worktrees
 .worktrees/
 worktrees/

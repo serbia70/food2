@@ -71,7 +71,6 @@ export function initMasterDispatchActions({
         body: JSON.stringify({
           orderId: normalizedOrderId,
           action: 'remind',
-          rider_remind_count: 0,
         }),
       });
       const dispatchData = await dispatchRes.json().catch(() => ({}));

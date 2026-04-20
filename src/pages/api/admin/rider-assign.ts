@@ -25,106 +25,22 @@ import {
 export const prerender = false;
 
 
-type OrderSummaryItem = { name?: unknown; quantity?: unknown };
-type OrderSummaryInput = {
-  orderNo?: unknown;
-  order_no?: unknown;
-  shopName?: unknown;
-  shop_name?: unknown;
-  restaurantName?: unknown;
-  restaurant_name?: unknown;
-  shopAddress?: unknown;
-  shop_address?: unknown;
-  restaurantAddress?: unknown;
-  restaurant_address?: unknown;
-  shopMapUrl?: unknown;
-  shop_map_url?: unknown;
-  tableInfo?: unknown;
-  table_info?: unknown;
-  deliveryAddress?: unknown;
-  delivery_address?: unknown;
-  deliveryMapUrl?: unknown;
-  delivery_map_url?: unknown;
-  userPhone?: unknown;
-  user_phone?: unknown;
-  totalAmount?: unknown;
-  total_amount?: unknown;
-  scheduledFor?: unknown;
-  scheduled_for?: unknown;
-  items?: unknown;
-  itemsJson?: unknown;
-  items_json?: unknown;
-};
-
 function readRiderChatId(rider: AssignableRider): string {
   return String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
 }
 
-function readOrderSummaryItems(raw: OrderSummaryInput): OrderSummaryItem[] {
-  if (Array.isArray(raw.items)) return raw.items as OrderSummaryItem[];
+function readOrderSummaryItems(row: Record<string, unknown>): Array<{ name?: unknown; quantity?: unknown }> {
+  if (Array.isArray(row.items)) return row.items as Array<{ name?: unknown; quantity?: unknown }>;
 
-  const rawItemsJson = raw.itemsJson ?? raw.items_json;
+  const rawItemsJson = row.itemsJson ?? row.items_json;
   if (typeof rawItemsJson !== 'string' || !rawItemsJson.trim()) return [];
 
   try {
     const parsed = JSON.parse(rawItemsJson) as unknown;
-    return Array.isArray(parsed) ? parsed as OrderSummaryItem[] : [];
+    return Array.isArray(parsed) ? parsed as Array<{ name?: unknown; quantity?: unknown }> : [];
   } catch {
     return [];
   }
-}
-
-function readOrderSummary(body: Record<string, unknown>): {
-  orderNo: string;
-  shopName: string;
-  shopAddress: string;
-  shopMapUrl: string;
-  address: string;
-  deliveryMapUrl: string;
-  phone: string;
-  totalAmount: number;
-  scheduledFor: string;
-  itemSummary: string[];
-} {
-  const raw = (body.orderSummary && typeof body.orderSummary === 'object')
-    ? body.orderSummary as OrderSummaryInput
-    : {};
-  const items = readOrderSummaryItems(raw);
-
-  const parsedTotalAmount = Number(raw.totalAmount ?? raw.total_amount);
-
-  const orderView = buildRiderOrderView({
-    shopName: String(raw.shopName ?? raw.shop_name ?? '').trim(),
-    restaurantName: String(raw.restaurantName ?? raw.restaurant_name ?? '').trim(),
-    shopAddress: String(raw.shopAddress ?? raw.shop_address ?? '').trim(),
-    restaurantAddress: String(raw.restaurantAddress ?? raw.restaurant_address ?? '').trim(),
-    shopMapUrl: String(raw.shopMapUrl ?? raw.shop_map_url ?? '').trim(),
-    tableInfo: String(raw.tableInfo ?? raw.table_info ?? '').trim(),
-    deliveryAddress: String(raw.deliveryAddress ?? raw.delivery_address ?? '').trim(),
-    deliveryMapUrl: String(raw.deliveryMapUrl ?? raw.delivery_map_url ?? '').trim(),
-    userPhone: String(raw.userPhone ?? raw.user_phone ?? '').trim(),
-    totalAmount: raw.totalAmount ?? raw.total_amount,
-  });
-
-  return {
-    orderNo: String(raw.orderNo ?? raw.order_no ?? '').trim(),
-    shopName: orderView.shopName,
-    shopAddress: orderView.shopAddress,
-    shopMapUrl: orderView.shopMapUrl,
-    address: orderView.deliveryAddress || '未提供地址',
-    deliveryMapUrl: orderView.deliveryMapUrl,
-    phone: String(raw.userPhone ?? raw.user_phone ?? '').trim() || '-',
-    totalAmount: Number.isFinite(parsedTotalAmount) ? parsedTotalAmount : 0,
-    scheduledFor: String(raw.scheduledFor ?? raw.scheduled_for ?? '').trim(),
-    itemSummary: items
-      .map((item) => {
-        const name = String(item?.name || '').trim();
-        const quantity = Number(item?.quantity || 0);
-        if (!name || !Number.isFinite(quantity) || quantity <= 0) return '';
-        return `${name} x${quantity}`;
-      })
-      .filter(Boolean),
-  };
 }
 
 function normalizeNotifyShopSlug(value: unknown): string {
@@ -149,7 +65,40 @@ function readOrderSummaryFromRow(row: Record<string, unknown>): {
   scheduledFor: string;
   itemSummary: string[];
 } {
-  return readOrderSummary({ orderSummary: row });
+  const items = readOrderSummaryItems(row);
+  const parsedTotalAmount = Number(row.totalAmount ?? row.total_amount);
+  const orderView = buildRiderOrderView({
+    shopName: String(row.shopName ?? row.shop_name ?? '').trim(),
+    restaurantName: String(row.restaurantName ?? row.restaurant_name ?? '').trim(),
+    shopAddress: String(row.shopAddress ?? row.shop_address ?? '').trim(),
+    restaurantAddress: String(row.restaurantAddress ?? row.restaurant_address ?? '').trim(),
+    shopMapUrl: String(row.shopMapUrl ?? row.shop_map_url ?? '').trim(),
+    tableInfo: String(row.tableInfo ?? row.table_info ?? '').trim(),
+    deliveryAddress: String(row.deliveryAddress ?? row.delivery_address ?? '').trim(),
+    deliveryMapUrl: String(row.deliveryMapUrl ?? row.delivery_map_url ?? '').trim(),
+    userPhone: String(row.userPhone ?? row.user_phone ?? '').trim(),
+    totalAmount: row.totalAmount ?? row.total_amount,
+  });
+
+  return {
+    orderNo: String(row.orderNo ?? row.order_no ?? '').trim(),
+    shopName: orderView.shopName,
+    shopAddress: orderView.shopAddress,
+    shopMapUrl: orderView.shopMapUrl,
+    address: orderView.deliveryAddress || '未提供地址',
+    deliveryMapUrl: orderView.deliveryMapUrl,
+    phone: String(row.userPhone ?? row.user_phone ?? '').trim() || '-',
+    totalAmount: Number.isFinite(parsedTotalAmount) ? parsedTotalAmount : 0,
+    scheduledFor: String(row.scheduledFor ?? row.scheduled_for ?? '').trim(),
+    itemSummary: items
+      .map((item) => {
+        const name = String(item?.name || '').trim();
+        const quantity = Number(item?.quantity || 0);
+        if (!name || !Number.isFinite(quantity) || quantity <= 0) return '';
+        return `${name} x${quantity}`;
+      })
+      .filter(Boolean),
+  };
 }
 
 async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies'], orderId: string): Promise<{

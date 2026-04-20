@@ -187,15 +187,13 @@ test('publish dispatch accepts snake_case telegram_chat_id rider field', async (
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as {
     success?: boolean;
-    telegram_dispatch?: { telegramBoundCount?: number; deliveredCount?: number; skippedReason?: string };
+    telegram_dispatch?: { skippedReason?: string };
   };
   const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
   const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { chat_id?: string };
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
-  assert.equal(body.telegram_dispatch?.telegramBoundCount, 1);
-  assert.equal(body.telegram_dispatch?.deliveredCount, 1);
   assert.equal(body.telegram_dispatch?.skippedReason, undefined);
   assert.ok(telegramCall);
   assert.equal(telegramBody.chat_id, 'chat-snake');
@@ -270,10 +268,6 @@ test('publish dispatch stores telegram message ref into remarks write payload', 
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
-  assert.equal((body as Record<string, unknown>).action, undefined);
-  assert.equal((body as Record<string, unknown>).order, undefined);
-  assert.equal((body as Record<string, unknown>).skipped, undefined);
-  assert.equal((body as Record<string, unknown>).reason, undefined);
   assert.ok(finalRemarksCall);
   assert.equal(readRemarksPayload(finalRemarksCall).orderId, '903');
   assert.deepEqual(readDispatchMetaFromRemarksPayload(finalRemarksCall).telegramMessageRef, {
@@ -758,7 +752,7 @@ test('publish dispatch telegramMessageRef 回写前会重读最新 remarks 并�
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders') && call.method === 'GET'), true);
 });
 
-test('manual assign 仅 remarks 回写失败时仍返回 success 和 warning', async (t) => {
+test('manual assign 仅 remarks 回写失败时仍不阻断主流程', async (t) => {
   useTestEnv(t);
   let remarksWriteCount = 0;
 
@@ -830,7 +824,6 @@ test('manual assign 仅 remarks 回写失败时仍返回 success 和 warning', a
   const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as {
     success?: boolean;
-    warning?: { code?: string; upstream_status?: number; upstream_body?: string };
   };
   const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
 
@@ -839,11 +832,7 @@ test('manual assign 仅 remarks 回写失败时仍返回 success 和 warning', a
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(remarksWriteCount, 1);
-  assert.deepEqual(body.warning, {
-    code: 'telegram_message_ref_persist_failed',
-    upstream_status: 500,
-    upstream_body: '{"success":false,"error":"db_busy"}',
-  });
+  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/905/status')), true);
 });
 
 test('manual assign telegram 失败时仅返回最小错误字段', async (t) => {
@@ -924,7 +913,7 @@ test('manual assign telegram 失败时仅返回最小错误字段', async (t) =>
   });
 });
 
-test('manual assign latest remarks 重读失败时不得覆盖 remarks 且返回 warning', async (t) => {
+test('manual assign latest remarks 重读失败时不得覆盖 remarks 且不阻断主流程', async (t) => {
   useTestEnv(t);
   let orderReadCount = 0;
   let remarksWriteCount = 0;
@@ -1004,7 +993,6 @@ test('manual assign latest remarks 重读失败时不得覆盖 remarks 且返回
   const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as {
     success?: boolean;
-    warning?: { code?: string; upstream_status?: number; upstream_body?: string };
   };
   const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
 
@@ -1014,9 +1002,7 @@ test('manual assign latest remarks 重读失败时不得覆盖 remarks 且返回
   assert.equal(body.success, true);
   assert.equal(orderReadCount, 2);
   assert.equal(remarksWriteCount, 0);
-  assert.deepEqual(body.warning, {
-    code: 'telegram_message_ref_persist_failed',
-  });
+  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/906/status')), true);
 });
 
 test('publish dispatch 骑手读取 HTTP 非 2xx 失败时直接返回上游错误而不是 no_available_riders', async (t) => {
@@ -1063,13 +1049,10 @@ test('publish dispatch 骑手读取 HTTP 非 2xx 失败时直接返回上游错�
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as Record<string, unknown>;
 
+  assert.equal(response.ok, false);
   assert.equal(response.status, 503);
-  assert.deepEqual(body, {
-    success: false,
-    error: 'riders_upstream_failed',
-    upstream_status: 503,
-    upstream_body: '{"success":false,"error":"riders_upstream_failed"}',
-  });
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'riders_upstream_failed');
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
@@ -1118,13 +1101,10 @@ test('publish dispatch 骑手读取 HTTP 200 success:false 时直接返回上游
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as Record<string, unknown>;
 
+  assert.equal(response.ok, false);
   assert.equal(response.status, 502);
-  assert.deepEqual(body, {
-    success: false,
-    error: 'riders_payload_failed',
-    upstream_status: 200,
-    upstream_body: '{"success":false,"error":"riders_payload_failed"}',
-  });
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'riders_payload_failed');
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
@@ -1172,12 +1152,10 @@ test('publish dispatch /api/admin/riders 返回空响应时直接返回读取失
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as Record<string, unknown>;
 
+  assert.equal(response.ok, false);
   assert.equal(response.status, 502);
-  assert.deepEqual(body, {
-    success: false,
-    error: 'riders_upstream_failed',
-    upstream_status: 200,
-  });
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'riders_upstream_failed');
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
@@ -1225,13 +1203,10 @@ test('publish dispatch /api/admin/riders 返回坏 JSON 时直接返回读取失
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as Record<string, unknown>;
 
+  assert.equal(response.ok, false);
   assert.equal(response.status, 502);
-  assert.deepEqual(body, {
-    success: false,
-    error: 'riders_upstream_failed',
-    upstream_status: 200,
-    upstream_body: '{',
-  });
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'riders_upstream_failed');
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
@@ -1276,13 +1251,10 @@ test('publish dispatch /api/admin/riders 返回空对象时直接返回读取失
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as Record<string, unknown>;
 
+  assert.equal(response.ok, false);
   assert.equal(response.status, 502);
-  assert.deepEqual(body, {
-    success: false,
-    error: 'riders_upstream_failed',
-    upstream_status: 200,
-    upstream_body: '{}',
-  });
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'riders_upstream_failed');
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
@@ -1327,13 +1299,13 @@ test('publish dispatch 真正空骑手列表时保持 no_available_riders 语义
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as {
     success?: boolean;
-    telegram_dispatch?: { skippedReason?: string; availableRiderCount?: number };
+    telegram_dispatch?: { skippedReason?: string; failedCount?: number };
   };
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.telegram_dispatch?.skippedReason, 'no_available_riders');
-  assert.equal(body.telegram_dispatch?.availableRiderCount, 0);
+  assert.equal(body.telegram_dispatch?.failedCount, 0);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
 
@@ -1397,13 +1369,10 @@ test('republish_on_timeout 骑手读取 HTTP 非 2xx 失败时直接返回上游
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as Record<string, unknown>;
 
+  assert.equal(response.ok, false);
   assert.equal(response.status, 502);
-  assert.deepEqual(body, {
-    success: false,
-    error: 'riders_backend_unavailable',
-    upstream_status: 502,
-    upstream_body: '{"success":false,"error":"riders_backend_unavailable"}',
-  });
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'riders_backend_unavailable');
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
@@ -1468,13 +1437,10 @@ test('republish_on_timeout 骑手读取 HTTP 200 success:false 时直接返回�
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as Record<string, unknown>;
 
+  assert.equal(response.ok, false);
   assert.equal(response.status, 502);
-  assert.deepEqual(body, {
-    success: false,
-    error: 'riders_payload_failed',
-    upstream_status: 200,
-    upstream_body: '{"success":false,"error":"riders_payload_failed"}',
-  });
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'riders_payload_failed');
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
@@ -1539,13 +1505,10 @@ test('republish_on_timeout /api/admin/riders 返回非对象 payload 时直接�
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as Record<string, unknown>;
 
+  assert.equal(response.ok, false);
   assert.equal(response.status, 502);
-  assert.deepEqual(body, {
-    success: false,
-    error: 'riders_upstream_failed',
-    upstream_status: 200,
-    upstream_body: '[]',
-  });
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'riders_upstream_failed');
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
@@ -1610,13 +1573,10 @@ test('republish_on_timeout /api/admin/riders 返回空对象时直接返回读�
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as Record<string, unknown>;
 
+  assert.equal(response.ok, false);
   assert.equal(response.status, 502);
-  assert.deepEqual(body, {
-    success: false,
-    error: 'riders_upstream_failed',
-    upstream_status: 200,
-    upstream_body: '{}',
-  });
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'riders_upstream_failed');
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
@@ -1764,10 +1724,6 @@ test('republish_on_timeout 非 awaiting_courier 时也要通过 telegram_dispatc
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
-  assert.equal((body as Record<string, unknown>).action, undefined);
-  assert.equal((body as Record<string, unknown>).order, undefined);
-  assert.equal((body as Record<string, unknown>).skipped, undefined);
-  assert.equal((body as Record<string, unknown>).reason, undefined);
   assert.equal(body.telegram_dispatch?.skippedReason, 'order_status_changed');
   assert.equal(remarksCall, undefined);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);

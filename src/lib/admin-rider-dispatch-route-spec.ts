@@ -441,14 +441,6 @@ test('manual assign accepts top-level telegram message_id when writing telegramM
       riderId: '202',
       shopSlug: 'shop-a',
       pickupEtaMinutes: 12,
-      orderSummary: {
-        orderNo: '908',
-        shopName: 'Shop A',
-        deliveryAddress: 'Address',
-        userPhone: '381600000000',
-        totalAmount: 100,
-        items: [{ name: 'Burger', quantity: 1 }],
-      },
     }),
   });
 
@@ -524,13 +516,6 @@ test('manual assign telegram uses restaurantName from fetched order row when sho
       riderId: '202',
       shopSlug: 'shop-a',
       pickupEtaMinutes: 12,
-      orderSummary: {
-        orderNo: '909',
-        deliveryAddress: 'Address',
-        userPhone: '381600000000',
-        totalAmount: 100,
-        items: [{ name: 'Burger', quantity: 1 }],
-      },
     }),
   });
 
@@ -606,13 +591,6 @@ test('manual assign still uses fetched shop data when orderNo differs from inter
       riderId: '202',
       shopSlug: 'shop-a',
       pickupEtaMinutes: 10,
-      orderSummary: {
-        orderNo: '260415016',
-        deliveryAddress: 'hui, 0613083888, ruma1 [货到付款/Cash] (备注:)',
-        userPhone: '0613083888',
-        totalAmount: 611,
-        items: [{ name: 'Fileti ribe u ljutom ulju (Shuizhu)', quantity: 1 }],
-      },
     }),
   });
 
@@ -630,7 +608,7 @@ test('manual assign still uses fetched shop data when orderNo differs from inter
   assert.equal(String(pickupButton?.url || ''), 'https://www.google.com/maps/search/?api=1&query=Bulevar%201');
 });
 
-test('manual assign never falls back to internal order id when fetched order lacks orderNo', async (t) => {
+test('manual assign 缺少可用订单快照时直接失败且不发送 telegram', async (t) => {
   useTestEnv(t);
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
@@ -651,11 +629,6 @@ test('manual assign never falls back to internal order id when fetched order lac
             id: '697',
             remarksJson: JSON.stringify(['dispatch_meta:{"currentRiderId":"202","telegramMessageRef":null}']),
             shopSlug: 'shop-a',
-            restaurantName: 'Ruma Sushi',
-            restaurantAddress: 'Bulevar 1',
-            tableInfo: 'ruma1',
-            totalAmount: 611,
-            userPhone: '0613083888',
             status: 'awaiting_courier',
           },
         ],
@@ -686,18 +659,24 @@ test('manual assign never falls back to internal order id when fetched order lac
       riderId: '202',
       shopSlug: 'shop-a',
       pickupEtaMinutes: 10,
+      orderSummary: {
+        orderNo: '697',
+        shopName: 'Body Shop',
+        deliveryAddress: 'Body Address',
+        userPhone: '0613083888',
+        totalAmount: 611,
+        items: [{ name: 'Body Item', quantity: 1 }],
+      },
     }),
   });
 
   const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
-  const body = JSON.parse(await response.text()) as { success?: boolean };
-  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
-  const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { text?: string };
+  const body = JSON.parse(await response.text()) as { success?: boolean; error?: string };
 
-  assert.equal(response.status, 200);
-  assert.equal(body.success, true);
-  assert.doesNotMatch(String(telegramBody.text || ''), /订单号：697/);
-  assert.match(String(telegramBody.text || ''), /店铺：Ruma Sushi/);
+  assert.equal(response.status, 409);
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'order_snapshot_required');
+  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
 
 test('publish dispatch telegramMessageRef 回写前会重读最新 remarks 并保留并发新增内容', async (t) => {
@@ -841,14 +820,6 @@ test('manual assign 仅 remarks 回写失败时仍不阻断主流程', async (t)
       riderId: '202',
       shopSlug: 'shop-a',
       pickupEtaMinutes: 12,
-      orderSummary: {
-        orderNo: '905',
-        shopName: 'Shop A',
-        deliveryAddress: 'Address',
-        userPhone: '381600000000',
-        totalAmount: 100,
-        items: [{ name: 'Burger', quantity: 1 }],
-      },
     }),
   });
 
@@ -918,14 +889,6 @@ test('manual assign telegram 失败时仅返回最小错误字段', async (t) =>
       riderId: '202',
       shopSlug: 'shop-a',
       pickupEtaMinutes: 12,
-      orderSummary: {
-        orderNo: '906',
-        shopName: 'Shop A',
-        deliveryAddress: 'Address',
-        userPhone: '381600000000',
-        totalAmount: 100,
-        items: [{ name: 'Burger', quantity: 1 }],
-      },
     }),
   });
 
@@ -1010,14 +973,6 @@ test('manual assign latest remarks 重读失败时不得覆盖 remarks 且不阻
       riderId: '202',
       shopSlug: 'shop-a',
       pickupEtaMinutes: 12,
-      orderSummary: {
-        orderNo: '906',
-        shopName: 'Shop A',
-        deliveryAddress: 'Address',
-        userPhone: '381600000000',
-        totalAmount: 100,
-        items: [{ name: 'Burger', quantity: 1 }],
-      },
     }),
   });
 

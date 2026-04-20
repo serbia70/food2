@@ -443,16 +443,21 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  const bodyOrderSummary = readOrderSummary(body);
   const notifyShopSlug = normalizeNotifyShopSlug(providedShopSlug) || fetchedOrderDetails.shopSlug;
-  const orderSummary = fetchedOrderDetails.orderSummary ?? bodyOrderSummary;
+  if (!fetchedOrderDetails.orderSummary) {
+    return new Response(JSON.stringify({ success: false, error: 'order_snapshot_required' }), {
+      status: 409,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const telegramNotification = await notifyAssignedRider({
     request,
     rider: target,
     shopSlug: notifyShopSlug,
     orderId,
     pickupEtaMinutes,
-    orderSummary,
+    orderSummary: fetchedOrderDetails.orderSummary,
     fallbackChatId: riderTelegramChatId,
     inlineTelegramBotToken,
   });

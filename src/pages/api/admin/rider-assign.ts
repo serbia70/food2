@@ -5,8 +5,8 @@ import {
   buildAdminJsonResponse,
   buildAdminOrderUpdateFailedResponse,
   buildAdminRidersReadFailureResponse,
-  buildTelegramMessageRefPersistWarning,
-  persistAdminTelegramMessageRef,
+  buildAdminSimpleErrorResponse,
+  persistAdminTelegramMessageRefHandled,
   readAdminAssignableRiders,
   readAdminOrderById,
   readJsonObject,
@@ -313,11 +313,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const inlineTelegramBotToken = String(body.telegramBotToken || body.telegram_bot_token || '').trim();
 
   if (action !== 'manual_assign' && action !== 'auto_assign') {
-    return buildAdminJsonResponse({ success: false, error: 'invalid_action' }, 400);
+    return buildAdminSimpleErrorResponse('invalid_action', 400);
   }
 
   if (!orderId) {
-    return buildAdminJsonResponse({ success: false, error: 'order_id_required' }, 400);
+    return buildAdminSimpleErrorResponse('order_id_required', 400);
   }
 
   const ridersResult = await readAdminAssignableRiders({
@@ -331,7 +331,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   const fetchedOrderDetails = await fetchOrderDetails(request, cookies, orderId);
   if (!fetchedOrderDetails.ok) {
-    return buildAdminJsonResponse({ success: false, error: 'order_fetch_failed' }, 502);
+    return buildAdminSimpleErrorResponse('order_fetch_failed', 502);
   }
 
   const eligibleRiders = filterAvailableRidersForOrder(ridersResult.riders, fetchedOrderDetails.remarksJson);
@@ -340,7 +340,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   if (action === 'manual_assign') {
     target = eligibleRiders.find((row) => String(row.id || '').trim() === manualRiderId) || null;
     if (!target && ridersResult.riders.some((row) => String(row.id || '').trim() === manualRiderId)) {
-      return buildAdminJsonResponse({ success: false, error: 'rider_already_declined_this_order' }, 409);
+      return buildAdminSimpleErrorResponse('rider_already_declined_this_order', 409);
     }
   }
 
@@ -349,11 +349,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   if (!target) {
-    return buildAdminJsonResponse({ success: false, error: 'no_available_riders' }, 409);
+    return buildAdminSimpleErrorResponse('no_available_riders', 409);
   }
 
   if (!fetchedOrderDetails.orderSummary) {
-    return buildAdminJsonResponse({ success: false, error: 'order_snapshot_required' }, 409);
+    return buildAdminSimpleErrorResponse('order_snapshot_required', 409);
   }
 
   const updateResult = await updateAdminOrderStatus({
@@ -383,16 +383,15 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   let warning: AdminWarningShape | undefined;
   if (telegramNotification.success && telegramNotification.messageRef) {
-    const persistResult = await persistAdminTelegramMessageRef({
+    const handled = await persistAdminTelegramMessageRefHandled({
       request,
       cookies,
       apiBaseUrl: API_BASE_URL,
       orderId,
       messageRef: telegramNotification.messageRef,
+      warningOptions: { remarksWriteFailedOnly: true },
     });
-    if (!persistResult.ok) {
-      warning = buildTelegramMessageRefPersistWarning(persistResult, { remarksWriteFailedOnly: true });
-    }
+    warning = handled.warning;
   }
 
   return buildAdminJsonResponse({

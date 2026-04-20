@@ -41,6 +41,10 @@ export function buildAdminJsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+export function buildAdminSimpleErrorResponse(error: string, status: number): Response {
+  return buildAdminJsonResponse({ success: false, error }, status);
+}
+
 export type AdminOrderReadResult =
   | {
     ok: true;
@@ -92,6 +96,41 @@ export function buildTelegramMessageRefPersistWarning(
     ...(includeUpstream && typeof result.status === 'number' ? { upstream_status: result.status } : {}),
     ...(includeUpstream && result.upstreamBody ? { upstream_body: result.upstreamBody } : {}),
   };
+}
+
+export type AdminTelegramMessageRefPersistHandledResult = {
+  warning?: AdminWarningShape;
+  persisted?: Extract<AdminTelegramMessageRefPersistResult, { ok: true }>;
+};
+
+export async function persistAdminTelegramMessageRefHandled({
+  request,
+  cookies,
+  apiBaseUrl,
+  orderId,
+  messageRef,
+  warningOptions,
+}: {
+  request: Request;
+  cookies: AstroCookies;
+  apiBaseUrl: string;
+  orderId: string;
+  messageRef: NonNullable<DispatchMeta['telegramMessageRef']>;
+  warningOptions?: { remarksWriteFailedOnly?: boolean };
+}): Promise<AdminTelegramMessageRefPersistHandledResult> {
+  const result = await persistAdminTelegramMessageRef({
+    request,
+    cookies,
+    apiBaseUrl,
+    orderId,
+    messageRef,
+  });
+
+  if (!result.ok) {
+    return { warning: buildTelegramMessageRefPersistWarning(result, warningOptions) };
+  }
+
+  return { persisted: result };
 }
 
 export function buildAdminOrderFetchFailedResponse(

@@ -8,8 +8,8 @@ import {
   buildAdminOrderFetchFailedResponse,
   buildAdminOrderUpdateFailedResponse,
   buildAdminRidersReadFailureResponse,
-  buildTelegramMessageRefPersistWarning,
-  persistAdminTelegramMessageRef,
+  buildAdminSimpleErrorResponse,
+  persistAdminTelegramMessageRefHandled,
   readAdminAssignableRiders,
   readAdminOrderById,
   updateAdminOrderStatus,
@@ -78,14 +78,47 @@ type TelegramDispatchResult =
   | { ok: true; summary: TelegramDispatchSummary }
   | { ok: false; error: string; upstreamStatus: number; upstreamBody?: string };
 
+function normalizeOrderId(orderId: unknown): string {
+  return String(orderId || '').trim();
+}
+
+function readOrderIdFromBody(payload: Record<string, unknown>): string {
+  return normalizeOrderId(payload.orderId || payload.id);
+}
+
+function isSameOrderId(orderIdLike: unknown, orderId: string): boolean {
+  return normalizeOrderId(orderIdLike) === orderId;
+}
+
+function normalizeRiderId(value: unknown): string {
+  return String(value || '').trim();
+}
+
+function createRiderIdFilter(targetRiderId: string): (rider: TelegramRiderRow) => boolean {
+  const normalizedTarget = normalizeRiderId(targetRiderId);
+  return (rider) => normalizeRiderId(rider.id) === normalizedTarget;
+}
+
 function handleRidersReadFailure(result: AvailableRidersReadFailure): Response {
   return buildAdminRidersReadFailureResponse(result, { coerce2xxTo502: true });
 }
 
-function buildTelegramDispatchResponse(summary: TelegramDispatchSummary | TelegramDispatchSkippedSummary): Response {
+function buildTelegramDispatchResponse(
+  summary: TelegramDispatchSummary | TelegramDispatchSkippedSummary,
+  warning?: AdminWarningShape,
+): Response {
   return buildAdminJsonResponse({
     success: true,
     telegram_dispatch: summary,
+    ...(warning ? { warning } : {}),
+  });
+}
+
+function buildSkippedTelegramDispatchResponse(skippedReason: string): Response {
+  return buildTelegramDispatchResponse({
+    failedCount: 0,
+    skippedReason,
+    attempts: [],
   });
 }
 
@@ -139,7 +172,7 @@ function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: st
   const directOrder = payload.order && typeof payload.order === 'object'
     ? payload.order as DispatchOrderSnapshot
     : null;
-  if (directOrder && String(directOrder.id || '').trim() === orderId) return directOrder;
+  if (directOrder && isSameOrderId(directOrder.id, orderId)) return directOrder;
 
   const shopSlug = String(payload.shopSlug || '').trim();
   const shopId = String(payload.shopId || '').trim();
@@ -188,7 +221,7 @@ async function fetchAvailableRiders(
 }
 
 function readForcedRiderId(value: unknown): string {
-  return String(value || '').trim();
+  return normalizeRiderId(value);
 }
 
 function readNowIsoFromBody(body: Record<string, unknown>): string {
@@ -220,7 +253,7 @@ function buildNextDispatchMetaForPublish({
   selectedRiderId: string;
   nowIso: string;
 }): DispatchMeta {
-  const prevCurrentRiderId = String(existingMeta.currentRiderId || '').trim();
+  const prevCurrentRiderId = normalizeRiderId(existingMeta.currentRiderId);
   const isReassigned = !!forcedRiderId && !!prevCurrentRiderId && prevCurrentRiderId !== selectedRiderId;
   const { assignedAt, expiresAt } = buildDispatchTiming(nowIso);
 
@@ -244,7 +277,7 @@ function selectRiderForPublish({
   forcedRiderId: string;
 }): TelegramRiderRow[] {
   if (!forcedRiderId) return riders;
-  return riders.filter((rider) => String(rider.id || '').trim() === forcedRiderId);
+  return riders.filter(createRiderIdFilter(forcedRiderId));
 }
 
 function pickNextRiderOnTimeout({
@@ -256,14 +289,14 @@ function pickNextRiderOnTimeout({
   currentRiderId: string;
   invalidatedRiderIds: string[];
 }): AssignableRider | null {
-  const normalizedCurrent = String(currentRiderId || '').trim();
+  const normalizedCurrent = normalizeRiderId(currentRiderId);
   if (!normalizedCurrent) return null;
 
-  const excluded = new Set(invalidatedRiderIds.map((item) => String(item || '').trim()).filter(Boolean));
-  const candidates = riders.filter((rider) => !excluded.has(String(rider.id || '').trim()));
+  const excluded = new Set(invalidatedRiderIds.map(normalizeRiderId).filter(Boolean));
+  const candidates = riders.filter((rider) => !excluded.has(normalizeRiderId(rider.id)));
   if (candidates.length === 0) return null;
 
-  const currentIndex = candidates.findIndex((rider) => String(rider.id || '').trim() === normalizedCurrent);
+  const currentIndex = candidates.findIndex((rider) => normalizeRiderId(rider.id) === normalizedCurrent);
   if (currentIndex < 0) return candidates[0] || null;
   if (candidates.length <= 1) return null;
   return candidates[(currentIndex + 1) % candidates.length] || null;
@@ -351,7 +384,7 @@ async function resolveRiderForPublish({
   }
 
   const scopedRiders = selectRiderForPublish({ riders: ridersResult.riders, forcedRiderId });
-  const selectedRiderId = String((scopedRiders[0]?.id || '')).trim();
+  const selectedRiderId = normalizeRiderId(scopedRiders[0]?.id);
 
   if (forcedRiderId && !selectedRiderId) {
     return { ok: false, response: buildForcedRiderNotFoundResponse(forcedRiderId) };
@@ -359,7 +392,7 @@ async function resolveRiderForPublish({
 
   return {
     ok: true,
-    selectedRiderId: selectedRiderId || String(existingMeta.currentRiderId || '').trim(),
+    selectedRiderId: selectedRiderId || normalizeRiderId(existingMeta.currentRiderId),
   };
 }
 
@@ -392,7 +425,7 @@ async function notifyTelegramRecipients(
     deliveredCount: 0,
     failedCount: 0,
     attempts: scopedRiders.map((rider) => ({
-      riderId: String(rider.id || '').trim(),
+      riderId: normalizeRiderId(rider.id),
       riderName: String(rider.name || '未命名骑手').trim(),
       riderPhone: String(rider.phone || '').trim(),
       telegramChatIdBound: readRiderChatId(rider) !== '',
@@ -509,7 +542,7 @@ async function notifyTelegramRecipients(
       }
       if (!sendRes.ok || parsedResponse.success === false || parsedResponse.ok === false) {
         return {
-          riderId: String(rider.id || '').trim(),
+          riderId: normalizeRiderId(rider.id),
           riderName: String(rider.name || '未命名骑手').trim(),
           riderPhone: riderPhone,
           telegramChatIdBound: true,
@@ -528,7 +561,7 @@ async function notifyTelegramRecipients(
       );
 
       return {
-        riderId: String(rider.id || '').trim(),
+        riderId: normalizeRiderId(rider.id),
         riderName: String(rider.name || '未命名骑手').trim(),
         riderPhone: riderPhone,
         telegramChatIdBound: true,
@@ -537,7 +570,7 @@ async function notifyTelegramRecipients(
       };
     } catch (error) {
       return {
-        riderId: String(rider.id || '').trim(),
+        riderId: normalizeRiderId(rider.id),
         riderName: String(rider.name || '未命名骑手').trim(),
         riderPhone: riderPhone,
         telegramChatIdBound: true,
@@ -582,9 +615,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     action = '';
   }
 
-  const orderId = String(parsedBody.orderId || parsedBody.id || '').trim();
+  const orderId = readOrderIdFromBody(parsedBody);
   if (!orderId) {
-    return buildAdminJsonResponse({ success: false, error: 'order_id_required' }, 400);
+    return buildAdminSimpleErrorResponse('order_id_required', 400);
   }
 
   if (action === 'publish' || action === 'remind' || action === 'republish_on_timeout') {
@@ -656,11 +689,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     if (action === 'republish_on_timeout') {
       if (currentStatus !== 'awaiting_courier') {
-        return buildTelegramDispatchResponse({
-          failedCount: 0,
-          skippedReason: 'order_status_changed',
-          attempts: [],
-        });
+        return buildSkippedTelegramDispatchResponse('order_status_changed');
       }
 
       const ridersResult = await fetchAvailableRiders(request, cookies);
@@ -669,7 +698,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       }
 
       const riders = readOnlineRiders({ riders: ridersResult.riders });
-      const currentRiderId = String(existingMeta.currentRiderId || '').trim();
+      const currentRiderId = normalizeRiderId(existingMeta.currentRiderId);
       const nextRider = pickNextRiderOnTimeout({
         riders,
         currentRiderId,
@@ -681,7 +710,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       const timeoutMeta: DispatchMeta = nextRider
         ? {
             ...existingMeta,
-            currentRiderId: String(nextRider.id || '').trim(),
+            currentRiderId: normalizeRiderId(nextRider.id),
             currentAssignedAt: assignedAt,
             currentExpiresAt: expiresAt,
             invalidatedRiderIds: invalidatedWithCurrent,
@@ -710,19 +739,15 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       const mergedOrder = remarksMergeResult.mergedOrder;
 
       if (!nextRider) {
-        return buildTelegramDispatchResponse({
-          failedCount: 0,
-          skippedReason: 'no_next_rider',
-          attempts: [],
-        });
+        return buildSkippedTelegramDispatchResponse('no_next_rider');
       }
 
-      const nextRiderId = String(nextRider.id || '').trim();
+      const nextRiderId = normalizeRiderId(nextRider.id);
       const dispatchRes = await runTelegramDispatchFlow({
         request,
         cookies,
         order: mergedOrder,
-        riderFilter: (rider) => String(rider.id || '').trim() === nextRiderId,
+        riderFilter: createRiderIdFilter(nextRiderId),
       });
       if (!dispatchRes.ok) return dispatchRes.response;
 
@@ -762,7 +787,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         }
         mergedOrder = remarksMergeResult.mergedOrder;
 
-        riderFilter = (rider) => String(rider.id || '').trim() === safeSelectedRiderId;
+        riderFilter = createRiderIdFilter(safeSelectedRiderId);
       }
     }
 
@@ -778,7 +803,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     let warning: AdminWarningShape | undefined;
 
     if (action === 'publish' && telegram_dispatch.telegramMessageRef) {
-      const persistResult = await persistAdminTelegramMessageRef({
+      const handled = await persistAdminTelegramMessageRefHandled({
         request,
         cookies,
         apiBaseUrl: API_BASE_URL,
@@ -786,23 +811,19 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         messageRef: telegram_dispatch.telegramMessageRef,
       });
 
-      if (!persistResult.ok) {
-        warning = buildTelegramMessageRefPersistWarning(persistResult);
-      } else {
+      if (handled.warning) {
+        warning = handled.warning;
+      } else if (handled.persisted) {
         mergedOrder = {
           ...mergedOrder,
-          ...persistResult.order as DispatchOrderSnapshot,
-          remarksJson: persistResult.remarksJson,
+          ...handled.persisted.order as DispatchOrderSnapshot,
+          remarksJson: handled.persisted.remarksJson,
         };
       }
     }
 
-    return buildAdminJsonResponse({
-      success: true,
-      telegram_dispatch,
-      ...(warning ? { warning } : {}),
-    });
+    return buildTelegramDispatchResponse(telegram_dispatch, warning);
   }
 
-  return buildAdminJsonResponse({ success: false, error: 'unsupported_action' }, 400);
+  return buildAdminSimpleErrorResponse('unsupported_action', 400);
 };

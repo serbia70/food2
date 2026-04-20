@@ -34,6 +34,13 @@ export function buildAdminRidersReadFailureResponse(
   });
 }
 
+export function buildAdminJsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 export type AdminOrderReadResult =
   | {
     ok: true;

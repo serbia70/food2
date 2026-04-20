@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
 import {
   type AdminWarningShape,
+  buildAdminJsonResponse,
   buildAdminOrderUpdateFailedResponse,
   buildAdminRidersReadFailureResponse,
   buildTelegramMessageRefPersistWarning,
@@ -312,17 +313,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const inlineTelegramBotToken = String(body.telegramBotToken || body.telegram_bot_token || '').trim();
 
   if (action !== 'manual_assign' && action !== 'auto_assign') {
-    return new Response(JSON.stringify({ success: false, error: 'invalid_action' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildAdminJsonResponse({ success: false, error: 'invalid_action' }, 400);
   }
 
   if (!orderId) {
-    return new Response(JSON.stringify({ success: false, error: 'order_id_required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildAdminJsonResponse({ success: false, error: 'order_id_required' }, 400);
   }
 
   const ridersResult = await readAdminAssignableRiders({
@@ -336,10 +331,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   const fetchedOrderDetails = await fetchOrderDetails(request, cookies, orderId);
   if (!fetchedOrderDetails.ok) {
-    return new Response(JSON.stringify({ success: false, error: 'order_fetch_failed' }), {
-      status: 502,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildAdminJsonResponse({ success: false, error: 'order_fetch_failed' }, 502);
   }
 
   const eligibleRiders = filterAvailableRidersForOrder(ridersResult.riders, fetchedOrderDetails.remarksJson);
@@ -348,10 +340,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   if (action === 'manual_assign') {
     target = eligibleRiders.find((row) => String(row.id || '').trim() === manualRiderId) || null;
     if (!target && ridersResult.riders.some((row) => String(row.id || '').trim() === manualRiderId)) {
-      return new Response(JSON.stringify({ success: false, error: 'rider_already_declined_this_order' }), {
-        status: 409,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return buildAdminJsonResponse({ success: false, error: 'rider_already_declined_this_order' }, 409);
     }
   }
 
@@ -360,17 +349,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   if (!target) {
-    return new Response(JSON.stringify({ success: false, error: 'no_available_riders' }), {
-      status: 409,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildAdminJsonResponse({ success: false, error: 'no_available_riders' }, 409);
   }
 
   if (!fetchedOrderDetails.orderSummary) {
-    return new Response(JSON.stringify({ success: false, error: 'order_snapshot_required' }), {
-      status: 409,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildAdminJsonResponse({ success: false, error: 'order_snapshot_required' }, 409);
   }
 
   const updateResult = await updateAdminOrderStatus({
@@ -412,12 +395,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
   }
 
-  return new Response(JSON.stringify({
+  return buildAdminJsonResponse({
     success: true,
     ...(warning ? { warning } : {}),
     ...(!telegramNotification.success ? { telegram_notification: telegramNotification } : {}),
-  }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
   });
 };

@@ -4,6 +4,7 @@ import { proxyAdminRequest } from '../../../lib/admin-api-route.ts';
 import {
   type AdminWarningShape,
   buildAdminDispatchMetaWriteFailedResponse,
+  buildAdminJsonResponse,
   buildAdminOrderFetchFailedResponse,
   buildAdminOrderUpdateFailedResponse,
   buildAdminRidersReadFailureResponse,
@@ -69,11 +70,45 @@ interface TelegramDispatchSummary {
   attempts: TelegramDispatchAttempt[];
 }
 
+type TelegramDispatchSkippedSummary = Pick<TelegramDispatchSummary, 'failedCount' | 'skippedReason' | 'attempts'>;
+
 type AvailableRidersReadResult = Awaited<ReturnType<typeof readAdminAssignableRiders>>;
 type AvailableRidersReadFailure = Extract<AvailableRidersReadResult, { success: false }>;
 type TelegramDispatchResult =
   | { ok: true; summary: TelegramDispatchSummary }
   | { ok: false; error: string; upstreamStatus: number; upstreamBody?: string };
+
+function buildTelegramDispatchResponse(summary: TelegramDispatchSummary | TelegramDispatchSkippedSummary): Response {
+  return new Response(JSON.stringify({
+    success: true,
+    telegram_dispatch: summary,
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function buildOrderSnapshotUnavailableResponse(rawResponseText: string): Response {
+  return new Response(JSON.stringify({
+    success: false,
+    error: 'order_snapshot_unavailable',
+    raw_response_text: rawResponseText,
+  }), {
+    status: 502,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function buildForcedRiderNotFoundResponse(forcedRiderId: string): Response {
+  return new Response(JSON.stringify({
+    success: false,
+    error: 'forced_rider_not_found',
+    forcedRiderId,
+  }), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
 function readDispatchOrderFromBody(payload: Record<string, unknown>, orderId: string): DispatchOrderSnapshot | null {
   const directOrder = payload.order && typeof payload.order === 'object'
@@ -453,10 +488,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   const orderId = String(parsedBody.orderId || parsedBody.id || '').trim();
   if (!orderId) {
-    return new Response(JSON.stringify({ success: false, error: 'order_id_required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildAdminJsonResponse({ success: false, error: 'order_id_required' }, 400);
   }
 
   if (action === 'publish' || action === 'remind' || action === 'republish_on_timeout') {
@@ -476,14 +508,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
       order = orderResult.order as DispatchOrderSnapshot | null;
       if (!order || !order.id) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'order_snapshot_unavailable',
-          raw_response_text: orderResult.rawText,
-        }), {
-          status: 502,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return buildOrderSnapshotUnavailableResponse(orderResult.rawText);
       }
     }
 
@@ -535,16 +560,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     if (action === 'republish_on_timeout') {
       if (currentStatus !== 'awaiting_courier') {
-        return new Response(JSON.stringify({
-          success: true,
-          telegram_dispatch: {
-            failedCount: 0,
-            skippedReason: 'order_status_changed',
-            attempts: [],
-          },
-        }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
+        return buildTelegramDispatchResponse({
+          failedCount: 0,
+          skippedReason: 'order_status_changed',
+          attempts: [],
         });
       }
 
@@ -598,16 +617,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       } satisfies DispatchOrderSnapshot;
 
       if (!nextRider) {
-        return new Response(JSON.stringify({
-          success: true,
-          telegram_dispatch: {
-            failedCount: 0,
-            skippedReason: 'no_next_rider',
-            attempts: [],
-          },
-        }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
+        return buildTelegramDispatchResponse({
+          failedCount: 0,
+          skippedReason: 'no_next_rider',
+          attempts: [],
         });
       }
 
@@ -627,13 +640,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         });
       }
 
-      return new Response(JSON.stringify({
-        success: true,
-        telegram_dispatch: telegramDispatchResult.summary,
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return buildTelegramDispatchResponse(telegramDispatchResult.summary);
     }
 
     let mergedOrder = mergedOrderBase;
@@ -648,14 +655,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       const scopedRiders = selectRiderForPublish({ riders: ridersResult.riders, forcedRiderId });
       const selectedRiderId = String((scopedRiders[0]?.id || '')).trim();
       if (forcedRiderId && !selectedRiderId) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'forced_rider_not_found',
-          forcedRiderId,
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return buildForcedRiderNotFoundResponse(forcedRiderId);
       }
       const safeSelectedRiderId = selectedRiderId || String(existingMeta.currentRiderId || '').trim();
 
@@ -719,18 +719,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       }
     }
 
-    return new Response(JSON.stringify({
+    return buildAdminJsonResponse({
       success: true,
       telegram_dispatch,
       ...(warning ? { warning } : {}),
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  return new Response(JSON.stringify({ success: false, error: 'unsupported_action' }), {
-    status: 400,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return buildAdminJsonResponse({ success: false, error: 'unsupported_action' }, 400);
 };

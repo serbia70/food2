@@ -591,11 +591,13 @@ test('buildRiderAwaitingPickupTelegramMessage uses awaiting-pickup semantics', (
     pickupEtaMinutes: 15,
     completeCallbackData: 'cb-pickup',
   });
+  const pickupButton = findInlineButton(message.replyMarkup.inline_keyboard, '取餐');
 
   assert.match(message.text, /状态：待取餐/);
   assert.match(message.text, /金额：1200 RSD/);
   assert.match(message.text, /预计：15 分钟/);
-  assert.equal(message.replyMarkup.inline_keyboard[0]?.[0]?.text, '取餐');
+  assert.ok(pickupButton);
+  assert.equal(pickupButton?.callback_data, 'cb-pickup');
 });
 
 test('buildRiderDeliveringTelegramMessage uses delivering semantics', () => {
@@ -608,11 +610,13 @@ test('buildRiderDeliveringTelegramMessage uses delivering semantics', () => {
     pickupEtaMinutes: 15,
     completeCallbackData: 'cb-complete',
   });
+  const completeButton = findInlineButton(message.replyMarkup.inline_keyboard, '送达');
 
   assert.match(message.text, /状态：配送中/);
   assert.match(message.text, /金额：1200 RSD/);
   assert.match(message.text, /预计：15 分钟/);
-  assert.equal(message.replyMarkup.inline_keyboard[0]?.[0]?.text, '送达');
+  assert.ok(completeButton);
+  assert.equal(completeButton?.callback_data, 'cb-complete');
 });
 
 test('legacy rider telegram builders delegate to renamed semantic builders', () => {

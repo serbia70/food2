@@ -69,6 +69,39 @@ function createCookies() {
   };
 }
 
+function findTelegramButton(markup: unknown, text: string): { text?: string; url?: string } | undefined {
+  if (Array.isArray(markup)) {
+    for (const item of markup) {
+      const button = findTelegramButton(item, text);
+      if (button) {
+        return button;
+      }
+    }
+    return undefined;
+  }
+
+  if (!markup || typeof markup !== 'object') {
+    return undefined;
+  }
+
+  const candidate = markup as { text?: unknown; url?: unknown };
+  if (candidate.text === text) {
+    return {
+      text,
+      url: typeof candidate.url === 'string' ? candidate.url : undefined,
+    };
+  }
+
+  for (const value of Object.values(markup)) {
+    const button = findTelegramButton(value, text);
+    if (button) {
+      return button;
+    }
+  }
+
+  return undefined;
+}
+
 function readRemarksPayload(call: MockCall): { orderId: string; remarks: string[] } {
   const parsed = JSON.parse(call.body) as { orderId?: unknown; remarks?: unknown };
   return {
@@ -504,10 +537,9 @@ test('manual assign telegram uses restaurantName from fetched order row when sho
   const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as { success?: boolean };
   const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
-  const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { text?: string; reply_markup?: { inline_keyboard?: Array<Array<{ text?: string; url?: string }>> } };
-  const buttons = telegramBody.reply_markup?.inline_keyboard?.flat() || [];
-  const pickupButton = buttons.find((button) => button.text === '取餐导航');
-  const deliveryButton = buttons.find((button) => button.text === '送餐导航');
+  const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { text?: string; reply_markup?: unknown };
+  const pickupButton = findTelegramButton(telegramBody.reply_markup, '取餐导航');
+  const deliveryButton = findTelegramButton(telegramBody.reply_markup, '送餐导航');
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
@@ -587,9 +619,8 @@ test('manual assign still uses fetched shop data when orderNo differs from inter
   const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as { success?: boolean };
   const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
-  const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { text?: string; reply_markup?: { inline_keyboard?: Array<Array<{ text?: string; url?: string }>> } };
-  const buttons = telegramBody.reply_markup?.inline_keyboard?.flat() || [];
-  const pickupButton = buttons.find((button) => button.text === '取餐导航');
+  const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { text?: string; reply_markup?: unknown };
+  const pickupButton = findTelegramButton(telegramBody.reply_markup, '取餐导航');
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);

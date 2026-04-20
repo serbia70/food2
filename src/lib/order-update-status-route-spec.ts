@@ -222,12 +222,17 @@ test('forwardOrderUpdateStatus updates telegram rider message to delivered actio
   assert.equal(response.status, 200);
   assert.equal(calls.some((call) => call.url === `${API_BASE_URL}/api/order/update_status/101`), true);
   const telegramCall = calls.find((call) => call.url === 'https://example.com/api/telegram/send');
+  const telegramPayload = readTelegramSendPayload(telegramCall);
+  const completeButton = findTelegramButton(telegramPayload, '送达');
+  const pickupButton = findTelegramButton(telegramPayload, '取餐');
   assert.ok(telegramCall);
   assert.match(telegramCall?.body || '', /"message_id":7788/);
   assert.match(telegramCall?.body || '', /"chat_id":"123456789"/);
   assert.match(telegramCall?.body || '', /状态：配送中/);
-  assert.match(telegramCall?.body || '', /"text":"送达"/);
-  assert.doesNotMatch(telegramCall?.body || '', /"text":"取餐"/);
+  assert.ok(completeButton);
+  assert.equal(typeof completeButton?.callback_data, 'string');
+  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
+  assert.equal(pickupButton, undefined);
 });
 
 test('forwardOrderUpdateStatus sends new telegram rider message and persists message ref when order lacks telegramMessageRef', async (t) => {
@@ -309,11 +314,15 @@ test('forwardOrderUpdateStatus sends new telegram rider message and persists mes
 
   assert.equal(response.status, 200);
   const telegramCall = calls.find((call) => call.url === 'https://example.com/api/telegram/send');
+  const telegramPayload = readTelegramSendPayload(telegramCall);
+  const completeButton = findTelegramButton(telegramPayload, '送达');
   assert.ok(telegramCall);
   assert.doesNotMatch(telegramCall?.body || '', /"message_id":/);
   assert.match(telegramCall?.body || '', /"chatId":"123456789"/);
   assert.match(telegramCall?.body || '', /状态：配送中/);
-  assert.match(telegramCall?.body || '', /"text":"送达"/);
+  assert.ok(completeButton);
+  assert.equal(typeof completeButton?.callback_data, 'string');
+  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
   assert.equal(remarksWrites.length, 1);
   const meta = readDispatchMetaFromRemarks(JSON.stringify(remarksWrites[0]?.remarks || []));
   assert.deepEqual(meta.telegramMessageRef, { chatId: '123456789', messageId: 8899 });
@@ -395,10 +404,14 @@ test('forwardOrderUpdateStatus falls back to order courier fields when payload o
 
   assert.equal(response.status, 200);
   const telegramCall = calls.find((call) => call.url === 'https://example.com/api/telegram/send');
+  const telegramPayload = readTelegramSendPayload(telegramCall);
+  const completeButton = findTelegramButton(telegramPayload, '送达');
   assert.ok(telegramCall);
   assert.match(telegramCall?.body || '', /"chatId":"1033472638"/);
   assert.match(telegramCall?.body || '', /状态：配送中/);
-  assert.match(telegramCall?.body || '', /"text":"送达"/);
+  assert.ok(completeButton);
+  assert.equal(typeof completeButton?.callback_data, 'string');
+  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
   assert.equal(remarksWrites.length, 1);
   const meta = readDispatchMetaFromRemarks(JSON.stringify(remarksWrites[0]?.remarks || []));
   assert.deepEqual(meta.telegramMessageRef, { chatId: '1033472638', messageId: 9901 });

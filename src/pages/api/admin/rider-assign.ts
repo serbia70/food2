@@ -58,10 +58,9 @@ function readOrderShopSlug(row: Record<string, unknown> | null | undefined): str
   return normalizeNotifyShopSlug(row.shopSlug || row.shop_slug || row.restaurantSlug || row.restaurant_slug || '');
 }
 
-function readOrderSummaryFromRow(row: Record<string, unknown>): {
+type RiderAssignOrderSummary = {
   orderNo: string;
   shopName: string;
-  shopAddress: string;
   shopMapUrl: string;
   address: string;
   deliveryMapUrl: string;
@@ -69,9 +68,12 @@ function readOrderSummaryFromRow(row: Record<string, unknown>): {
   totalAmount: number;
   scheduledFor: string;
   itemSummary: string[];
-} {
+};
+
+function readOrderSummaryFromRow(row: Record<string, unknown>): RiderAssignOrderSummary {
   const items = readOrderSummaryItems(row);
   const parsedTotalAmount = Number(row.totalAmount ?? row.total_amount);
+  const userPhone = String(row.userPhone ?? row.user_phone ?? '').trim();
   const orderView = buildRiderOrderView({
     shopName: String(row.shopName ?? row.shop_name ?? '').trim(),
     restaurantName: String(row.restaurantName ?? row.restaurant_name ?? '').trim(),
@@ -81,18 +83,17 @@ function readOrderSummaryFromRow(row: Record<string, unknown>): {
     tableInfo: String(row.tableInfo ?? row.table_info ?? '').trim(),
     deliveryAddress: String(row.deliveryAddress ?? row.delivery_address ?? '').trim(),
     deliveryMapUrl: String(row.deliveryMapUrl ?? row.delivery_map_url ?? '').trim(),
-    userPhone: String(row.userPhone ?? row.user_phone ?? '').trim(),
+    userPhone,
     totalAmount: row.totalAmount ?? row.total_amount,
   });
 
   return {
     orderNo: String(row.orderNo ?? row.order_no ?? '').trim(),
     shopName: orderView.shopName,
-    shopAddress: orderView.shopAddress,
     shopMapUrl: orderView.shopMapUrl,
     address: orderView.deliveryAddress || '未提供地址',
     deliveryMapUrl: orderView.deliveryMapUrl,
-    phone: String(row.userPhone ?? row.user_phone ?? '').trim() || '-',
+    phone: userPhone || '-',
     totalAmount: Number.isFinite(parsedTotalAmount) ? parsedTotalAmount : 0,
     scheduledFor: String(row.scheduledFor ?? row.scheduled_for ?? '').trim(),
     itemSummary: items
@@ -108,21 +109,9 @@ function readOrderSummaryFromRow(row: Record<string, unknown>): {
 
 async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies'], orderId: string): Promise<{
   ok: boolean;
-  found: boolean;
   shopSlug: string;
   remarksJson: string;
-  orderSummary: {
-    orderNo: string;
-    shopName: string;
-    shopAddress: string;
-    shopMapUrl: string;
-    address: string;
-    deliveryMapUrl: string;
-    phone: string;
-    totalAmount: number;
-    scheduledFor: string;
-    itemSummary: string[];
-  } | null;
+  orderSummary: RiderAssignOrderSummary | null;
 }> {
   const result = await readAdminOrderById({
     request,
@@ -130,10 +119,9 @@ async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute[
     apiBaseUrl: API_BASE_URL,
     orderId,
   });
-  if (!result.ok) return { ok: false, found: false, shopSlug: '', remarksJson: '', orderSummary: null };
+  if (!result.ok) return { ok: false, shopSlug: '', remarksJson: '', orderSummary: null };
   return {
     ok: true,
-    found: result.found,
     shopSlug: readOrderShopSlug(result.order),
     remarksJson: result.remarksJson,
     orderSummary: result.order ? readOrderSummaryFromRow(result.order) : null,
@@ -155,18 +143,7 @@ async function notifyAssignedRider({
   shopSlug: string;
   orderId: string;
   pickupEtaMinutes: number;
-  orderSummary: {
-    orderNo: string;
-    shopName: string;
-    shopAddress: string;
-    shopMapUrl: string;
-    address: string;
-    deliveryMapUrl: string;
-    phone: string;
-    totalAmount: number;
-    scheduledFor: string;
-    itemSummary: string[];
-  };
+  orderSummary: RiderAssignOrderSummary;
   fallbackChatId?: string;
   inlineTelegramBotToken?: string;
 }): Promise<
@@ -176,21 +153,23 @@ async function notifyAssignedRider({
   }
   | { success: false; error: string }
 > {
-  const riderChatId = String(readRiderChatId(rider) || '').trim();
+  const riderChatId = readRiderChatId(rider);
   const requestChatId = String(fallbackChatId || '').trim();
-  const chatId = String(riderChatId || requestChatId).trim();
+  const chatId = riderChatId || requestChatId;
   if (!chatId) return { success: false, error: 'telegram_chat_id_missing' };
 
   try {
     let claimCallbackData = '';
     let declineCallbackData = '';
     try {
+      const riderName = String(rider.name || '').trim();
+      const riderPhone = String(rider.phone || '').trim();
       const callbackBase = {
         orderId: Number(orderId),
         riderId: Number(rider.id || 0),
-        riderName: String(rider.name || '').trim(),
-        riderPhone: String(rider.phone || '').trim(),
-        restaurantId: String(shopSlug || 'admin').trim() || 'admin',
+        riderName,
+        riderPhone,
+        restaurantId: shopSlug || 'admin',
         telegramChatId: chatId,
       };
       claimCallbackData = buildTelegramShortClaimCallback(callbackBase);
@@ -228,12 +207,16 @@ async function notifyAssignedRider({
     if (cookie) headers.cookie = cookie;
     if (authorization) headers.authorization = authorization;
 
-    const requestPayload = {
+    const telegramPayloadBase = {
       ...(shopSlug ? { shop_slug: shopSlug } : {}),
       ...(inlineTelegramBotToken ? { telegramBotToken: inlineTelegramBotToken } : {}),
       chat_id: chatId,
       chatId,
       text: message.text,
+    };
+
+    const requestPayload = {
+      ...telegramPayloadBase,
       reply_markup: message.replyMarkup,
     };
 
@@ -257,13 +240,7 @@ async function notifyAssignedRider({
       && responseText.includes('502');
 
     if (shouldRetryWithoutReplyMarkup) {
-      const retryPayload = {
-        ...(shopSlug ? { shop_slug: shopSlug } : {}),
-        ...(inlineTelegramBotToken ? { telegramBotToken: inlineTelegramBotToken } : {}),
-        chat_id: chatId,
-        chatId,
-        text: message.text,
-      };
+      const retryPayload = telegramPayloadBase;
       ({ response, responseText, parsedResponse } = await sendTelegram(retryPayload));
     }
 
@@ -335,11 +312,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const eligibleRiders = filterAvailableRidersForOrder(ridersResult.riders, fetchedOrderDetails.remarksJson);
+  const isManualRider = (row: AssignableRider) => String(row.id || '').trim() === manualRiderId;
   let target: AssignableRider | null = null;
 
   if (action === 'manual_assign') {
-    target = eligibleRiders.find((row) => String(row.id || '').trim() === manualRiderId) || null;
-    if (!target && ridersResult.riders.some((row) => String(row.id || '').trim() === manualRiderId)) {
+    target = eligibleRiders.find(isManualRider) || null;
+    if (!target && ridersResult.riders.some(isManualRider)) {
       return buildAdminSimpleErrorResponse('rider_already_declined_this_order', 409);
     }
   }

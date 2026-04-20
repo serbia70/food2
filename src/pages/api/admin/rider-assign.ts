@@ -1,6 +1,8 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
 import {
+  type AdminWarningShape,
+  buildAdminOrderUpdateFailedResponse,
   buildAdminRidersReadFailureResponse,
   buildTelegramMessageRefPersistWarning,
   persistAdminTelegramMessageRef,
@@ -333,6 +335,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const fetchedOrderDetails = await fetchOrderDetails(request, cookies, orderId);
+  if (!fetchedOrderDetails.ok) {
+    return new Response(JSON.stringify({ success: false, error: 'order_fetch_failed' }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const eligibleRiders = filterAvailableRidersForOrder(ridersResult.riders, fetchedOrderDetails.remarksJson);
   let target: AssignableRider | null = null;
 
@@ -357,6 +366,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
+  if (!fetchedOrderDetails.orderSummary) {
+    return new Response(JSON.stringify({ success: false, error: 'order_snapshot_required' }), {
+      status: 409,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const updateResult = await updateAdminOrderStatus({
     request,
     cookies,
@@ -366,24 +382,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   });
 
   if (!updateResult.ok) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: 'order_update_failed',
-      upstream_status: updateResult.status,
-      upstream_body: updateResult.bodyText || JSON.stringify(updateResult.bodyJson),
-    }), {
-      status: updateResult.status || 502,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildAdminOrderUpdateFailedResponse(updateResult, updateResult.status || 502);
   }
 
   const notifyShopSlug = normalizeNotifyShopSlug(providedShopSlug) || fetchedOrderDetails.shopSlug;
-  if (!fetchedOrderDetails.orderSummary) {
-    return new Response(JSON.stringify({ success: false, error: 'order_snapshot_required' }), {
-      status: 409,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
 
   const telegramNotification = await notifyAssignedRider({
     request,
@@ -396,7 +398,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     inlineTelegramBotToken,
   });
 
-  let warning: { code: string; upstream_status?: number; upstream_body?: string } | undefined;
+  let warning: AdminWarningShape | undefined;
   if (telegramNotification.success && telegramNotification.messageRef) {
     const persistResult = await persistAdminTelegramMessageRef({
       request,

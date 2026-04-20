@@ -608,6 +608,63 @@ test('manual assign still uses fetched shop data when orderNo differs from inter
   assert.equal(String(pickupButton?.url || ''), 'https://www.google.com/maps/search/?api=1&query=Bulevar%201');
 });
 
+test('manual assign 订单读取失败时直接返回 order_fetch_failed 且不更新订单不发 telegram', async (t) => {
+  useTestEnv(t);
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/admin/riders') {
+      return jsonResponse({
+        riders: [
+          { id: '202', name: 'Rider 1', phone: '381641234567', telegramChatId: 'chat-1', status: 'available' },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders' && request.method === 'GET') {
+      return new Response('upstream boom', {
+        status: 502,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders/697/status') {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/telegram/send') {
+      return jsonResponse({ success: true, message_id: 7793 });
+    }
+
+    if (url.pathname === '/api/admin/orders/remarks') {
+      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const request = new Request('https://example.com/api/admin/rider-assign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'manual_assign',
+      orderId: '697',
+      riderId: '202',
+      shopSlug: 'shop-a',
+      pickupEtaMinutes: 10,
+    }),
+  });
+
+  const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
+  const body = JSON.parse(await response.text()) as { success?: boolean; error?: string };
+
+  assert.equal(response.status, 502);
+  assert.equal(body.success, false);
+  assert.equal(body.error, 'order_fetch_failed');
+  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/697/status')), false);
+  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+});
+
 test('manual assign 缺少可用订单快照时直接失败且不发送 telegram', async (t) => {
   useTestEnv(t);
   const calls = useMockFetch(t, async (request) => {
@@ -652,14 +709,6 @@ test('manual assign 缺少可用订单快照时直接失败且不发送 telegram
       riderId: '202',
       shopSlug: 'shop-a',
       pickupEtaMinutes: 10,
-      orderSummary: {
-        orderNo: '697',
-        shopName: 'Body Shop',
-        deliveryAddress: 'Body Address',
-        userPhone: '0613083888',
-        totalAmount: 611,
-        items: [{ name: 'Body Item', quantity: 1 }],
-      },
     }),
   });
 
@@ -669,6 +718,7 @@ test('manual assign 缺少可用订单快照时直接失败且不发送 telegram
   assert.equal(response.status, 409);
   assert.equal(body.success, false);
   assert.equal(body.error, 'order_snapshot_required');
+  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/697/status')), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
 

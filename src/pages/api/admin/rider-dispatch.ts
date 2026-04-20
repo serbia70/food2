@@ -1,7 +1,11 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL, DISPATCH_AUTO_REASSIGN_MINUTES, SITE_BASE_URL } from '../../../config.ts';
-import { buildAdminAuthHeader, proxyAdminRequest } from '../../../lib/admin-api-route.ts';
+import { proxyAdminRequest } from '../../../lib/admin-api-route.ts';
 import {
+  type AdminWarningShape,
+  buildAdminDispatchMetaWriteFailedResponse,
+  buildAdminOrderFetchFailedResponse,
+  buildAdminOrderUpdateFailedResponse,
   buildAdminRidersReadFailureResponse,
   buildTelegramMessageRefPersistWarning,
   persistAdminTelegramMessageRef,
@@ -455,8 +459,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  buildAdminAuthHeader(request, cookies);
-
   if (action === 'publish' || action === 'remind' || action === 'republish_on_timeout') {
     let order = readDispatchOrderFromBody(parsedBody, orderId);
 
@@ -469,15 +471,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       });
 
       if (!orderResult.ok) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'order_fetch_failed',
-          upstream_status: orderResult.status,
-          upstream_body: orderResult.upstreamBody,
-        }), {
-          status: orderResult.status,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return buildAdminOrderFetchFailedResponse(orderResult);
       }
 
       order = orderResult.order as DispatchOrderSnapshot | null;
@@ -525,15 +519,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
 
     if (!updateResult.ok) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'order_update_failed',
-        upstream_status: updateResult.status,
-        upstream_body: updateResult.bodyText || JSON.stringify(updateResult.bodyJson),
-      }), {
-        status: updateResult.status,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return buildAdminOrderUpdateFailedResponse(updateResult);
     }
 
     const mergedOrderBase = {
@@ -603,15 +589,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         nextMeta: timeoutMeta,
       });
       if (!remarksResult.ok) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'dispatch_meta_write_failed',
-          upstream_status: remarksResult.status,
-          upstream_body: remarksResult.upstreamBody,
-        }), {
-          status: remarksResult.status,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return buildAdminDispatchMetaWriteFailedResponse(remarksResult);
       }
 
       const mergedOrder = {
@@ -697,15 +675,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
           nextMeta,
         });
         if (!remarksResult.ok) {
-          return new Response(JSON.stringify({
-            success: false,
-            error: 'dispatch_meta_write_failed',
-            upstream_status: remarksResult.status,
-            upstream_body: remarksResult.upstreamBody,
-          }), {
-            status: remarksResult.status,
-            headers: { 'Content-Type': 'application/json' },
-          });
+          return buildAdminDispatchMetaWriteFailedResponse(remarksResult);
         }
         mergedOrder = {
           ...mergedOrderBase,
@@ -727,7 +697,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
 
     const telegram_dispatch = telegramDispatchResult.summary;
-    let warning: { code: string; upstream_status?: number; upstream_body?: string } | undefined;
+    let warning: AdminWarningShape | undefined;
 
     if (action === 'publish' && telegram_dispatch.telegramMessageRef) {
       const persistResult = await persistAdminTelegramMessageRef({

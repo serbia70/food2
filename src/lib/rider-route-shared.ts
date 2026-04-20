@@ -87,6 +87,21 @@ export function buildTelegramMessageRefPersistWarning(
   };
 }
 
+export function buildAdminOrderFetchFailedResponse(
+  result: Extract<AdminOrderReadResult, { ok: false }>,
+  statusOverride?: number,
+): Response {
+  return new Response(JSON.stringify({
+    success: false,
+    error: 'order_fetch_failed',
+    upstream_status: result.status,
+    upstream_body: result.upstreamBody,
+  }), {
+    status: statusOverride ?? result.status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 export function readTelegramItemSummaryFromOrder(order: Record<string, unknown> | null | undefined): string[] {
   const raw = order?.itemsJson ?? order?.items_json ?? order?.items;
   if (!raw) return [];
@@ -514,6 +529,38 @@ export async function persistAdminTelegramMessageRef({
     order: latestOrderResult.order,
     remarksJson: remarksResult.remarksJson,
   };
+}
+
+export function buildAdminDispatchMetaWriteFailedResponse(
+  result: Extract<AdminDispatchMetaWriteResult, { ok: false }>,
+): Response {
+  return new Response(JSON.stringify({
+    success: false,
+    error: 'dispatch_meta_write_failed',
+    upstream_status: result.status,
+    upstream_body: result.upstreamBody,
+  }), {
+    status: result.status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+export function buildAdminOrderUpdateFailedResponse(result: {
+  status: number;
+  bodyText: string;
+  bodyJson: Record<string, unknown>;
+},
+statusOverride?: number,
+): Response {
+  return new Response(JSON.stringify({
+    success: false,
+    error: 'order_update_failed',
+    upstream_status: result.status,
+    upstream_body: result.bodyText || JSON.stringify(result.bodyJson),
+  }), {
+    status: statusOverride ?? result.status,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 export function buildUpstreamFailureResponse(

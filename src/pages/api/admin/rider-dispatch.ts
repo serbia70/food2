@@ -2,9 +2,12 @@ import type { APIRoute } from 'astro';
 import { API_BASE_URL, DISPATCH_AUTO_REASSIGN_MINUTES, SITE_BASE_URL } from '../../../config.ts';
 import { buildAdminAuthHeader, proxyAdminRequest } from '../../../lib/admin-api-route.ts';
 import {
+  buildAdminRidersReadFailureResponse,
+  buildTelegramMessageRefPersistWarning,
   persistAdminTelegramMessageRef,
   readAdminAssignableRiders,
   readAdminOrderById,
+  updateAdminOrderStatus,
   writeAdminDispatchMetaRemarks,
 } from '../../../lib/rider-route-shared.ts';
 import { buildRiderOrderView, readDispatchMetaFromRemarks, type DispatchMeta } from '../../../lib/rider-dispatch.ts';
@@ -117,22 +120,6 @@ async function fetchAvailableRiders(
     request,
     cookies,
     apiBaseUrl: API_BASE_URL,
-  });
-}
-
-function readAvailableRidersErrorHttpStatus(result: AvailableRidersReadFailure): number {
-  return result.status >= 200 && result.status < 300 ? 502 : result.status;
-}
-
-function buildAvailableRidersErrorResponse(result: AvailableRidersReadFailure): Response {
-  return new Response(JSON.stringify({
-    success: false,
-    error: result.error,
-    upstream_status: result.status,
-    ...(result.upstreamBody ? { upstream_body: result.upstreamBody } : {}),
-  }), {
-    status: readAvailableRidersErrorHttpStatus(result),
-    headers: { 'Content-Type': 'application/json' },
   });
 }
 
@@ -529,33 +516,22 @@ export const POST: APIRoute = async ({ request, cookies }) => {
           riderLastRemindedAt: parsedBody.riderLastRemindedAt,
         };
 
-    const updateRes = await proxyAdminRequest({
+    const updateResult = await updateAdminOrderStatus({
       request,
       cookies,
-      url: `${API_BASE_URL}/api/admin/orders/${encodeURIComponent(orderId)}/status`,
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updatePayload),
+      apiBaseUrl: API_BASE_URL,
+      orderId,
+      payload: updatePayload,
     });
-    const updateText = await updateRes.text();
 
-    let updateJson: Record<string, unknown> = {};
-    try {
-      updateJson = JSON.parse(updateText) as Record<string, unknown>;
-    } catch {
-      updateJson = {};
-    }
-
-    if (!updateRes.ok || updateJson.success === false) {
+    if (!updateResult.ok) {
       return new Response(JSON.stringify({
         success: false,
         error: 'order_update_failed',
-        upstream_status: updateRes.status,
-        upstream_body: updateText || JSON.stringify(updateJson),
+        upstream_status: updateResult.status,
+        upstream_body: updateResult.bodyText || JSON.stringify(updateResult.bodyJson),
       }), {
-        status: updateRes.status,
+        status: updateResult.status,
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -588,7 +564,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
       const ridersResult = await fetchAvailableRiders(request, cookies);
       if (!ridersResult.success) {
-        return buildAvailableRidersErrorResponse(ridersResult);
+        return buildAdminRidersReadFailureResponse(ridersResult, { coerce2xxTo502: true });
       }
 
       const riders = readOnlineRiders({ riders: ridersResult.riders });
@@ -665,7 +641,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         (rider) => String(rider.id || '').trim() === nextRiderId,
       );
       if (!telegramDispatchResult.ok) {
-        return buildAvailableRidersErrorResponse({
+        return buildAdminRidersReadFailureResponse({
           success: false,
           status: telegramDispatchResult.upstreamStatus,
           error: telegramDispatchResult.error,
@@ -688,7 +664,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (action === 'publish') {
       const ridersResult = await fetchAvailableRiders(request, cookies);
       if (!ridersResult.success) {
-        return buildAvailableRidersErrorResponse(ridersResult);
+        return buildAdminRidersReadFailureResponse(ridersResult, { coerce2xxTo502: true });
       }
 
       const scopedRiders = selectRiderForPublish({ riders: ridersResult.riders, forcedRiderId });
@@ -742,7 +718,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     const telegramDispatchResult = await notifyTelegramRecipients(request, cookies, mergedOrder, riderFilter);
     if (!telegramDispatchResult.ok) {
-      return buildAvailableRidersErrorResponse({
+      return buildAdminRidersReadFailureResponse({
         success: false,
         status: telegramDispatchResult.upstreamStatus,
         error: telegramDispatchResult.error,
@@ -763,11 +739,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       });
 
       if (!persistResult.ok) {
-        warning = {
-          code: 'telegram_message_ref_persist_failed',
-          ...(typeof persistResult.status === 'number' ? { upstream_status: persistResult.status } : {}),
-          ...(persistResult.upstreamBody ? { upstream_body: persistResult.upstreamBody } : {}),
-        };
+        warning = buildTelegramMessageRefPersistWarning(persistResult);
       } else {
         mergedOrder = {
           ...mergedOrder,

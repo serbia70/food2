@@ -1,11 +1,13 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
-import { proxyAdminRequest } from '../../../lib/admin-api-route.ts';
 import {
+  buildAdminRidersReadFailureResponse,
+  buildTelegramMessageRefPersistWarning,
   persistAdminTelegramMessageRef,
   readAdminAssignableRiders,
   readAdminOrderById,
   readJsonObject,
+  updateAdminOrderStatus,
 } from '../../../lib/rider-route-shared.ts';
 import {
   buildAssignedOrderStatusPayload,
@@ -327,15 +329,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     apiBaseUrl: API_BASE_URL,
   });
   if (!ridersResult.success) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: ridersResult.error,
-      upstream_status: ridersResult.status,
-      ...(ridersResult.upstreamBody ? { upstream_body: ridersResult.upstreamBody } : {}),
-    }), {
-      status: ridersResult.status,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return buildAdminRidersReadFailureResponse(ridersResult);
   }
 
   const fetchedOrderDetails = await fetchOrderDetails(request, cookies, orderId);
@@ -363,31 +357,22 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  const updateRes = await proxyAdminRequest({
+  const updateResult = await updateAdminOrderStatus({
     request,
     cookies,
-    url: `${API_BASE_URL}/api/admin/orders/${encodeURIComponent(orderId)}/status`,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildAssignedOrderStatusPayload({ rider: target, pickupEtaMinutes })),
+    apiBaseUrl: API_BASE_URL,
+    orderId,
+    payload: buildAssignedOrderStatusPayload({ rider: target, pickupEtaMinutes }),
   });
 
-  const updateText = await updateRes.text();
-  let updateJson: Record<string, unknown> = {};
-  try {
-    updateJson = JSON.parse(updateText) as Record<string, unknown>;
-  } catch {
-    updateJson = {};
-  }
-
-  if (!updateRes.ok || updateJson.success === false) {
+  if (!updateResult.ok) {
     return new Response(JSON.stringify({
       success: false,
       error: 'order_update_failed',
-      upstream_status: updateRes.status,
-      upstream_body: updateText || JSON.stringify(updateJson),
+      upstream_status: updateResult.status,
+      upstream_body: updateResult.bodyText || JSON.stringify(updateResult.bodyJson),
     }), {
-      status: updateRes.status || 502,
+      status: updateResult.status || 502,
       headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -421,15 +406,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       messageRef: telegramNotification.messageRef,
     });
     if (!persistResult.ok) {
-      warning = {
-        code: 'telegram_message_ref_persist_failed',
-        ...(persistResult.code === 'remarks_write_failed' && typeof persistResult.status === 'number'
-          ? { upstream_status: persistResult.status }
-          : {}),
-        ...(persistResult.code === 'remarks_write_failed' && persistResult.upstreamBody
-          ? { upstream_body: persistResult.upstreamBody }
-          : {}),
-      };
+      warning = buildTelegramMessageRefPersistWarning(persistResult, { remarksWriteFailedOnly: true });
     }
   }
 

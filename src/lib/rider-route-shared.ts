@@ -13,6 +13,27 @@ export type AdminRidersReadResult =
   | { success: true; riders: AssignableRider[] }
   | { success: false; status: number; error: string; upstreamBody?: string };
 
+export type AdminRidersReadFailure = Extract<AdminRidersReadResult, { success: false }>;
+
+export function buildAdminRidersReadFailureResponse(
+  result: AdminRidersReadFailure,
+  options: { coerce2xxTo502?: boolean } = {},
+): Response {
+  const status = options.coerce2xxTo502 && result.status >= 200 && result.status < 300
+    ? 502
+    : result.status;
+
+  return new Response(JSON.stringify({
+    success: false,
+    error: result.error,
+    upstream_status: result.status,
+    ...(result.upstreamBody ? { upstream_body: result.upstreamBody } : {}),
+  }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 export type AdminOrderReadResult =
   | {
     ok: true;
@@ -31,6 +52,10 @@ export type AdminDispatchMetaWriteResult =
   | { ok: true; remarksJson: string }
   | { ok: false; status: number; upstreamBody: string };
 
+export type AdminOrderStatusUpdateResult =
+  | { ok: true; status: number; bodyText: string; bodyJson: Record<string, unknown> }
+  | { ok: false; status: number; bodyText: string; bodyJson: Record<string, unknown> };
+
 export type AdminTelegramMessageRefPersistResult =
   | {
     ok: true;
@@ -43,6 +68,24 @@ export type AdminTelegramMessageRefPersistResult =
     status?: number;
     upstreamBody?: string;
   };
+
+export type AdminWarningShape = {
+  code: string;
+  upstream_status?: number;
+  upstream_body?: string;
+};
+
+export function buildTelegramMessageRefPersistWarning(
+  result: Extract<AdminTelegramMessageRefPersistResult, { ok: false }>,
+  options: { remarksWriteFailedOnly?: boolean } = {},
+): AdminWarningShape {
+  const includeUpstream = !options.remarksWriteFailedOnly || result.code === 'remarks_write_failed';
+  return {
+    code: 'telegram_message_ref_persist_failed',
+    ...(includeUpstream && typeof result.status === 'number' ? { upstream_status: result.status } : {}),
+    ...(includeUpstream && result.upstreamBody ? { upstream_body: result.upstreamBody } : {}),
+  };
+}
 
 export function readTelegramItemSummaryFromOrder(order: Record<string, unknown> | null | undefined): string[] {
   const raw = order?.itemsJson ?? order?.items_json ?? order?.items;
@@ -364,6 +407,47 @@ export async function writeAdminDispatchMetaRemarks({
   return {
     ok: true,
     remarksJson: JSON.stringify(nextRemarks),
+  };
+}
+
+export async function updateAdminOrderStatus({
+  request,
+  cookies,
+  apiBaseUrl,
+  orderId,
+  payload,
+}: {
+  request: Request;
+  cookies: AstroCookies;
+  apiBaseUrl: string;
+  orderId: string;
+  payload: Record<string, unknown>;
+}): Promise<AdminOrderStatusUpdateResult> {
+  const upstream = await proxyAdminRequest({
+    request,
+    cookies,
+    url: `${apiBaseUrl}/api/admin/orders/${encodeURIComponent(orderId)}/status`,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const bodyText = await upstream.text();
+  const bodyJson = readJsonObject(bodyText) || {};
+
+  if (!upstream.ok || bodyJson.success === false) {
+    return {
+      ok: false,
+      status: upstream.status || 502,
+      bodyText,
+      bodyJson,
+    };
+  }
+
+  return {
+    ok: true,
+    status: upstream.status || 200,
+    bodyText,
+    bodyJson,
   };
 }
 

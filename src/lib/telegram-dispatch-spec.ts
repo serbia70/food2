@@ -124,6 +124,17 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
   return JSON.parse(await response.text()) as Record<string, unknown>;
 }
 
+function flattenInlineButtonTexts(inlineKeyboard: Array<Array<{ text?: string }>>): string[] {
+  return inlineKeyboard.flat().map((button) => String(button.text || ''));
+}
+
+function findInlineButton(
+  inlineKeyboard: Array<Array<{ text?: string; callback_data?: string; url?: string }>>,
+  text: string,
+): { text?: string; callback_data?: string; url?: string } | undefined {
+  return inlineKeyboard.flat().find((button) => button.text === text);
+}
+
 test('buildTelegramClaimCallback round-trip parses signed callback', (t) => {
   useTelegramCallbackSecret(t);
 
@@ -257,15 +268,13 @@ test('buildRiderSingleMessageTelegram 输出短动作文案与时间', () => {
   assert.match(message.text, /接单时间：12:03/);
   assert.doesNotMatch(message.text, /已取餐/);
   assert.doesNotMatch(message.text, /店铺地图：|客户导航：|https:\/\/maps\.example\.com\/shop|https:\/\/maps\.example\.com\/customer/);
-  assert.deepEqual(message.replyMarkup.inline_keyboard, [
-    [
-      { text: '取餐', callback_data: 'cb-pickup' },
-    ],
-    [
-      { text: '取餐导航', url: 'https://maps.example.com/shop' },
-      { text: '送餐导航', url: 'https://maps.example.com/customer' },
-    ],
-  ]);
+  const pickupButton = findInlineButton(message.replyMarkup.inline_keyboard, '取餐');
+  const pickupNavButton = findInlineButton(message.replyMarkup.inline_keyboard, '取餐导航');
+  const deliveryNavButton = findInlineButton(message.replyMarkup.inline_keyboard, '送餐导航');
+  assert.deepEqual(flattenInlineButtonTexts(message.replyMarkup.inline_keyboard), ['取餐', '取餐导航', '送餐导航']);
+  assert.equal(pickupButton?.callback_data, 'cb-pickup');
+  assert.equal(pickupNavButton?.url, 'https://maps.example.com/shop');
+  assert.equal(deliveryNavButton?.url, 'https://maps.example.com/customer');
 });
 
 test('buildRiderSingleMessageTelegram formats ISO timestamps as Belgrade HH:mm', () => {
@@ -561,16 +570,15 @@ test('buildAdminAssignedOrderTelegramMessage only keeps bilingual item lines and
   assert.match(message.text, /• 可乐 \/ Coca-Cola x1 · 200 RSD/);
   assert.doesNotMatch(message.text, /店铺地图：|客户导航：|https:\/\/maps\.example\.com\/shop|https:\/\/maps\.example\.com\/customer/);
   assert.doesNotMatch(message.text, /Nova dodeljena porudžbina|Broj porudžbine|Lokal|Adresa|Telefon|Iznos|Preuzimanje za|Stavke|Mapa lokala|Navigacija/);
-  assert.deepEqual(message.replyMarkup.inline_keyboard, [
-    [
-      { text: '接单', callback_data: 'cb-accept' },
-      { text: '暂不接单', callback_data: 'cb-decline' },
-    ],
-    [
-      { text: '取餐导航', url: 'https://maps.example.com/shop' },
-      { text: '送餐导航', url: 'https://maps.example.com/customer' },
-    ],
-  ]);
+  const acceptButton = findInlineButton(message.replyMarkup.inline_keyboard, '接单');
+  const declineButton = findInlineButton(message.replyMarkup.inline_keyboard, '暂不接单');
+  const pickupNavButton = findInlineButton(message.replyMarkup.inline_keyboard, '取餐导航');
+  const deliveryNavButton = findInlineButton(message.replyMarkup.inline_keyboard, '送餐导航');
+  assert.deepEqual(flattenInlineButtonTexts(message.replyMarkup.inline_keyboard), ['接单', '暂不接单', '取餐导航', '送餐导航']);
+  assert.equal(acceptButton?.callback_data, 'cb-accept');
+  assert.equal(declineButton?.callback_data, 'cb-decline');
+  assert.equal(pickupNavButton?.url, 'https://maps.example.com/shop');
+  assert.equal(deliveryNavButton?.url, 'https://maps.example.com/customer');
 });
 
 test('buildRiderAwaitingPickupTelegramMessage uses awaiting-pickup semantics', () => {

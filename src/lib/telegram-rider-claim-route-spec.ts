@@ -191,6 +191,42 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
   return JSON.parse(await response.text()) as Record<string, unknown>;
 }
 
+interface TelegramSendPayloadButton {
+  text?: string;
+  url?: string;
+  callback_data?: string;
+}
+
+interface TelegramSendPayload {
+  chat_id?: string;
+  message_id?: number;
+  text?: string;
+  shopSlug?: string;
+  replyMarkup?: {
+    inline_keyboard?: TelegramSendPayloadButton[][];
+  };
+  reply_markup?: {
+    inline_keyboard?: TelegramSendPayloadButton[][];
+  };
+}
+
+function readTelegramSendPayload(call: MockFetchCall | undefined): TelegramSendPayload {
+  assert.ok(call);
+  return JSON.parse(call.body) as TelegramSendPayload;
+}
+
+function readTelegramInlineKeyboard(payload: TelegramSendPayload): TelegramSendPayloadButton[][] {
+  return payload.replyMarkup?.inline_keyboard || payload.reply_markup?.inline_keyboard || [];
+}
+
+function flattenTelegramButtonTexts(payload: TelegramSendPayload): string[] {
+  return readTelegramInlineKeyboard(payload).flat().map((button) => String(button.text || ''));
+}
+
+function findTelegramButton(payload: TelegramSendPayload, text: string): TelegramSendPayloadButton | undefined {
+  return readTelegramInlineKeyboard(payload).flat().find((button) => button.text === text);
+}
+
 function createFetchHandler(
   snapshot: OrderSnapshot,
   options?: {
@@ -498,9 +534,12 @@ test('picked_up 更新成功后即使二次读取订单失败也必须编辑原�
   assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
-  assert.match(telegramCalls[0]?.body || '', /"text":"送达"/);
-  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
+  const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
+  const completeButton = findTelegramButton(telegramPayload, '送达');
+  assert.match(telegramPayload.text || '', /状态：配送中/);
+  assert.ok(completeButton);
+  assert.equal(typeof completeButton.callback_data, 'string');
+  assert.ok(String(completeButton.callback_data || '').trim().length > 0);
 });
 
 test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback 不回退 admin', async (t) => {
@@ -558,21 +597,22 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   assert.deepEqual(nextMeta.telegramMessageRef, { chatId: TEST_CHAT_ID, messageId: 7788 });
 
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /状态：已送达/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：12:19/);
-  assert.match(telegramCalls[0]?.body || '', /送达时间：\d{2}:\d{2}/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /送达时间：\d{4}-\d{2}-\d{2}T/);
-  assert.match(telegramCalls[0]?.body || '', /菜品：/);
-  assert.match(telegramCalls[0]?.body || '', /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
-  assert.match(telegramCalls[0]?.body || '', /可乐 \/ Coca-Cola x1 · 200 RSD/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"callback_data":/);
-  assert.match(telegramCalls[0]?.body || '', /取餐导航/);
-  assert.match(telegramCalls[0]?.body || '', /送餐导航/);
-  assert.match(telegramCalls[0]?.body || '', /"inline_keyboard":\[\[/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /Nova dodeljena porudžbina|Stavke/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"text":"Pizza One有新单/);
+  const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
+  const buttonTexts = flattenTelegramButtonTexts(telegramPayload);
+  assert.equal(telegramPayload.message_id, 7788);
+  assert.match(telegramPayload.text || '', /状态：已送达/);
+  assert.match(telegramPayload.text || '', /接单时间：12:03/);
+  assert.match(telegramPayload.text || '', /取餐时间：12:19/);
+  assert.match(telegramPayload.text || '', /送达时间：\d{2}:\d{2}/);
+  assert.doesNotMatch(telegramPayload.text || '', /送达时间：\d{4}-\d{2}-\d{2}T/);
+  assert.match(telegramPayload.text || '', /菜品：/);
+  assert.match(telegramPayload.text || '', /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
+  assert.match(telegramPayload.text || '', /可乐 \/ Coca-Cola x1 · 200 RSD/);
+  assert.equal(buttonTexts.includes('取餐导航'), true);
+  assert.equal(buttonTexts.includes('送餐导航'), true);
+  assert.equal((readTelegramInlineKeyboard(telegramPayload) || []).flat().some((button) => typeof button.callback_data === 'string' && button.callback_data.trim().length > 0), false);
+  assert.doesNotMatch(telegramPayload.text || '', /Nova dodeljena porudžbina|Stavke/);
+  assert.doesNotMatch(telegramPayload.text || '', /Pizza One有新单/);
 });
 
 test('配送阶段 admin orders 只返回 remarks_json 时仍能识别当前骑手并推进 picked_up', async (t) => {
@@ -858,13 +898,12 @@ test('decline 自动续派在 rider-dispatch 返回 success true 且 telegram_di
       return jsonResponse({
         success: true,
         telegram_dispatch: {
-          deliveredCount: 1,
           failedCount: 0,
           skippedReason: '',
           attempts: [
             {
               riderId: nextRiderId,
-              status: 'delivered',
+              delivered: true,
             },
           ],
         },
@@ -892,6 +931,86 @@ test('decline 自动续派在 rider-dispatch 返回 success true 且 telegram_di
   assert.equal(body.success, true);
   assert.equal(body.action, 'decline');
   assert.equal(body.reassigned, true);
+  assert.ok(redispatchCall);
+  assert.match(redispatchCall.body, new RegExp(`"forceRiderId":"${nextRiderId}"`));
+});
+
+test('decline 自动续派不得再把 deliveredCount 当作 reassigned 成功判据', async (t) => {
+  useTestEnv(t);
+  const nextRiderId = '303';
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+      return jsonResponse({
+        riders: [
+          {
+            id: TEST_RIDER_ID,
+            name: TEST_RIDER_NAME,
+            phone: TEST_RIDER_PHONE,
+            telegramChatId: TEST_CHAT_ID,
+            status: 'available',
+          },
+          {
+            id: nextRiderId,
+            name: 'Rider 2',
+            phone: '381641111111',
+            telegramChatId: '987654321',
+            status: 'available',
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === '/api/admin/orders') {
+      return jsonResponse([createOrderRow({
+        status: 'awaiting_courier',
+        remarksJson: createRemarksJson({ declinedRiderIds: ['404'] }),
+      })]);
+    }
+
+    if (url.pathname === `/api/order/update_status/${TEST_ORDER_ID}`) {
+      return jsonResponse({ success: true });
+    }
+
+    if (url.pathname === '/api/admin/rider-dispatch') {
+      return jsonResponse({
+        success: true,
+        telegram_dispatch: {
+          deliveredCount: 1,
+          failedCount: 0,
+          skippedReason: '',
+          attempts: [
+            {
+              riderId: nextRiderId,
+              delivered: false,
+            },
+          ],
+        },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const declineCallback = buildTelegramShortClaimCallback({
+    orderId: TEST_ORDER_ID,
+    riderId: TEST_RIDER_ID,
+    riderName: TEST_RIDER_NAME,
+    riderPhone: TEST_RIDER_PHONE,
+    restaurantId: 'shop-1',
+    telegramChatId: TEST_CHAT_ID,
+    action: 'decline',
+    expiresAt: Date.now() + 60_000,
+  });
+  const response = await handleTelegramRiderClaim(createRequest(declineCallback));
+  const body = await readJson(response);
+  const redispatchCall = calls.find((call) => call.url.endsWith('/api/admin/rider-dispatch'));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.action, 'decline');
+  assert.equal(body.reassigned, false);
   assert.ok(redispatchCall);
   assert.match(redispatchCall.body, new RegExp(`"forceRiderId":"${nextRiderId}"`));
 });
@@ -938,7 +1057,6 @@ test('decline 自动续派在 rider-dispatch 返回 success true 但 telegram_di
       return jsonResponse({
         success: true,
         telegram_dispatch: {
-          deliveredCount: 0,
           failedCount: 1,
           skippedReason: 'no_telegram_bound_riders',
         },
@@ -1103,9 +1221,11 @@ test('accept 成功时即使 list_available 不再返回当前骑手，也必须
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"text":"取餐"/);
-  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+  const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
+  const pickupButton = findTelegramButton(telegramPayload, '取餐');
+  assert.ok(pickupButton);
+  assert.equal(typeof pickupButton.callback_data, 'string');
+  assert.ok(String(pickupButton.callback_data || '').trim().length > 0);
 });
 
 test('accept 成功时订单只有 restaurantId 也必须编辑出取餐按钮', async (t) => {
@@ -1156,10 +1276,12 @@ test('accept 成功时订单只有 restaurantId 也必须编辑出取餐按钮',
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"shopSlug":"103"/);
-  assert.match(telegramCalls[0]?.body || '', /"text":"取餐"/);
-  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+  const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
+  const pickupButton = findTelegramButton(telegramPayload, '取餐');
+  assert.equal(telegramPayload.shopSlug, '103');
+  assert.ok(pickupButton);
+  assert.equal(typeof pickupButton.callback_data, 'string');
+  assert.ok(String(pickupButton.callback_data || '').trim().length > 0);
 });
 
 test('accept 成功时写回 dispatch_meta 保留当前骑手位，并把 Telegram 原消息切到待取餐', async (t) => {
@@ -1205,12 +1327,14 @@ test('accept 成功时写回 dispatch_meta 保留当前骑手位，并把 Telegr
   assert.equal(updateCall.headers.get('authorization'), null);
   assert.equal(telegramCalls.length, 1);
   assert.equal(telegramCalls[0]?.url, 'https://example.com/api/telegram/send');
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /状态：待取餐/);
-  assert.match(telegramCalls[0]?.body || '', /"text":"取餐"/);
-  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /送达/);
+  const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
+  const pickupButton = findTelegramButton(telegramPayload, '取餐');
+  assert.equal(telegramPayload.message_id, 7788);
+  assert.match(telegramPayload.text || '', /状态：待取餐/);
+  assert.ok(pickupButton);
+  assert.equal(typeof pickupButton.callback_data, 'string');
+  assert.ok(String(pickupButton.callback_data || '').trim().length > 0);
+  assert.doesNotMatch(telegramPayload.text || '', /送达/);
 });
 
 test('accept 成功时 admin orders 未授权且回退 rider orders 仍保留取餐导航', async (t) => {
@@ -1273,11 +1397,16 @@ test('accept 成功时 admin orders 未授权且回退 rider orders 仍保留取
   assert.equal(body.success, true);
   assert.equal(calls.some((call) => call.url.includes('/api/rider/orders?phone=')), true);
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /状态：待取餐/);
-  assert.match(telegramCalls[0]?.body || '', /取餐导航/);
-  assert.match(telegramCalls[0]?.body || '', /https:\/\/maps\.example\.com\/shop-a/);
-  assert.match(telegramCalls[0]?.body || '', /送餐导航/);
-  assert.match(telegramCalls[0]?.body || '', /"text":"取餐"/);
+  const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
+  const pickupButton = findTelegramButton(telegramPayload, '取餐');
+  const pickupNavButton = findTelegramButton(telegramPayload, '取餐导航');
+  const deliveryNavButton = findTelegramButton(telegramPayload, '送餐导航');
+  assert.match(telegramPayload.text || '', /状态：待取餐/);
+  assert.ok(pickupButton);
+  assert.equal(typeof pickupButton.callback_data, 'string');
+  assert.ok(String(pickupButton.callback_data || '').trim().length > 0);
+  assert.equal(pickupNavButton?.url, 'https://maps.example.com/shop-a');
+  assert.equal(deliveryNavButton?.text, '送餐导航');
 });
 
 test('accept update_status 调用会透传 cookie 和 authorization 头', async (t) => {

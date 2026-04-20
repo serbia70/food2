@@ -100,11 +100,16 @@ function didRedispatchActuallySucceed(status: number, bodyText: string): boolean
 
   const failedCount = Number(telegramDispatch.failedCount || 0);
   const skippedReason = String(telegramDispatch.skippedReason || '').trim();
-  const deliveredCount = Number(telegramDispatch.deliveredCount || 0);
+  const attempts = Array.isArray(telegramDispatch.attempts) ? telegramDispatch.attempts : [];
 
   if (failedCount > 0) return false;
   if (skippedReason) return false;
-  return deliveredCount > 0;
+  return attempts.some((attempt) => Boolean(
+    attempt
+    && typeof attempt === 'object'
+    && !Array.isArray(attempt)
+    && (attempt as { delivered?: unknown }).delivered === true,
+  ));
 }
 
 async function editDeliveryProgressMessage(

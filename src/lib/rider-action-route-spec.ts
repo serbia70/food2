@@ -31,6 +31,25 @@ interface MockDateConstructor extends DateConstructor {
   now(): number;
 }
 
+interface TelegramSendPayloadButton {
+  text?: string;
+  url?: string;
+  callback_data?: string;
+}
+
+interface TelegramSendPayload {
+  chat_id?: string;
+  message_id?: number;
+  text?: string;
+  shopSlug?: string;
+  replyMarkup?: {
+    inline_keyboard?: TelegramSendPayloadButton[][];
+  };
+  reply_markup?: {
+    inline_keyboard?: TelegramSendPayloadButton[][];
+  };
+}
+
 function useTestEnv(t: TestContext): void {
   const originalApiUrl = process.env.PUBLIC_API_URL;
   const originalCallbackSecret = process.env.TELEGRAM_CALLBACK_SECRET;
@@ -122,6 +141,23 @@ function createOrderRow(snapshot: OrderSnapshot): Record<string, unknown> {
 
 async function readJson(response: Response): Promise<Record<string, unknown>> {
   return JSON.parse(await response.text()) as Record<string, unknown>;
+}
+
+function readTelegramSendPayload(call: MockFetchCall | undefined): TelegramSendPayload {
+  assert.ok(call);
+  return JSON.parse(call.body) as TelegramSendPayload;
+}
+
+function readTelegramInlineKeyboard(payload: TelegramSendPayload): TelegramSendPayloadButton[][] {
+  return payload.replyMarkup?.inline_keyboard || payload.reply_markup?.inline_keyboard || [];
+}
+
+function flattenTelegramButtonTexts(payload: TelegramSendPayload): string[] {
+  return readTelegramInlineKeyboard(payload).flat().map((button) => String(button.text || ''));
+}
+
+function findTelegramButton(payload: TelegramSendPayload, text: string): TelegramSendPayloadButton | undefined {
+  return readTelegramInlineKeyboard(payload).flat().find((button) => button.text === text);
 }
 
 function createActionRequest(body: Record<string, unknown>): Request {
@@ -247,12 +283,15 @@ test('accept 主链路先写 admin remarks 再 update_status，并把 Telegram �
   assert.equal(updatePayload.status, 'delivering');
   assert.equal(telegramCalls.length, 1);
   assert.equal(telegramCalls[0]?.url, 'https://example.com/api/telegram/send');
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /状态：待取餐/);
-  assert.match(telegramCalls[0]?.body || '', /"text":"取餐"/);
-  assert.match(telegramCalls[0]?.body || '', /"callback_data":/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /送达/);
+  const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
+  const pickupButton = findTelegramButton(telegramPayload, '取餐');
+  assert.equal(telegramPayload.message_id, 7788);
+  assert.match(telegramPayload.text || '', /状态：待取餐/);
+  const buttonTexts = flattenTelegramButtonTexts(telegramPayload);
+  assert.equal(buttonTexts.includes('取餐'), true);
+  assert.equal(typeof pickupButton?.callback_data, 'string');
+  assert.ok(String(pickupButton?.callback_data || '').trim().length > 0);
+  assert.equal(buttonTexts.includes('送达'), false);
 });
 
 test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达按钮', async (t) => {
@@ -295,16 +334,20 @@ test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达�
   assert.deepEqual(nextMeta.telegramMessageRef, { chatId: '123456789', messageId: 7788 });
 
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
-  assert.match(telegramCalls[0]?.body || '', /"shopSlug":"real-shop"/);
-  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：12:25/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
-  assert.match(telegramCalls[0]?.body || '', /送达/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /已送达/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+  const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
+  const completeButton = findTelegramButton(telegramPayload, '送达');
+  assert.equal(telegramPayload.message_id, 7788);
+  assert.equal(telegramPayload.chat_id, '123456789');
+  assert.equal(telegramPayload.shopSlug, 'real-shop');
+  assert.match(telegramPayload.text || '', /状态：配送中/);
+  assert.match(telegramPayload.text || '', /接单时间：12:03/);
+  assert.match(telegramPayload.text || '', /取餐时间：12:25/);
+  assert.doesNotMatch(telegramPayload.text || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
+  const buttonTexts = flattenTelegramButtonTexts(telegramPayload);
+  assert.equal(buttonTexts.includes('送达'), true);
+  assert.equal(typeof completeButton?.callback_data, 'string');
+  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
+  assert.equal(buttonTexts.includes('已送达'), false);
 });
 
 test('picked_up 缺少订单 shopSlug 时使用请求体回退 shop slug 保留送达按钮', async (t) => {
@@ -338,11 +381,15 @@ test('picked_up 缺少订单 shopSlug 时使用请求体回退 shop slug 保留�
   assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"shopSlug":"dashboard-shop"/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：12:40/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
-  assert.match(telegramCalls[0]?.body || '', /送达/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"inline_keyboard":\[\]/);
+  const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
+  const completeButton = findTelegramButton(telegramPayload, '送达');
+  assert.equal(telegramPayload.shopSlug, 'dashboard-shop');
+  assert.match(telegramPayload.text || '', /取餐时间：12:40/);
+  assert.doesNotMatch(telegramPayload.text || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
+  const buttonTexts = flattenTelegramButtonTexts(telegramPayload);
+  assert.equal(buttonTexts.includes('送达'), true);
+  assert.equal(typeof completeButton?.callback_data, 'string');
+  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
 });
 
 test('complete 写入 completedAt 并同步编辑 telegram 原消息为只读送达态', async (t) => {
@@ -386,15 +433,19 @@ test('complete 写入 completedAt 并同步编辑 telegram 原消息为只读送
   assert.deepEqual(nextMeta.telegramMessageRef, { chatId: '123456789', messageId: 7788 });
 
   assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
-  assert.match(telegramCalls[0]?.body || '', /状态：已送达/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：12:19/);
-  assert.match(telegramCalls[0]?.body || '', /送达时间：12:55/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /送达时间：\d{4}-\d{2}-\d{2}T/);
-  assert.match(telegramCalls[0]?.body || '', /送餐导航/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"callback_data":/);
+  const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
+  assert.equal(telegramPayload.message_id, 7788);
+  assert.equal(telegramPayload.chat_id, '123456789');
+  assert.match(telegramPayload.text || '', /状态：已送达/);
+  assert.match(telegramPayload.text || '', /接单时间：12:03/);
+  assert.match(telegramPayload.text || '', /取餐时间：12:19/);
+  assert.match(telegramPayload.text || '', /送达时间：12:55/);
+  assert.doesNotMatch(telegramPayload.text || '', /送达时间：\d{4}-\d{2}-\d{2}T/);
+  const buttonTexts = flattenTelegramButtonTexts(telegramPayload);
+  const deliveryNavButton = findTelegramButton(telegramPayload, '送餐导航');
+  assert.equal(buttonTexts.includes('送餐导航'), true);
+  assert.ok(deliveryNavButton?.url);
+  assert.equal(readTelegramInlineKeyboard(telegramPayload).flat().some((button) => typeof button.callback_data === 'string' && button.callback_data.trim().length > 0), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
 });
 

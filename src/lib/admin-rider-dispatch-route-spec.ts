@@ -624,14 +624,7 @@ test('manual assign 缺少可用订单快照时直接失败且不发送 telegram
     if (url.pathname === '/api/admin/orders' && request.method === 'GET') {
       return jsonResponse({
         success: true,
-        orders: [
-          {
-            id: '697',
-            remarksJson: JSON.stringify(['dispatch_meta:{"currentRiderId":"202","telegramMessageRef":null}']),
-            shopSlug: 'shop-a',
-            status: 'awaiting_courier',
-          },
-        ],
+        orders: [],
       });
     }
 

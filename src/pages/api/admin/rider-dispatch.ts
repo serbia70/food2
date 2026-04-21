@@ -11,6 +11,7 @@ import {
   buildAdminSimpleErrorResponse,
   persistAdminTelegramMessageRefHandled,
   readAdminAssignableRiders,
+  readJsonObject,
   readAdminOrderById,
   updateAdminOrderStatus,
   writeAdminDispatchMetaRemarks,
@@ -97,6 +98,10 @@ function normalizeRiderId(value: unknown): string {
 function createRiderIdFilter(targetRiderId: string): (rider: TelegramRiderRow) => boolean {
   const normalizedTarget = normalizeRiderId(targetRiderId);
   return (rider) => normalizeRiderId(rider.id) === normalizedTarget;
+}
+
+function readRiderChatId(rider: TelegramRiderRow): string {
+  return String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
 }
 
 function handleRidersReadFailure(result: AvailableRidersReadFailure): Response {
@@ -269,17 +274,6 @@ function buildNextDispatchMetaForPublish({
   };
 }
 
-function selectRiderForPublish({
-  riders,
-  forcedRiderId,
-}: {
-  riders: TelegramRiderRow[];
-  forcedRiderId: string;
-}): TelegramRiderRow[] {
-  if (!forcedRiderId) return riders;
-  return riders.filter(createRiderIdFilter(forcedRiderId));
-}
-
 function pickNextRiderOnTimeout({
   riders,
   currentRiderId,
@@ -383,7 +377,9 @@ async function resolveRiderForPublish({
     return { ok: false, response: handleRidersReadFailure(ridersResult) };
   }
 
-  const scopedRiders = selectRiderForPublish({ riders: ridersResult.riders, forcedRiderId });
+  const scopedRiders = forcedRiderId
+    ? ridersResult.riders.filter(createRiderIdFilter(forcedRiderId))
+    : ridersResult.riders;
   const selectedRiderId = normalizeRiderId(scopedRiders[0]?.id);
 
   if (forcedRiderId && !selectedRiderId) {
@@ -413,7 +409,6 @@ async function notifyTelegramRecipients(
   }
 
   const riders = ridersResult.riders;
-  const readRiderChatId = (rider: TelegramRiderRow) => String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
   const scopedRiders = riderFilter ? riders.filter(riderFilter) : riders;
   const availableRiderCount = scopedRiders.length;
   const telegramRiders = scopedRiders.filter((rider) => readRiderChatId(rider) !== '');
@@ -424,14 +419,20 @@ async function notifyTelegramRecipients(
     telegramBoundCount,
     deliveredCount: 0,
     failedCount: 0,
-    attempts: scopedRiders.map((rider) => ({
-      riderId: normalizeRiderId(rider.id),
-      riderName: String(rider.name || '未命名骑手').trim(),
-      riderPhone: String(rider.phone || '').trim(),
-      telegramChatIdBound: readRiderChatId(rider) !== '',
-      delivered: false,
-      error: readRiderChatId(rider) !== '' ? undefined : 'telegram_not_bound',
-    })),
+    attempts: scopedRiders.map((rider) => {
+      const riderChatId = readRiderChatId(rider);
+      const riderName = String(rider.name || '未命名骑手').trim();
+      const riderPhone = String(rider.phone || '').trim();
+      const telegramChatIdBound = riderChatId !== '';
+      return {
+        riderId: normalizeRiderId(rider.id),
+        riderName,
+        riderPhone,
+        telegramChatIdBound,
+        delivered: false,
+        error: telegramChatIdBound ? undefined : 'telegram_not_bound',
+      };
+    }),
   };
 
   if (availableRiderCount === 0) {
@@ -477,23 +478,34 @@ async function notifyTelegramRecipients(
   const totalAmount = Number(order.totalAmount || 0);
   const pickupEtaMinutes = Number(order.pickupEtaMinutes || 0);
   const phone = String(order.userPhone || '');
+  const rawCookie = String(request.headers.get('cookie') || '').trim();
+  const shopSlug = String(order.shopSlug || '').trim();
+  const telegramSendUrl = new URL('/api/telegram/send', request.url).toString();
+  const dashboardLink = buildTelegramDeepLink({
+    baseUrl: dashboardBaseUrl,
+    restaurantId,
+    orderId: order.id,
+  });
 
   const attempts = await Promise.all(telegramRiders.map(async (rider): Promise<TelegramDispatchAttempt> => {
-    const dashboardLink = buildTelegramDeepLink({
-      baseUrl: dashboardBaseUrl,
-      restaurantId,
-      orderId: order.id,
-    });
     const riderId = Number(rider.id || 0);
+    const riderName = String(rider.name || '').trim();
+    const attemptRiderName = riderName || '未命名骑手';
     const riderPhone = String(rider.phone || '').trim();
     const riderChatId = readRiderChatId(rider);
+    const attemptBase = {
+      riderId: normalizeRiderId(rider.id),
+      riderName: attemptRiderName,
+      riderPhone,
+      telegramChatIdBound: true,
+    };
     let claimCallbackData: string | undefined;
-    if (riderId > 0 && String(rider.name || '').trim() && riderPhone && riderChatId) {
+    if (riderId > 0 && riderName && riderPhone && riderChatId) {
       try {
         claimCallbackData = buildTelegramClaimCallback({
           orderId: Number(order.id || 0),
           riderId,
-          riderName: String(rider.name || '').trim(),
+          riderName,
           restaurantId,
           riderPhone,
           telegramChatId: riderChatId,
@@ -517,35 +529,26 @@ async function notifyTelegramRecipients(
     });
 
     try {
-      const rawCookie = String(request.headers.get('cookie') || '').trim();
       const sendRes = await proxyAdminRequest({
         request,
         cookies,
-        url: new URL('/api/telegram/send', request.url).toString(),
+        url: telegramSendUrl,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(rawCookie ? { cookie: rawCookie } : {}),
         },
         body: JSON.stringify({
-          shopSlug: String(order.shopSlug || '').trim(),
+          shopSlug,
           chat_id: riderChatId,
           ...message,
         }),
       });
       const responseText = await sendRes.text();
-      let parsedResponse: Record<string, unknown> = {};
-      try {
-        parsedResponse = JSON.parse(responseText) as Record<string, unknown>;
-      } catch {
-        parsedResponse = {};
-      }
+      const parsedResponse = readJsonObject(responseText) || {};
       if (!sendRes.ok || parsedResponse.success === false || parsedResponse.ok === false) {
         return {
-          riderId: normalizeRiderId(rider.id),
-          riderName: String(rider.name || '未命名骑手').trim(),
-          riderPhone: riderPhone,
-          telegramChatIdBound: true,
+          ...attemptBase,
           delivered: false,
           error: responseText.trim() || `telegram_send_http_${sendRes.status}`,
         };
@@ -561,19 +564,13 @@ async function notifyTelegramRecipients(
       );
 
       return {
-        riderId: normalizeRiderId(rider.id),
-        riderName: String(rider.name || '未命名骑手').trim(),
-        riderPhone: riderPhone,
-        telegramChatIdBound: true,
+        ...attemptBase,
         delivered: true,
         ...(messageId > 0 ? { messageRef: { chatId: riderChatId, messageId } } : {}),
       };
     } catch (error) {
       return {
-        riderId: normalizeRiderId(rider.id),
-        riderName: String(rider.name || '未命名骑手').trim(),
-        riderPhone: riderPhone,
-        telegramChatIdBound: true,
+        ...attemptBase,
         delivered: false,
         error: error instanceof Error ? error.message : 'telegram_send_failed',
       };
@@ -606,7 +603,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const body = await request.text();
 
   let parsedBody: Record<string, unknown> = {};
-  let action = '';
+  let action: string;
   try {
     parsedBody = JSON.parse(body) as Record<string, unknown>;
     action = String(parsedBody.action || '').trim();
@@ -647,6 +644,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const existingMeta = readDispatchMetaFromRemarks(existingRemarksJson);
 
     const currentStatus = String(order.status || '').trim();
+    const awaitingCourierStatus = currentStatus || 'awaiting_courier';
     const publishStatus = String(parsedBody.status || '').trim() || (currentStatus === 'awaiting_courier' ? currentStatus : 'awaiting_courier');
 
     const updatePayload = action === 'publish'
@@ -659,7 +657,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
           riderLastRemindedAt: parsedBody.riderLastRemindedAt,
         }
       : {
-          status: currentStatus || 'awaiting_courier',
+          status: awaitingCourierStatus,
           riderRemindCount: parsedBody.riderRemindCount,
           riderLastRemindedAt: parsedBody.riderLastRemindedAt,
         };
@@ -678,7 +676,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     const mergedOrderBase = {
       ...order,
-      status: action === 'publish' ? publishStatus : (currentStatus || 'awaiting_courier'),
+      status: action === 'publish' ? publishStatus : awaitingCourierStatus,
       pickupEtaMinutes: parsedBody.pickupEtaMinutes ?? order.pickupEtaMinutes,
       pickupReadyAt: parsedBody.pickupReadyAt ?? order.pickupReadyAt,
       riderBroadcastedAt: parsedBody.riderBroadcastedAt ?? order.riderBroadcastedAt,
@@ -766,12 +764,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       });
       if (!resolved.ok) return resolved.response;
 
-      const safeSelectedRiderId = resolved.selectedRiderId;
-      if (safeSelectedRiderId) {
+      const selectedRiderId = resolved.selectedRiderId;
+      if (selectedRiderId) {
         const nextMeta = buildNextDispatchMetaForPublish({
           existingMeta,
           forcedRiderId,
-          selectedRiderId: safeSelectedRiderId,
+          selectedRiderId,
           nowIso,
         });
 
@@ -787,7 +785,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         }
         mergedOrder = remarksMergeResult.mergedOrder;
 
-        riderFilter = createRiderIdFilter(safeSelectedRiderId);
+        riderFilter = createRiderIdFilter(selectedRiderId);
       }
     }
 
@@ -813,12 +811,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
       if (handled.warning) {
         warning = handled.warning;
-      } else if (handled.persisted) {
-        mergedOrder = {
-          ...mergedOrder,
-          ...handled.persisted.order as DispatchOrderSnapshot,
-          remarksJson: handled.persisted.remarksJson,
-        };
       }
     }
 

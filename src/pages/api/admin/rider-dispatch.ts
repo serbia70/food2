@@ -108,15 +108,39 @@ function handleRidersReadFailure(result: AvailableRidersReadFailure): Response {
   return buildAdminRidersReadFailureResponse(result, { coerce2xxTo502: true });
 }
 
+type TelegramDispatchPublicSummary = Omit<
+  TelegramDispatchSummary,
+  'availableRiderCount' | 'telegramBoundCount' | 'deliveredCount' | 'telegramMessageRef'
+>;
+
+type TelegramDispatchPublicResponseBody = {
+  success: true;
+  telegram_dispatch: TelegramDispatchPublicSummary | TelegramDispatchSkippedSummary;
+  warning?: AdminWarningShape;
+};
+
+function toPublicTelegramDispatchSummary(
+  summary: TelegramDispatchSummary | TelegramDispatchSkippedSummary,
+): TelegramDispatchPublicSummary | TelegramDispatchSkippedSummary {
+  const normalized: Record<string, unknown> = { ...summary };
+  delete normalized.availableRiderCount;
+  delete normalized.telegramBoundCount;
+  delete normalized.deliveredCount;
+  delete normalized.telegramMessageRef;
+  return normalized as TelegramDispatchPublicSummary | TelegramDispatchSkippedSummary;
+}
+
 function buildTelegramDispatchResponse(
   summary: TelegramDispatchSummary | TelegramDispatchSkippedSummary,
   warning?: AdminWarningShape,
 ): Response {
-  return buildAdminJsonResponse({
+  const body: TelegramDispatchPublicResponseBody = {
     success: true,
-    telegram_dispatch: summary,
+    telegram_dispatch: toPublicTelegramDispatchSummary(summary),
     ...(warning ? { warning } : {}),
-  });
+  };
+
+  return buildAdminJsonResponse(body);
 }
 
 function buildSkippedTelegramDispatchResponse(skippedReason: string): Response {

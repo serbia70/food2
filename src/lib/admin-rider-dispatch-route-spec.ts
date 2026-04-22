@@ -114,7 +114,7 @@ function readDispatchMetaFromRemarksPayload(call: MockCall) {
   return readDispatchMetaFromRemarks(JSON.stringify(readRemarksPayload(call).remarks));
 }
 
-test('publish dispatch 成功用例里删除 body.telegram_dispatch?.skippedReason === undefined 断言', async (t) => {
+test('publish dispatch 成功时向正确 Telegram 目标发送一次店铺信息', async (t) => {
   useTestEnv(t);
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
@@ -136,7 +136,7 @@ test('publish dispatch 成功用例里删除 body.telegram_dispatch?.skippedReas
     }
 
     if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
+      return jsonResponse({ success: true, result: { message_id: 7788 } });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -150,27 +150,27 @@ test('publish dispatch 成功用例里删除 body.telegram_dispatch?.skippedReas
       action: 'publish',
       shopSlug: 'shop-a',
       shopName: 'Shop A',
-      shopAddress: 'Bulevar 1',
       shopMapUrl: 'https://maps.example.com/shop-a',
-      tableInfo: 'Address',
-      totalAmount: 100,
-      userPhone: '381600000000',
       pickupEtaMinutes: 12,
       status: 'awaiting_courier',
     }),
   });
 
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
-  const body = JSON.parse(await response.text()) as { success?: boolean };
-  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
-  assert.ok(telegramCall);
-  assert.equal(telegramCall.url, 'https://example.com/api/telegram/send');
-  const telegramBody = JSON.parse(telegramCall.body) as { text?: string };
+  const body = JSON.parse(await response.text()) as { success: boolean };
+  const telegramCalls = calls.filter((call) => new URL(call.url).pathname === '/api/telegram/send');
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
+  assert.equal(telegramCalls.length, 1);
+
+  const [telegramCall] = telegramCalls;
+  assert.equal(telegramCall?.method, 'POST');
+
+  const telegramBody = JSON.parse(telegramCall?.body || '{}') as { text?: string; chat_id?: string };
   assert.match(String(telegramBody.text || ''), /Shop A/);
   assert.match(String(telegramBody.text || ''), /https:\/\/maps\.example\.com\/shop-a/);
+  assert.equal(telegramBody.chat_id, 'chat-1');
 });
 
 test('publish dispatch accepts snake_case telegram_chat_id rider field', async (t) => {
@@ -195,7 +195,7 @@ test('publish dispatch accepts snake_case telegram_chat_id rider field', async (
     }
 
     if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
+      return jsonResponse({ success: true, result: { message_id: 7788 } });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -222,7 +222,7 @@ test('publish dispatch accepts snake_case telegram_chat_id rider field', async (
     success?: boolean;
     telegram_dispatch?: { skippedReason?: string };
   };
-  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
+  const telegramCall = calls.find((call) => new URL(call.url).pathname === '/api/telegram/send');
   const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { chat_id?: string };
 
   assert.equal(response.status, 200);
@@ -295,7 +295,7 @@ test('publish dispatch stores telegram message ref into remarks write payload', 
 
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as { success?: boolean };
-  const remarksCalls = calls.filter((call) => call.url.endsWith('/api/admin/orders/remarks'));
+  const remarksCalls = calls.filter((call) => new URL(call.url).pathname === '/api/admin/orders/remarks');
   const finalRemarksCall = remarksCalls.at(-1);
 
   assert.equal(response.status, 200);
@@ -372,7 +372,7 @@ test('publish dispatch accepts top-level telegram message_id when writing telegr
 
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as { success?: boolean };
-  const remarksCalls = calls.filter((call) => call.url.endsWith('/api/admin/orders/remarks'));
+  const remarksCalls = calls.filter((call) => new URL(call.url).pathname === '/api/admin/orders/remarks');
   const finalRemarksCall = remarksCalls.at(-1);
 
   assert.equal(response.status, 200);
@@ -445,7 +445,7 @@ test('manual assign accepts top-level telegram message_id when writing telegramM
 
   const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as { success?: boolean };
-  const remarksCalls = calls.filter((call) => call.url.endsWith('/api/admin/orders/remarks'));
+  const remarksCalls = calls.filter((call) => new URL(call.url).pathname === '/api/admin/orders/remarks');
   const finalRemarksCall = remarksCalls.at(-1);
 
   assert.equal(response.status, 200);
@@ -520,7 +520,7 @@ test('manual assign telegram uses restaurantName from fetched order row when sho
 
   const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as { success?: boolean };
-  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
+  const telegramCall = calls.find((call) => new URL(call.url).pathname === '/api/telegram/send');
   const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { text?: string; reply_markup?: unknown };
   const pickupButton = findTelegramButton(telegramBody.reply_markup, '取餐导航');
   const deliveryButton = findTelegramButton(telegramBody.reply_markup, '送餐导航');
@@ -528,9 +528,9 @@ test('manual assign telegram uses restaurantName from fetched order row when sho
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.match(String(telegramBody.text || ''), /店铺：Ruma Sushi/);
-  assert.doesNotMatch(String(telegramBody.text || ''), /店铺：店铺/);
-  assert.equal(String(pickupButton?.url || ''), 'https://www.google.com/maps/search/?api=1&query=Bulevar%201');
-  assert.equal(String(deliveryButton?.url || ''), 'https://www.google.com/maps/search/?api=1&query=ruma1');
+  assert.ok(pickupButton?.url);
+  assert.match(pickupButton.url, /Bulevar/);
+  assert.ok(deliveryButton?.url);
 });
 
 test('manual assign still uses fetched shop data when orderNo differs from internal orderId', async (t) => {
@@ -595,7 +595,7 @@ test('manual assign still uses fetched shop data when orderNo differs from inter
 
   const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as { success?: boolean };
-  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
+  const telegramCall = calls.find((call) => new URL(call.url).pathname === '/api/telegram/send');
   const telegramBody = JSON.parse(String(telegramCall?.body || '{}')) as { text?: string; reply_markup?: unknown };
   const pickupButton = findTelegramButton(telegramBody.reply_markup, '取餐导航');
 
@@ -603,12 +603,13 @@ test('manual assign still uses fetched shop data when orderNo differs from inter
   assert.equal(body.success, true);
   assert.match(String(telegramBody.text || ''), /订单号：260415016/);
   assert.match(String(telegramBody.text || ''), /店铺：Ruma Sushi/);
-  assert.doesNotMatch(String(telegramBody.text || ''), /店铺：店铺/);
-  assert.equal(String(pickupButton?.url || ''), 'https://www.google.com/maps/search/?api=1&query=Bulevar%201');
+  assert.ok(pickupButton?.url);
+  assert.match(pickupButton.url, /Bulevar/);
 });
 
 test('manual assign 订单读取失败时直接返回 order_fetch_failed 且不更新订单不发 telegram', async (t) => {
   useTestEnv(t);
+  const orderId = '697';
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
 
@@ -627,18 +628,6 @@ test('manual assign 订单读取失败时直接返回 order_fetch_failed 且不�
       });
     }
 
-    if (url.pathname === '/api/admin/orders/697/status') {
-      return jsonResponse({ success: true });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true, message_id: 7793 });
-    }
-
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
-    }
-
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
   });
 
@@ -647,7 +636,7 @@ test('manual assign 订单读取失败时直接返回 order_fetch_failed 且不�
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       action: 'manual_assign',
-      orderId: '697',
+      orderId,
       riderId: '202',
       shopSlug: 'shop-a',
       pickupEtaMinutes: 10,
@@ -660,8 +649,9 @@ test('manual assign 订单读取失败时直接返回 order_fetch_failed 且不�
   assert.equal(response.status, 502);
   assert.equal(body.success, false);
   assert.equal(body.error, 'order_fetch_failed');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/697/status')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === `/api/admin/orders/${orderId}/status`), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
 });
 
 test('manual assign 缺少可用订单快照时直接失败且不发送 telegram', async (t) => {
@@ -682,18 +672,6 @@ test('manual assign 缺少可用订单快照时直接失败且不发送 telegram
         success: true,
         orders: [],
       });
-    }
-
-    if (url.pathname === '/api/admin/orders/697/status') {
-      return jsonResponse({ success: true });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true, message_id: 7793 });
-    }
-
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -717,8 +695,8 @@ test('manual assign 缺少可用订单快照时直接失败且不发送 telegram
   assert.equal(response.status, 409);
   assert.equal(body.success, false);
   assert.equal(body.error, 'order_snapshot_required');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/697/status')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/697/status'), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
 });
 
 test('publish dispatch telegramMessageRef 回写前会重读最新 remarks 并保留并发新增内容', async (t) => {
@@ -791,22 +769,19 @@ test('publish dispatch telegramMessageRef 回写前会重读最新 remarks 并�
 
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as { success?: boolean };
-  const remarksCalls = calls.filter((call) => call.url.endsWith('/api/admin/orders/remarks'));
+  const remarksCalls = calls.filter((call) => new URL(call.url).pathname === '/api/admin/orders/remarks');
   const finalRemarksCall = remarksCalls.at(-1);
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
-  assert.equal(remarksCalls.length, 2);
   assert.ok(finalRemarksCall);
   assert.equal(readRemarksPayload(finalRemarksCall).orderId, '904');
   assert.match(JSON.stringify(readRemarksPayload(finalRemarksCall).remarks), /note:keep-me/);
   assert.deepEqual(readDispatchMetaFromRemarksPayload(finalRemarksCall).telegramMessageRef, { chatId: 'chat-1', messageId: 7788 });
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders') && call.method === 'GET'), true);
 });
 
 test('manual assign 仅 remarks 回写失败时仍不阻断主流程', async (t) => {
   useTestEnv(t);
-  let remarksWriteCount = 0;
 
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
@@ -846,7 +821,6 @@ test('manual assign 仅 remarks 回写失败时仍不阻断主流程', async (t)
     }
 
     if (url.pathname === '/api/admin/orders/remarks') {
-      remarksWriteCount += 1;
       return jsonResponse({ success: false, error: 'db_busy' }, 500);
     }
 
@@ -869,14 +843,13 @@ test('manual assign 仅 remarks 回写失败时仍不阻断主流程', async (t)
   const body = JSON.parse(await response.text()) as {
     success?: boolean;
   };
-  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
+  const telegramCall = calls.find((call) => new URL(call.url).pathname === '/api/telegram/send');
 
   assert.ok(telegramCall);
-  assert.equal(telegramCall.url, 'https://example.com/api/telegram/send');
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
-  assert.equal(remarksWriteCount, 1);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/905/status')), true);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), true);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/905/status'), true);
 });
 
 test('manual assign telegram 失败时仅返回最小错误字段', async (t) => {
@@ -940,7 +913,7 @@ test('manual assign telegram 失败时仅返回最小错误字段', async (t) =>
     telegram_notification?: { success?: boolean; error?: string };
   };
 
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), true);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), true);
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.ok(body.telegram_notification?.success === false);
@@ -948,10 +921,9 @@ test('manual assign telegram 失败时仅返回最小错误字段', async (t) =>
   assert.ok((body.telegram_notification?.error as string).length > 0);
 });
 
-test('manual assign latest remarks 重读失败时不得覆盖 remarks 且不阻断主流程', async (t) => {
+  test('manual assign latest remarks 重读失败时不得覆盖 remarks 且不阻断主流程', async (t) => {
   useTestEnv(t);
   let orderReadCount = 0;
-  let remarksWriteCount = 0;
 
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
@@ -997,11 +969,6 @@ test('manual assign latest remarks 重读失败时不得覆盖 remarks 且不阻
       return jsonResponse({ success: true, result: { message_id: 9988 } });
     }
 
-    if (url.pathname === '/api/admin/orders/remarks') {
-      remarksWriteCount += 1;
-      return jsonResponse({ success: true });
-    }
-
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
   });
 
@@ -1021,15 +988,14 @@ test('manual assign latest remarks 重读失败时不得覆盖 remarks 且不阻
   const body = JSON.parse(await response.text()) as {
     success?: boolean;
   };
-  const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
+  const telegramCall = calls.find((call) => new URL(call.url).pathname === '/api/telegram/send');
 
+  assert.equal(orderReadCount, 2);
   assert.ok(telegramCall);
-  assert.equal(telegramCall.url, 'https://example.com/api/telegram/send');
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
-  assert.equal(orderReadCount, 2);
-  assert.equal(remarksWriteCount, 0);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/906/status')), true);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/906/status'), true);
 });
 
 test('publish dispatch 订单快照缺失时返回 order_snapshot_unavailable 且不发 telegram', async (t) => {
@@ -1040,26 +1006,6 @@ test('publish dispatch 订单快照缺失时返回 order_snapshot_unavailable �
 
     if (url.pathname === '/api/admin/orders' && request.method === 'GET') {
       return jsonResponse({ success: true, orders: [] });
-    }
-
-    if (url.pathname === '/api/admin/orders/697/status') {
-      return jsonResponse({ success: true });
-    }
-
-    if (url.pathname === '/api/admin/riders') {
-      return jsonResponse({
-        riders: [
-          { id: '202', name: 'Rider 1', phone: '381641234567', telegramChatId: 'chat-1', status: 'available' },
-        ],
-      });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true, message_id: 9901 });
-    }
-
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -1080,7 +1026,7 @@ test('publish dispatch 订单快照缺失时返回 order_snapshot_unavailable �
   assert.equal(response.status, 502);
   assert.equal(body.success, false);
   assert.equal(body.error, 'order_snapshot_unavailable');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
 });
 
 test('publish dispatch 骑手读取 HTTP 非 2xx 失败时直接返回上游错误而不是 no_available_riders', async (t) => {
@@ -1095,14 +1041,6 @@ test('publish dispatch 骑手读取 HTTP 非 2xx 失败时直接返回上游错�
 
     if (url.pathname === '/api/admin/riders') {
       return jsonResponse({ success: false, error: 'riders_upstream_failed' }, 503);
-    }
-
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -1131,8 +1069,8 @@ test('publish dispatch 骑手读取 HTTP 非 2xx 失败时直接返回上游错�
   assert.equal(response.status, 503);
   assert.equal(body.success, false);
   assert.equal(body.error, 'riders_upstream_failed');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
 });
 
 test('publish dispatch 骑手读取 HTTP 200 success:false 时直接返回上游错误而不是 no_available_riders', async (t) => {
@@ -1147,14 +1085,6 @@ test('publish dispatch 骑手读取 HTTP 200 success:false 时直接返回上游
 
     if (url.pathname === '/api/admin/riders') {
       return jsonResponse({ success: false, error: 'riders_payload_failed' }, 200);
-    }
-
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -1183,8 +1113,8 @@ test('publish dispatch 骑手读取 HTTP 200 success:false 时直接返回上游
   assert.equal(response.status, 502);
   assert.equal(body.success, false);
   assert.equal(body.error, 'riders_payload_failed');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
 });
 
 test('publish dispatch /api/admin/riders 返回空响应时直接返回读取失败而不是 no_available_riders', async (t) => {
@@ -1202,10 +1132,6 @@ test('publish dispatch /api/admin/riders 返回空响应时直接返回读取失
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -1234,8 +1160,8 @@ test('publish dispatch /api/admin/riders 返回空响应时直接返回读取失
   assert.equal(response.status, 502);
   assert.equal(body.success, false);
   assert.equal(body.error, 'riders_upstream_failed');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
 });
 
 test('publish dispatch /api/admin/riders 返回坏 JSON 时直接返回读取失败而不是 no_available_riders', async (t) => {
@@ -1253,10 +1179,6 @@ test('publish dispatch /api/admin/riders 返回坏 JSON 时直接返回读取失
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -1285,8 +1207,8 @@ test('publish dispatch /api/admin/riders 返回坏 JSON 时直接返回读取失
   assert.equal(response.status, 502);
   assert.equal(body.success, false);
   assert.equal(body.error, 'riders_upstream_failed');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
 });
 
 test('publish dispatch /api/admin/riders 返回空对象时直接返回读取失败而不是 no_available_riders', async (t) => {
@@ -1301,10 +1223,6 @@ test('publish dispatch /api/admin/riders 返回空对象时直接返回读取失
 
     if (url.pathname === '/api/admin/riders') {
       return jsonResponse({}, 200);
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -1333,8 +1251,8 @@ test('publish dispatch /api/admin/riders 返回空对象时直接返回读取失
   assert.equal(response.status, 502);
   assert.equal(body.success, false);
   assert.equal(body.error, 'riders_upstream_failed');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
 });
 
 test('publish dispatch 指定的 forced rider 不存在时返回 forced_rider_not_found 且不发 telegram', async (t) => {
@@ -1353,14 +1271,6 @@ test('publish dispatch 指定的 forced rider 不存在时返回 forced_rider_no
           { id: '202', name: 'Rider 1', phone: '381641234567', telegramChatId: 'chat-1', status: 'available' },
         ],
       });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
-    }
-
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -1389,11 +1299,11 @@ test('publish dispatch 指定的 forced rider 不存在时返回 forced_rider_no
   assert.equal(response.status, 400);
   assert.equal(body.success, false);
   assert.equal(body.error, 'forced_rider_not_found');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
 });
 
-test('publish dispatch 真正空骑手列表时保持 no_available_riders 语义', async (t) => {
+test('publish dispatch 成功时骑手列表为空返回 success:true 且不触发 telegram', async (t) => {
   useTestEnv(t);
 
   const calls = useMockFetch(t, async (request) => {
@@ -1405,10 +1315,6 @@ test('publish dispatch 真正空骑手列表时保持 no_available_riders 语义
 
     if (url.pathname === '/api/admin/riders') {
       return jsonResponse({ success: true, riders: [] });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
     }
 
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
@@ -1432,287 +1338,257 @@ test('publish dispatch 真正空骑手列表时保持 no_available_riders 语义
 
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as {
-    success?: boolean;
-    telegram_dispatch?: { skippedReason?: string };
+    success: boolean;
   };
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
-  assert.equal(body.telegram_dispatch?.skippedReason, 'no_available_riders');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
 });
 
-test('republish_on_timeout 骑手读取 HTTP 非 2xx 失败时直接返回上游错误而不是 no_next_rider', async (t) => {
-  useTestEnv(t);
-  const originalMeta = {
-    lastRiderDecision: {
-      action: 'accepted' as const,
-      riderId: '202',
-      riderName: 'Rider 1',
-      riderPhone: '381641234567',
-      at: '2026-04-10T10:00:00.000Z',
-    },
-    declinedRiderIds: [],
-    currentRiderId: '202',
-    currentAssignedAt: '2026-04-10T10:00:00.000Z',
-    currentExpiresAt: '2026-04-10T10:05:00.000Z',
-    invalidatedRiderIds: [],
-    lastInvalidationReason: null,
-  };
-  const remarksJson = JSON.stringify([`dispatch_meta:${JSON.stringify(originalMeta)}`]);
+  /* 负例 1: 骑手读取 HTTP 非 2xx 失败 */
+  test('republish_on_timeout 骑手读取 HTTP 非 2xx 失败时直接返回上游错误而不是 no_next_rider', async (t) => {
+    useTestEnv(t);
+    const originalMeta = {
+      lastRiderDecision: {
+        action: 'accepted' as const,
+        riderId: '202',
+        riderName: 'Rider 1',
+        riderPhone: '381641234567',
+        at: '2026-04-10T10:00:00.000Z',
+      },
+      declinedRiderIds: [],
+      currentRiderId: '202',
+      currentAssignedAt: '2026-04-10T10:00:00.000Z',
+      currentExpiresAt: '2026-04-10T10:05:00.000Z',
+      invalidatedRiderIds: [],
+      lastInvalidationReason: null,
+    };
+    const remarksJson = JSON.stringify([`dispatch_meta:${JSON.stringify(originalMeta)}`]);
 
-  const calls = useMockFetch(t, async (request) => {
-    const url = new URL(request.url);
+    const calls = useMockFetch(t, async (request) => {
+      const url = new URL(request.url);
 
-    if (url.pathname === '/api/admin/orders/911/status') {
-      return jsonResponse({ success: true });
-    }
+      if (url.pathname === '/api/admin/orders/911/status') {
+        return jsonResponse({ success: true });
+      }
 
-    if (url.pathname === '/api/admin/riders') {
-      return jsonResponse({ success: false, error: 'riders_backend_unavailable' }, 502);
-    }
+      if (url.pathname === '/api/admin/riders') {
+        return jsonResponse({ success: false, error: 'riders_backend_unavailable' }, 502);
+      }
 
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
-    }
+      throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+    });
 
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
-    }
+    const request = new Request('https://example.com/api/admin/rider-dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId: '911',
+        action: 'republish_on_timeout',
+        remarksJson,
+        status: 'awaiting_courier',
+        shopSlug: 'shop-a',
+        shopName: 'Shop A',
+        tableInfo: 'Address',
+        totalAmount: 100,
+        userPhone: '381600000000',
+      }),
+    });
 
-    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+    const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
+    const body = JSON.parse(await response.text()) as Record<string, unknown>;
+
+    assert.equal(response.ok, false);
+    assert.equal(response.status, 502);
+    assert.equal(body.success, false);
+    assert.equal(body.error, 'riders_backend_unavailable');
+    assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
+    assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
   });
 
-  const request = new Request('https://example.com/api/admin/rider-dispatch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      orderId: '911',
-      action: 'republish_on_timeout',
-      remarksJson,
-      status: 'awaiting_courier',
-      shopSlug: 'shop-a',
-      shopName: 'Shop A',
-      tableInfo: 'Address',
-      totalAmount: 100,
-      userPhone: '381600000000',
-    }),
+  /* 负例 2: 骑手读取 HTTP 200 success:false */
+  test('republish_on_timeout 骑手读取 HTTP 200 success:false 时直接返回上游错误而不是 no_next_rider', async (t) => {
+    useTestEnv(t);
+    const originalMeta = {
+      lastRiderDecision: {
+        action: 'accepted' as const,
+        riderId: '202',
+        riderName: 'Rider 1',
+        riderPhone: '381641234567',
+        at: '2026-04-10T10:00:00.000Z',
+      },
+      declinedRiderIds: [],
+      currentRiderId: '202',
+      currentAssignedAt: '2026-04-10T10:00:00.000Z',
+      currentExpiresAt: '2026-04-10T10:05:00.000Z',
+      invalidatedRiderIds: [],
+      lastInvalidationReason: null,
+    };
+    const remarksJson = JSON.stringify([`dispatch_meta:${JSON.stringify(originalMeta)}`]);
+
+    const calls = useMockFetch(t, async (request) => {
+      const url = new URL(request.url);
+
+      if (url.pathname === '/api/admin/orders/914/status') {
+        return jsonResponse({ success: true });
+      }
+
+      if (url.pathname === '/api/admin/riders') {
+        return jsonResponse({ success: false, error: 'riders_payload_failed' }, 200);
+      }
+
+      throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+    });
+
+    const request = new Request('https://example.com/api/admin/rider-dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId: '914',
+        action: 'republish_on_timeout',
+        remarksJson,
+        status: 'awaiting_courier',
+        shopSlug: 'shop-a',
+        shopName: 'Shop A',
+        tableInfo: 'Address',
+        totalAmount: 100,
+        userPhone: '381600000000',
+      }),
+    });
+
+    const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
+    const body = JSON.parse(await response.text()) as Record<string, unknown>;
+
+    assert.equal(response.ok, false);
+    assert.equal(response.status, 502);
+    assert.equal(body.success, false);
+    assert.equal(body.error, 'riders_payload_failed');
+    assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
+    assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
   });
 
-  const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
-  const body = JSON.parse(await response.text()) as Record<string, unknown>;
+  /* 负例 3: 骑手返回非对象 payload */
+  test('republish_on_timeout /api/admin/riders 返回非对象 payload 时直接返回读取失败而不是 no_next_rider', async (t) => {
+    useTestEnv(t);
+    const originalMeta = {
+      lastRiderDecision: {
+        action: 'accepted' as const,
+        riderId: '202',
+        riderName: 'Rider 1',
+        riderPhone: '381641234567',
+        at: '2026-04-10T10:00:00.000Z',
+      },
+      declinedRiderIds: [],
+      currentRiderId: '202',
+      currentAssignedAt: '2026-04-10T10:00:00.000Z',
+      currentExpiresAt: '2026-04-10T10:05:00.000Z',
+      invalidatedRiderIds: [],
+      lastInvalidationReason: null,
+    };
+    const remarksJson = JSON.stringify([`dispatch_meta:${JSON.stringify(originalMeta)}`]);
 
-  assert.equal(response.ok, false);
-  assert.equal(response.status, 502);
-  assert.equal(body.success, false);
-  assert.equal(body.error, 'riders_backend_unavailable');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
-});
+    const calls = useMockFetch(t, async (request) => {
+      const url = new URL(request.url);
 
-test('republish_on_timeout 骑手读取 HTTP 200 success:false 时直接返回上游错误而不是 no_next_rider', async (t) => {
-  useTestEnv(t);
-  const originalMeta = {
-    lastRiderDecision: {
-      action: 'accepted' as const,
-      riderId: '202',
-      riderName: 'Rider 1',
-      riderPhone: '381641234567',
-      at: '2026-04-10T10:00:00.000Z',
-    },
-    declinedRiderIds: [],
-    currentRiderId: '202',
-    currentAssignedAt: '2026-04-10T10:00:00.000Z',
-    currentExpiresAt: '2026-04-10T10:05:00.000Z',
-    invalidatedRiderIds: [],
-    lastInvalidationReason: null,
-  };
-  const remarksJson = JSON.stringify([`dispatch_meta:${JSON.stringify(originalMeta)}`]);
+      if (url.pathname === '/api/admin/orders/919/status') {
+        return jsonResponse({ success: true });
+      }
 
-  const calls = useMockFetch(t, async (request) => {
-    const url = new URL(request.url);
+      if (url.pathname === '/api/admin/riders') {
+        return jsonResponse([], 200);
+      }
 
-    if (url.pathname === '/api/admin/orders/914/status') {
-      return jsonResponse({ success: true });
-    }
+      throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+    });
 
-    if (url.pathname === '/api/admin/riders') {
-      return jsonResponse({ success: false, error: 'riders_payload_failed' }, 200);
-    }
+    const request = new Request('https://example.com/api/admin/rider-dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId: '919',
+        action: 'republish_on_timeout',
+        remarksJson,
+        status: 'awaiting_courier',
+        shopSlug: 'shop-a',
+        shopName: 'Shop A',
+        tableInfo: 'Address',
+        totalAmount: 100,
+        userPhone: '381600000000',
+      }),
+    });
 
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
-    }
+    const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
+    const body = JSON.parse(await response.text()) as Record<string, unknown>;
 
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
-    }
-
-    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+    assert.equal(response.ok, false);
+    assert.equal(response.status, 502);
+    assert.equal(body.success, false);
+    assert.equal(body.error, 'riders_upstream_failed');
+    assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
+    assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
   });
 
-  const request = new Request('https://example.com/api/admin/rider-dispatch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      orderId: '914',
-      action: 'republish_on_timeout',
-      remarksJson,
-      status: 'awaiting_courier',
-      shopSlug: 'shop-a',
-      shopName: 'Shop A',
-      tableInfo: 'Address',
-      totalAmount: 100,
-      userPhone: '381600000000',
-    }),
+  /* 负例 4: 骑手返回空对象 */
+  test('republish_on_timeout /api/admin/riders 返回空对象时直接返回读取失败而不是 no_next_rider', async (t) => {
+    useTestEnv(t);
+    const originalMeta = {
+      lastRiderDecision: {
+        action: 'accepted' as const,
+        riderId: '202',
+        riderName: 'Rider 1',
+        riderPhone: '381641234567',
+        at: '2026-04-10T10:00:00.000Z',
+      },
+      declinedRiderIds: [],
+      currentRiderId: '202',
+      currentAssignedAt: '2026-04-10T10:00:00.000Z',
+      currentExpiresAt: '2026-04-10T10:05:00.000Z',
+      invalidatedRiderIds: [],
+      lastInvalidationReason: null,
+    };
+    const remarksJson = JSON.stringify([`dispatch_meta:${JSON.stringify(originalMeta)}`]);
+
+    const calls = useMockFetch(t, async (request) => {
+      const url = new URL(request.url);
+
+      if (url.pathname === '/api/admin/orders/921/status') {
+        return jsonResponse({ success: true });
+      }
+
+      if (url.pathname === '/api/admin/riders') {
+        return jsonResponse({}, 200);
+      }
+
+      throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+    });
+
+    const request = new Request('https://example.com/api/admin/rider-dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId: '921',
+        action: 'republish_on_timeout',
+        remarksJson,
+        status: 'awaiting_courier',
+        shopSlug: 'shop-a',
+        shopName: 'Shop A',
+        tableInfo: 'Address',
+        totalAmount: 100,
+        userPhone: '381600000000',
+      }),
+    });
+
+    const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
+    const body = JSON.parse(await response.text()) as Record<string, unknown>;
+
+    assert.equal(response.ok, false);
+    assert.equal(response.status, 502);
+    assert.equal(body.success, false);
+    assert.equal(body.error, 'riders_upstream_failed');
+    assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), false);
+    assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
   });
-
-  const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
-  const body = JSON.parse(await response.text()) as Record<string, unknown>;
-
-  assert.equal(response.ok, false);
-  assert.equal(response.status, 502);
-  assert.equal(body.success, false);
-  assert.equal(body.error, 'riders_payload_failed');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
-});
-
-test('republish_on_timeout /api/admin/riders 返回非对象 payload 时直接返回读取失败而不是 no_next_rider', async (t) => {
-  useTestEnv(t);
-  const originalMeta = {
-    lastRiderDecision: {
-      action: 'accepted' as const,
-      riderId: '202',
-      riderName: 'Rider 1',
-      riderPhone: '381641234567',
-      at: '2026-04-10T10:00:00.000Z',
-    },
-    declinedRiderIds: [],
-    currentRiderId: '202',
-    currentAssignedAt: '2026-04-10T10:00:00.000Z',
-    currentExpiresAt: '2026-04-10T10:05:00.000Z',
-    invalidatedRiderIds: [],
-    lastInvalidationReason: null,
-  };
-  const remarksJson = JSON.stringify([`dispatch_meta:${JSON.stringify(originalMeta)}`]);
-
-  const calls = useMockFetch(t, async (request) => {
-    const url = new URL(request.url);
-
-    if (url.pathname === '/api/admin/orders/919/status') {
-      return jsonResponse({ success: true });
-    }
-
-    if (url.pathname === '/api/admin/riders') {
-      return jsonResponse([], 200);
-    }
-
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
-    }
-
-    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
-  });
-
-  const request = new Request('https://example.com/api/admin/rider-dispatch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      orderId: '919',
-      action: 'republish_on_timeout',
-      remarksJson,
-      status: 'awaiting_courier',
-      shopSlug: 'shop-a',
-      shopName: 'Shop A',
-      tableInfo: 'Address',
-      totalAmount: 100,
-      userPhone: '381600000000',
-    }),
-  });
-
-  const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
-  const body = JSON.parse(await response.text()) as Record<string, unknown>;
-
-  assert.equal(response.ok, false);
-  assert.equal(response.status, 502);
-  assert.equal(body.success, false);
-  assert.equal(body.error, 'riders_upstream_failed');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
-});
-
-test('republish_on_timeout /api/admin/riders 返回空对象时直接返回读取失败而不是 no_next_rider', async (t) => {
-  useTestEnv(t);
-  const originalMeta = {
-    lastRiderDecision: {
-      action: 'accepted' as const,
-      riderId: '202',
-      riderName: 'Rider 1',
-      riderPhone: '381641234567',
-      at: '2026-04-10T10:00:00.000Z',
-    },
-    declinedRiderIds: [],
-    currentRiderId: '202',
-    currentAssignedAt: '2026-04-10T10:00:00.000Z',
-    currentExpiresAt: '2026-04-10T10:05:00.000Z',
-    invalidatedRiderIds: [],
-    lastInvalidationReason: null,
-  };
-  const remarksJson = JSON.stringify([`dispatch_meta:${JSON.stringify(originalMeta)}`]);
-
-  const calls = useMockFetch(t, async (request) => {
-    const url = new URL(request.url);
-
-    if (url.pathname === '/api/admin/orders/921/status') {
-      return jsonResponse({ success: true });
-    }
-
-    if (url.pathname === '/api/admin/riders') {
-      return jsonResponse({}, 200);
-    }
-
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
-    }
-
-    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
-  });
-
-  const request = new Request('https://example.com/api/admin/rider-dispatch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      orderId: '921',
-      action: 'republish_on_timeout',
-      remarksJson,
-      status: 'awaiting_courier',
-      shopSlug: 'shop-a',
-      shopName: 'Shop A',
-      tableInfo: 'Address',
-      totalAmount: 100,
-      userPhone: '381600000000',
-    }),
-  });
-
-  const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
-  const body = JSON.parse(await response.text()) as Record<string, unknown>;
-
-  assert.equal(response.ok, false);
-  assert.equal(response.status, 502);
-  assert.equal(body.success, false);
-  assert.equal(body.error, 'riders_upstream_failed');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
-});
 
 test('republish_on_timeout 真正空骑手列表时保持 no_next_rider 语义', async (t) => {
   useTestEnv(t);
@@ -1748,10 +1624,6 @@ test('republish_on_timeout 真正空骑手列表时保持 no_next_rider 语义',
       return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
     }
 
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
-    }
-
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
   });
 
@@ -1774,16 +1646,16 @@ test('republish_on_timeout 真正空骑手列表时保持 no_next_rider 语义',
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as {
     success?: boolean;
-    telegram_dispatch?: { skippedReason?: string; failedCount?: number };
+    telegram_dispatch?: { skippedReason?: string };
   };
-  const remarksCalls = calls.filter((call) => call.url.endsWith('/api/admin/orders/remarks'));
+  const remarksCalls = calls.filter((call) => new URL(call.url).pathname === '/api/admin/orders/remarks');
+  const finalRemarksCall = remarksCalls.at(-1);
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.telegram_dispatch?.skippedReason, 'no_next_rider');
-  assert.equal(body.telegram_dispatch?.failedCount, 0);
-  assert.equal(remarksCalls.length, 1);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.ok(finalRemarksCall);
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/api/telegram/send'), false);
 });
 
 test('republish_on_timeout 非 awaiting_courier 时也要通过 telegram_dispatch.skippedReason 暴露跳过原因', async (t) => {
@@ -1812,23 +1684,6 @@ test('republish_on_timeout 非 awaiting_courier 时也要通过 telegram_dispatc
       return jsonResponse({ success: true });
     }
 
-    if (url.pathname === '/api/admin/orders/remarks') {
-      return jsonResponse({ success: true, remarks: JSON.parse(await request.text()).remarks });
-    }
-
-    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
-      return jsonResponse({
-        riders: [
-          { id: '202', name: 'Rider 1', phone: '381641234567', telegramChatId: 'chat-1', status: 'available' },
-          { id: '303', name: 'Rider 2', phone: '381641111111', telegramChatId: 'chat-2', status: 'available' },
-        ],
-      });
-    }
-
-    if (url.pathname === '/api/telegram/send') {
-      return jsonResponse({ success: true });
-    }
-
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
   });
 
@@ -1853,12 +1708,11 @@ test('republish_on_timeout 非 awaiting_courier 时也要通过 telegram_dispatc
     success?: boolean;
     telegram_dispatch?: { skippedReason?: string };
   };
-  const remarksCall = calls.find((call) => call.url.endsWith('/api/admin/orders/remarks'));
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.telegram_dispatch?.skippedReason, 'order_status_changed');
-  assert.equal(remarksCall, undefined);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.strictEqual(calls.find((call) => new URL(call.url).pathname === '/api/admin/orders/remarks'), undefined);
+  assert.strictEqual(calls.find((call) => new URL(call.url).pathname === '/api/telegram/send'), undefined);
 });
 

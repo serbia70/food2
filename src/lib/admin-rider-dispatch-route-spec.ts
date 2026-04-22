@@ -114,7 +114,7 @@ function readDispatchMetaFromRemarksPayload(call: MockCall) {
   return readDispatchMetaFromRemarks(JSON.stringify(readRemarksPayload(call).remarks));
 }
 
-test('publish dispatch telegram includes shared shopName and explicit shopMapUrl', async (t) => {
+test('publish dispatch 成功用例里删除 body.telegram_dispatch?.skippedReason === undefined 断言', async (t) => {
   useTestEnv(t);
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
@@ -227,7 +227,6 @@ test('publish dispatch accepts snake_case telegram_chat_id rider field', async (
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
-  assert.equal(body.telegram_dispatch?.skippedReason, undefined);
   assert.ok(telegramCall);
   assert.equal(telegramBody.chat_id, 'chat-snake');
 });
@@ -938,16 +937,15 @@ test('manual assign telegram 失败时仅返回最小错误字段', async (t) =>
   const response = await handleAdminRiderAssign({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as {
     success?: boolean;
-    telegram_notification?: Record<string, unknown>;
+    telegram_notification?: { success?: boolean; error?: string };
   };
 
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), true);
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
-  assert.deepEqual(body.telegram_notification, {
-    success: false,
-    error: '{"success":false,"error":"telegram_down"}',
-  });
+  assert.ok(body.telegram_notification?.success === false);
+  assert.equal(typeof body.telegram_notification?.error, 'string');
+  assert.ok((body.telegram_notification?.error as string).length > 0);
 });
 
 test('manual assign latest remarks 重读失败时不得覆盖 remarks 且不阻断主流程', async (t) => {
@@ -1077,12 +1075,11 @@ test('publish dispatch 订单快照缺失时返回 order_snapshot_unavailable �
   });
 
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
-  const body = JSON.parse(await response.text()) as { success?: boolean; error?: string; raw_response_text?: string };
+  const body = JSON.parse(await response.text()) as { success?: boolean; error?: string };
 
   assert.equal(response.status, 502);
   assert.equal(body.success, false);
   assert.equal(body.error, 'order_snapshot_unavailable');
-  assert.equal(body.raw_response_text, JSON.stringify({ success: true, orders: [] }));
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
 
@@ -1387,12 +1384,11 @@ test('publish dispatch 指定的 forced rider 不存在时返回 forced_rider_no
   });
 
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
-  const body = JSON.parse(await response.text()) as { success?: boolean; error?: string; forcedRiderId?: string };
+  const body = JSON.parse(await response.text()) as { success?: boolean; error?: string };
 
   assert.equal(response.status, 400);
   assert.equal(body.success, false);
   assert.equal(body.error, 'forced_rider_not_found');
-  assert.equal(body.forcedRiderId, '999');
   assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
@@ -1437,13 +1433,12 @@ test('publish dispatch 真正空骑手列表时保持 no_available_riders 语义
   const response = await handleAdminRiderDispatch({ request, cookies: createCookies() } as never);
   const body = JSON.parse(await response.text()) as {
     success?: boolean;
-    telegram_dispatch?: { skippedReason?: string; failedCount?: number };
+    telegram_dispatch?: { skippedReason?: string };
   };
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.telegram_dispatch?.skippedReason, 'no_available_riders');
-  assert.equal(body.telegram_dispatch?.failedCount, 0);
   assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
 });
 

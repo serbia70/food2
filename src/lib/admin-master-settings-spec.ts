@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { fetchProtectedAdminMasterSettings } from './admin-master-settings.ts';
+import { fetchProtectedAdminMasterSettings, readTelegramCallbackSecretFromMasterSettings } from './admin-master-settings.ts';
 
 test('fetchProtectedAdminMasterSettings derives Authorization from admin_token cookie when header is absent', async () => {
   const originalFetch = globalThis.fetch;
@@ -10,10 +10,9 @@ test('fetchProtectedAdminMasterSettings derives Authorization from admin_token c
 
   globalThis.fetch = async (_input, init) => {
     const headers = (init?.headers || {}) as Record<string, string>;
-    capturedAuthorization = String(headers.authorization || '');
-    capturedCookie = String(headers.cookie || '');
+    capturedAuthorization = headers.authorization || '';
+    capturedCookie = headers.cookie || '';
     return new Response(JSON.stringify({ success: true, settings: { telegram: { chatId: '-1001' } } }), {
-      status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
   };
@@ -37,9 +36,8 @@ test('fetchProtectedAdminMasterSettings prefers explicit Authorization header wh
 
   globalThis.fetch = async (_input, init) => {
     const headers = (init?.headers || {}) as Record<string, string>;
-    capturedAuthorization = String(headers.authorization || '');
+    capturedAuthorization = headers.authorization || '';
     return new Response(JSON.stringify({ success: true, settings: {} }), {
-      status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
   };
@@ -54,4 +52,37 @@ test('fetchProtectedAdminMasterSettings prefers explicit Authorization header wh
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('readTelegramCallbackSecretFromMasterSettings prefers callback secret and falls back to webhook secret', () => {
+  assert.equal(
+    readTelegramCallbackSecretFromMasterSettings({
+      telegramCallbackSecret: 'callback-top-level',
+      telegramWebhookSecret: 'webhook-top-level',
+      server: {
+        telegramCallbackSecret: 'callback-server',
+      },
+    }),
+    'callback-top-level',
+  );
+
+  assert.equal(
+    readTelegramCallbackSecretFromMasterSettings({
+      server: {
+        telegramWebhookSecret: 'webhook-server',
+      },
+    }),
+    'webhook-server',
+  );
+
+  assert.equal(
+    readTelegramCallbackSecretFromMasterSettings({
+      telegram: {
+        callback_secret: 'callback-telegram',
+      },
+    }),
+    'callback-telegram',
+  );
+
+  assert.equal(readTelegramCallbackSecretFromMasterSettings({}), '');
 });

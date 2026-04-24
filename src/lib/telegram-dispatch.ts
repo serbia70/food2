@@ -137,6 +137,7 @@ interface TelegramClaimCallbackInput {
   telegramChatId: string;
   expiresAt?: number;
   action?: TelegramClaimAction;
+  secretOverride?: string;
 }
 
 interface TelegramClaimPayload {
@@ -217,14 +218,14 @@ function validateTelegramClaimPayload(payload: TelegramClaimPayload): void {
   if (shouldValidateTelegramCallbackExpiry(payload.action) && payload.expiresAt <= Date.now()) throw new Error('expired_callback');
 }
 
-function requireTelegramCallbackSecret(): string {
-  const secret = readTelegramCallbackSecret();
+function requireTelegramCallbackSecret(secretOverride?: string): string {
+  const secret = String(secretOverride || '').trim() || readTelegramCallbackSecret();
   if (!secret) throw new Error('missing_telegram_callback_secret');
   return secret;
 }
 
-function signTelegramClaimPayload(payload: TelegramClaimPayload): string {
-  const secret = requireTelegramCallbackSecret();
+function signTelegramClaimPayload(payload: TelegramClaimPayload, secretOverride?: string): string {
+  const secret = requireTelegramCallbackSecret(secretOverride);
   return createHmac('sha256', secret)
     .update(JSON.stringify(payload))
     .digest('base64url');
@@ -242,7 +243,7 @@ function signAndValidateTelegramClaim(input: TelegramClaimCallbackInput): Telegr
   validateTelegramClaimPayload(normalized);
   return {
     ...normalized,
-    sig: signTelegramClaimPayload(normalized),
+    sig: signTelegramClaimPayload(normalized, input.secretOverride),
   };
 }
 
@@ -277,16 +278,16 @@ function readShortCallbackToken(payload: string): string {
   return value.slice(TELEGRAM_SHORT_CALLBACK_PREFIX.length);
 }
 
-function signShortCallbackParts(parts: string[]): string {
-  const secret = requireTelegramCallbackSecret();
+function signShortCallbackParts(parts: string[], secretOverride?: string): string {
+  const secret = requireTelegramCallbackSecret(secretOverride);
   return createHmac('sha256', secret)
     .update(['rc2', ...parts].join('.'))
     .digest('base64url')
     .slice(0, SHORT_CALLBACK_SIG_LEN);
 }
 
-function computeShortChatIdHash(chatId: string): string {
-  const secret = requireTelegramCallbackSecret();
+function computeShortChatIdHash(chatId: string, secretOverride?: string): string {
+  const secret = requireTelegramCallbackSecret(secretOverride);
   return createHmac('sha256', secret)
     .update(`chat:${chatId}`)
     .digest('base64url')
@@ -324,12 +325,12 @@ function buildShortTelegramClaimCallback(input: TelegramClaimCallbackInput): str
   const orderPart = callback.orderId.toString(36);
   const riderPart = callback.riderId.toString(36);
   const expiresPart = Math.floor(expiresAt / 1000).toString(36);
-  const chatPart = computeShortChatIdHash(callback.telegramChatId);
+  const chatPart = computeShortChatIdHash(callback.telegramChatId, input.secretOverride);
   const phonePart = sanitizeCompactPhone(callback.riderPhone);
   const namePart = sanitizeCompactText(callback.riderName);
   if (!namePart) throw new Error('invalid_rider_name');
   const shortParts = [actionPart, orderPart, riderPart, expiresPart, chatPart, phonePart, namePart];
-  const sigPart = signShortCallbackParts(shortParts);
+  const sigPart = signShortCallbackParts(shortParts, input.secretOverride);
   return `${TELEGRAM_SHORT_CALLBACK_PREFIX}${shortParts.join('.')}.${sigPart}`;
 }
 

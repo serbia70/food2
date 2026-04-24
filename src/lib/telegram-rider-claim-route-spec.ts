@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import test, { type TestContext } from 'node:test';
 
 import { buildDispatchMetaRemarks, readDispatchMetaFromRemarks } from './rider-dispatch.ts';
+import { runSharedRiderProgressAction } from './rider-route-shared.ts';
 import { buildTelegramShortClaimCallback } from './telegram-dispatch.ts';
 import { handleTelegramRiderClaim } from '../pages/api/telegram/rider-claim.ts';
 
@@ -67,11 +69,10 @@ function useMockFetch(t: TestContext, handler: FetchHandler): MockFetchCall[] {
 
   globalThis.fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const request = input instanceof Request ? input : new Request(input, init);
-    const cloned = request.clone();
     calls.push({
       url: request.url,
       method: request.method,
-      body: await cloned.text(),
+      body: await request.clone().text(),
       headers: request.headers,
     });
     return handler(request);
@@ -110,9 +111,9 @@ function createRemarksJson(overrides: Partial<{
     currentExpiresAt: overrides.currentExpiresAt || new Date(Date.now() + 5 * 60_000).toISOString(),
     invalidatedRiderIds: overrides.invalidatedRiderIds || [],
     lastInvalidationReason: null,
-    acceptedAt: overrides.acceptedAt || '',
-    pickedUpAt: overrides.pickedUpAt || '',
-    completedAt: overrides.completedAt || '',
+    acceptedAt: overrides.acceptedAt ?? '',
+    pickedUpAt: overrides.pickedUpAt ?? '',
+    completedAt: overrides.completedAt ?? '',
     telegramMessageRef: overrides.telegramMessageRef === undefined ? null : overrides.telegramMessageRef,
   }));
 }
@@ -220,11 +221,15 @@ function readTelegramInlineKeyboard(payload: TelegramSendPayload): TelegramSendP
 }
 
 function flattenTelegramButtonTexts(payload: TelegramSendPayload): string[] {
-  return readTelegramInlineKeyboard(payload).flat().map((button) => String(button.text || ''));
+  return readTelegramInlineKeyboard(payload).flat().map((button) => button.text ?? '');
 }
 
 function findTelegramButton(payload: TelegramSendPayload, text: string): TelegramSendPayloadButton | undefined {
   return readTelegramInlineKeyboard(payload).flat().find((button) => button.text === text);
+}
+
+function readRouteSource(relativePath: string): string {
+  return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 }
 
 function createFetchHandler(
@@ -275,6 +280,15 @@ function createFetchHandler(
   };
 }
 
+test('telegram/rider-claim route uses shared non-decline progress helper and keeps decline path local', () => {
+  assert.equal(typeof runSharedRiderProgressAction, 'function');
+  const source = readRouteSource('../pages/api/telegram/rider-claim.ts');
+
+  assert.match(source, /runSharedRiderProgressAction\(/);
+  assert.doesNotMatch(source, /const nextActionTimes = \{/);
+  assert.match(source, /if \(isDeclineAction\) \{/);
+});
+
 test('stale picked_up callback 在 delivering 且当前骑手匹配时可成功推进', async (t) => {
   useTestEnv(t);
   const calls = useMockFetch(t, createFetchHandler({
@@ -285,15 +299,14 @@ test('stale picked_up callback 在 delivering 且当前骑手匹配时可成功�
   const response = await handleTelegramRiderClaim(createRequest(createCallback('picked_up', Date.now() - 1_000)));
   const body = await readJson(response);
   const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
-  const telegramSendCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
 
-  assert.equal(response.status, 200);
-  assert.equal(body.success, true);
+  assert.strictEqual(response.status, 200);
+  assert.ok(body.success);
   assert.equal(body.action, 'picked_up');
   assert.ok(updateCall);
   assert.match(updateCall.body, /"expectedCurrentStatus":"delivering"/);
   assert.match(updateCall.body, /"status":"picked_up"/);
-  assert.equal(telegramSendCall, undefined);
+  assert.ok(!calls.find((call) => call.url.endsWith('/api/telegram/send')));
 });
 
 test('stale accept callback 仍返回 expired_callback', async (t) => {
@@ -306,7 +319,7 @@ test('stale accept callback 仍返回 expired_callback', async (t) => {
   const body = await readJson(response);
 
   assert.equal(response.status, 400);
-  assert.equal(body.success, false);
+  assert.ok(!body.success);
   assert.equal(body.error, 'expired_callback');
 });
 
@@ -321,9 +334,9 @@ test('stale complete callback 在订单已完成时返回 order_completed', asyn
   const body = await readJson(response);
 
   assert.equal(response.status, 409);
-  assert.equal(body.success, false);
+  assert.ok(!body.success);
   assert.equal(body.error, 'order_completed');
-  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), false);
+  assert.ok(!calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
 
 test('配送阶段状态已变化时优先返回 order_status_updated', async (t) => {
@@ -337,9 +350,9 @@ test('配送阶段状态已变化时优先返回 order_status_updated', async (t
   const body = await readJson(response);
 
   assert.equal(response.status, 409);
-  assert.equal(body.success, false);
+  assert.ok(!body.success);
   assert.equal(body.error, 'order_status_updated');
-  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), false);
+  assert.ok(!calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
 
 test('配送阶段当前骑手不匹配时优先返回 dispatch_invalidated', async (t) => {
@@ -353,15 +366,14 @@ test('配送阶段当前骑手不匹配时优先返回 dispatch_invalidated', as
   const body = await readJson(response);
 
   assert.equal(response.status, 409);
-  assert.equal(body.success, false);
+  assert.ok(!body.success);
   assert.equal(body.error, 'dispatch_invalidated');
   assert.equal(body.reason, '已改派');
-  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), false);
+  assert.ok(!calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
 
 test('配送阶段 admin orders 未授权时回退 rider orders 仍能推进 picked_up', async (t) => {
   useTestEnv(t);
-  const remarksJson = createRemarksJson();
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
 
@@ -387,7 +399,7 @@ test('配送阶段 admin orders 未授权时回退 rider orders 仍能推进 pic
       return jsonResponse({
         success: true,
         orders: [
-          createOrderRow({ status: 'delivering', remarksJson }),
+          createOrderRow({ status: 'delivering', remarksJson: createRemarksJson() }),
         ],
       });
     }
@@ -406,11 +418,11 @@ test('配送阶段 admin orders 未授权时回退 rider orders 仍能推进 pic
   const response = await handleTelegramRiderClaim(createRequest(createCallback('picked_up', Date.now() - 1_000)));
   const body = await readJson(response);
 
-  assert.equal(response.status, 200);
-  assert.equal(body.success, true);
+  assert.strictEqual(response.status, 200);
+  assert.ok(body.success);
   assert.equal(body.action, 'picked_up');
-  assert.equal(calls.some((call) => call.url.includes('/api/rider/orders?phone=')), true);
-  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
+  assert.ok(calls.some((call) => call.url.includes('/api/rider/orders?phone=')));
+  assert.ok(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
 
 test('配送阶段 remarksJson 为空但订单仍属于当前骑手时可推进 picked_up', async (t) => {
@@ -424,10 +436,10 @@ test('配送阶段 remarksJson 为空但订单仍属于当前骑手时可推进 
   const response = await handleTelegramRiderClaim(createRequest(createCallback('picked_up', Date.now() - 1_000)));
   const body = await readJson(response);
 
-  assert.equal(response.status, 200);
-  assert.equal(body.success, true);
+  assert.strictEqual(response.status, 200);
+  assert.ok(body.success);
   assert.equal(body.action, 'picked_up');
-  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
+  assert.ok(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
 
 test('picked_up writes pickedUpAt and edits original telegram message instead of sending new one', async (t) => {
@@ -446,38 +458,37 @@ test('picked_up writes pickedUpAt and edits original telegram message instead of
   const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
   const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
-  assert.equal(response.status, 200);
-  assert.equal(body.success, true);
+  assert.strictEqual(response.status, 200);
+  assert.ok(body.success);
   assert.equal(body.action, 'picked_up');
   assert.ok(updateCall);
 
   const updatePayload = JSON.parse(updateCall.body) as { id?: unknown; remarksJson?: string };
   assert.equal(updatePayload.id, TEST_ORDER_ID);
-  const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
+  const nextMeta = readDispatchMetaFromRemarks(updatePayload.remarksJson || '');
   assert.equal(nextMeta.acceptedAt, acceptedAt);
   assert.match(nextMeta.pickedUpAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(nextMeta.completedAt, '');
   assert.deepEqual(nextMeta.telegramMessageRef, { chatId: TEST_CHAT_ID, messageId: 7788 });
 
-  assert.equal(telegramCalls.length, 1);
-  assert.match(telegramCalls[0]?.body || '', /"message_id":7788/);
-  assert.match(telegramCalls[0]?.body || '', /"chat_id":"123456789"/);
-  assert.match(telegramCalls[0]?.body || '', /状态：配送中/);
-  assert.match(telegramCalls[0]?.body || '', /接单时间：12:03/);
-  assert.match(telegramCalls[0]?.body || '', /取餐时间：\d{2}:\d{2}/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
-  assert.match(telegramCalls[0]?.body || '', /菜品：/);
-  assert.match(telegramCalls[0]?.body || '', /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
-  assert.match(telegramCalls[0]?.body || '', /可乐 \/ Coca-Cola x1 · 200 RSD/);
-  assert.match(telegramCalls[0]?.body || '', /送达/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /已送达/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /Nova dodeljena porudžbina|Stavke/);
-  assert.doesNotMatch(telegramCalls[0]?.body || '', /"text":"Pizza One有新单/);
+  assert.strictEqual(telegramCalls.length, 1);
+  assert.match(telegramCalls[0].body, /"message_id":7788/);
+  assert.match(telegramCalls[0].body, /"chat_id":"123456789"/);
+  assert.match(telegramCalls[0].body, /状态：配送中/);
+  assert.match(telegramCalls[0].body, /接单时间：12:03/);
+  assert.match(telegramCalls[0].body, /取餐时间：\d{2}:\d{2}/);
+  assert.doesNotMatch(telegramCalls[0].body, /取餐时间：\d{4}-\d{2}-\d{2}T/);
+  assert.match(telegramCalls[0].body, /菜品：/);
+  assert.match(telegramCalls[0].body, /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
+  assert.match(telegramCalls[0].body, /可乐 \/ Coca-Cola x1 · 200 RSD/);
+  assert.match(telegramCalls[0].body, /送达/);
+  assert.doesNotMatch(telegramCalls[0].body, /已送达/);
+  assert.doesNotMatch(telegramCalls[0].body, /Nova dodeljena porudžbina|Stavke/);
+  assert.doesNotMatch(telegramCalls[0].body, /"text":"Pizza One有新单/);
 });
 
 test('picked_up 更新成功后即使二次读取订单失败也必须编辑原消息', async (t) => {
   useTestEnv(t);
-  const acceptedAt = '2026-04-14T10:03:00.000Z';
   let adminOrdersReads = 0;
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
@@ -502,7 +513,7 @@ test('picked_up 更新成功后即使二次读取订单失败也必须编辑原�
         return jsonResponse([createOrderRow({
           status: 'delivering',
           remarksJson: createRemarksJson({
-            acceptedAt,
+            acceptedAt: '2026-04-14T10:03:00.000Z',
             telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
           }),
           shopSlug: 'real-shop',
@@ -530,16 +541,15 @@ test('picked_up 更新成功后即使二次读取订单失败也必须编辑原�
   const body = await readJson(response);
   const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
-  assert.equal(response.status, 200);
-  assert.equal(body.success, true);
+  assert.strictEqual(response.status, 200);
+  assert.ok(body.success);
   assert.equal(body.action, 'picked_up');
-  assert.equal(telegramCalls.length, 1);
+  assert.strictEqual(telegramCalls.length, 1);
   const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
-  const completeButton = findTelegramButton(telegramPayload, '送达');
   assert.match(telegramPayload.text || '', /状态：配送中/);
-  assert.ok(completeButton);
-  assert.equal(typeof completeButton.callback_data, 'string');
-  assert.ok(String(completeButton.callback_data || '').trim().length > 0);
+  assert.ok(findTelegramButton(telegramPayload, '送达'));
+  assert.strictEqual(typeof findTelegramButton(telegramPayload, '送达')?.callback_data, 'string');
+  assert.ok(findTelegramButton(telegramPayload, '送达')?.callback_data?.trim().length);
 });
 
 test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback 不回退 admin', async (t) => {
@@ -557,8 +567,8 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   const body = await readJson(response);
   const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
 
-  assert.equal(response.status, 200);
-  assert.equal(body.success, true);
+  assert.strictEqual(response.status, 200);
+  assert.ok(body.success);
   assert.equal(body.action, 'picked_up');
   assert.ok(telegramCall);
   assert.match(telegramCall.body, /"shopSlug":"real-shop"/);
@@ -566,7 +576,7 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   assert.doesNotMatch(telegramCall.body, /admin/);
 });
 
- test('complete edits original telegram message to readonly delivered state without action buttons', async (t) => {
+test('complete edits original telegram message to readonly delivered state without action buttons', async (t) => {
   useTestEnv(t);
   const acceptedAt = '2026-04-14T10:03:00.000Z';
   const pickedUpAt = '2026-04-14T10:19:00.000Z';
@@ -585,20 +595,19 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.equal(response.status, 200);
-  assert.equal(body.success, true);
+  assert.ok(body.success);
   assert.equal(body.action, 'complete');
   assert.ok(updateCall);
 
   const updatePayload = JSON.parse(updateCall.body) as { remarksJson?: string };
-  const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
+  const nextMeta = readDispatchMetaFromRemarks(updatePayload.remarksJson || '');
   assert.equal(nextMeta.acceptedAt, acceptedAt);
   assert.equal(nextMeta.pickedUpAt, pickedUpAt);
   assert.match(nextMeta.completedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.deepEqual(nextMeta.telegramMessageRef, { chatId: TEST_CHAT_ID, messageId: 7788 });
 
-  assert.equal(telegramCalls.length, 1);
+  assert.strictEqual(telegramCalls.length, 1);
   const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
-  const buttonTexts = flattenTelegramButtonTexts(telegramPayload);
   assert.equal(telegramPayload.message_id, 7788);
   assert.match(telegramPayload.text || '', /状态：已送达/);
   assert.match(telegramPayload.text || '', /接单时间：12:03/);
@@ -608,16 +617,15 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   assert.match(telegramPayload.text || '', /菜品：/);
   assert.match(telegramPayload.text || '', /土豆牛肉饼 \/ Pljeskavica x2 · 600 RSD/);
   assert.match(telegramPayload.text || '', /可乐 \/ Coca-Cola x1 · 200 RSD/);
-  assert.equal(buttonTexts.includes('取餐导航'), true);
-  assert.equal(buttonTexts.includes('送餐导航'), true);
-  assert.equal((readTelegramInlineKeyboard(telegramPayload) || []).flat().some((button) => typeof button.callback_data === 'string' && button.callback_data.trim().length > 0), false);
+  assert.ok(flattenTelegramButtonTexts(telegramPayload).includes('取餐导航'));
+  assert.ok(flattenTelegramButtonTexts(telegramPayload).includes('送餐导航'));
+  assert.ok(!readTelegramInlineKeyboard(telegramPayload).flat().some((button) => typeof button.callback_data === 'string' && button.callback_data.trim().length > 0));
   assert.doesNotMatch(telegramPayload.text || '', /Nova dodeljena porudžbina|Stavke/);
   assert.doesNotMatch(telegramPayload.text || '', /Pizza One有新单/);
 });
 
 test('配送阶段 admin orders 只返回 remarks_json 时仍能识别当前骑手并推进 picked_up', async (t) => {
   useTestEnv(t);
-  const remarksJson = createRemarksJson();
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
 
@@ -640,7 +648,7 @@ test('配送阶段 admin orders 只返回 remarks_json 时仍能识别当前骑�
         {
           ...createOrderRow({ status: 'delivering', remarksJson: '' }),
           remarksJson: '',
-          remarks_json: remarksJson,
+          remarks_json: createRemarksJson(),
         },
       ]);
     }
@@ -662,12 +670,11 @@ test('配送阶段 admin orders 只返回 remarks_json 时仍能识别当前骑�
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
-  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
+  assert.ok(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
 
 test('配送阶段 admin orders 返回对象包装时仍能识别当前骑手并推进 picked_up', async (t) => {
   useTestEnv(t);
-  const remarksJson = createRemarksJson();
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
 
@@ -692,7 +699,7 @@ test('配送阶段 admin orders 返回对象包装时仍能识别当前骑手并
           {
             ...createOrderRow({ status: 'delivering', remarksJson: '' }),
             remarksJson: '',
-            remarks_json: remarksJson,
+            remarks_json: createRemarksJson(),
           },
         ],
       });
@@ -715,7 +722,7 @@ test('配送阶段 admin orders 返回对象包装时仍能识别当前骑手并
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
-  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
+  assert.ok(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
 
 test('picked_up 调用 update_status 返回 409 时透传业务错误', async (t) => {
@@ -736,7 +743,7 @@ test('picked_up 调用 update_status 返回 409 时透传业务错误', async (t
   assert.equal(body.success, false);
   assert.equal(body.error, 'order_status_updated');
   assert.equal(body.action, undefined);
-  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
+  assert.ok(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
 
 test('complete 调用 update_status 返回 409 时透传业务错误', async (t) => {
@@ -758,7 +765,7 @@ test('complete 调用 update_status 返回 409 时透传业务错误', async (t)
   assert.equal(body.error, 'dispatch_invalidated');
   assert.equal(body.reason, '已改派');
   assert.equal(body.action, undefined);
-  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), true);
+  assert.ok(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
 
 test('complete 在订单快照仍为 delivering 时返回 order_status_updated 且不调用 update_status', async (t) => {
@@ -774,7 +781,7 @@ test('complete 在订单快照仍为 delivering 时返回 order_status_updated �
   assert.equal(response.status, 409);
   assert.equal(body.success, false);
   assert.equal(body.error, 'order_status_updated');
-  assert.equal(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)), false);
+  assert.ok(!calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
 
 test('decline 通过共享 actionDecision 的单一路径写回 update_status remarks 且不走 admin remarks', async (t) => {
@@ -833,7 +840,7 @@ test('decline 通过共享 actionDecision 的单一路径写回 update_status re
   assert.equal(body.action, 'decline');
   assert.equal(body.reassigned, false);
   assert.ok(updateCall);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
+  assert.ok(!calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')));
 
   const updatePayload = JSON.parse(updateCall.body) as {
     expectedCurrentStatus?: string;
@@ -844,7 +851,7 @@ test('decline 通过共享 actionDecision 的单一路径写回 update_status re
   assert.equal(updatePayload.status, 'awaiting_courier');
   assert.equal(typeof updatePayload.remarksJson, 'string');
 
-  const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
+  const nextMeta = readDispatchMetaFromRemarks(updatePayload.remarksJson);
   assert.equal(nextMeta.lastRiderDecision?.action, 'declined');
   assert.equal(nextMeta.lastRiderDecision?.riderId, String(TEST_RIDER_ID));
   assert.equal(nextMeta.lastRiderDecision?.riderPhone, TEST_RIDER_PHONE);
@@ -1144,10 +1151,10 @@ test('decline update_status 调用会透传 cookie 和 authorization 头', async
     },
     body: JSON.stringify({ callbackData: declineCallback, chatId: TEST_CHAT_ID }),
   }));
-  const body = await readJson(response);
   const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
 
   assert.equal(response.status, 200);
+  const body = await readJson(response);
   assert.equal(body.success, true);
   assert.ok(updateCall);
   assert.equal(updateCall.headers.get('cookie'), 'admin_session=abc123');
@@ -1171,20 +1178,13 @@ test('accept 失败时走共享错误出口并且不补发阶段消息', async (
   assert.equal(response.status, 409);
   assert.equal(body.success, false);
   assert.equal(body.error, 'order_status_updated');
-  assert.equal(calls.some((call) => call.url.endsWith('/api/telegram/send')), false);
+  assert.ok(!calls.some((call) => call.url.endsWith('/api/telegram/send')));
 });
 
 test('accept 成功时即使 list_available 不再返回当前骑手，也必须编辑出取餐按钮', async (t) => {
   useTestEnv(t);
   const currentAssignedAt = new Date(Date.now() - 60_000).toISOString();
   const currentExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
-  const existingRemarksJson = createRemarksJson({
-    currentAssignedAt,
-    currentExpiresAt,
-    invalidatedRiderIds: ['303'],
-    declinedRiderIds: ['404'],
-    telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
-  });
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
 
@@ -1195,7 +1195,13 @@ test('accept 成功时即使 list_available 不再返回当前骑手，也必须
     if (url.pathname === '/api/admin/orders') {
       return jsonResponse([createOrderRow({
         status: 'awaiting_courier',
-        remarksJson: existingRemarksJson,
+        remarksJson: createRemarksJson({
+          currentAssignedAt,
+          currentExpiresAt,
+          invalidatedRiderIds: ['303'],
+          declinedRiderIds: ['404'],
+          telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+        }),
       })]);
     }
 
@@ -1215,24 +1221,20 @@ test('accept 成功时即使 list_available 不再返回当前骑手，也必须
   });
 
   const response = await handleTelegramRiderClaim(createRequest(createCallback('accept', Date.now() + 60_000)));
-  const body = await readJson(response);
   const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.equal(response.status, 200);
+  const body = await readJson(response);
   assert.equal(body.success, true);
-  assert.equal(telegramCalls.length, 1);
+  assert.strictEqual(telegramCalls.length, 1);
   const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
-  const pickupButton = findTelegramButton(telegramPayload, '取餐');
-  assert.ok(pickupButton);
-  assert.equal(typeof pickupButton.callback_data, 'string');
-  assert.ok(String(pickupButton.callback_data || '').trim().length > 0);
+  assert.ok(findTelegramButton(telegramPayload, '取餐'));
+  assert.strictEqual(typeof findTelegramButton(telegramPayload, '取餐')?.callback_data, 'string');
+  assert.ok(findTelegramButton(telegramPayload, '取餐')?.callback_data?.trim().length);
 });
 
 test('accept 成功时订单只有 restaurantId 也必须编辑出取餐按钮', async (t) => {
   useTestEnv(t);
-  const existingRemarksJson = createRemarksJson({
-    telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
-  });
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
 
@@ -1245,7 +1247,9 @@ test('accept 成功时订单只有 restaurantId 也必须编辑出取餐按钮',
         {
           ...createOrderRow({
             status: 'awaiting_courier',
-            remarksJson: existingRemarksJson,
+            remarksJson: createRemarksJson({
+              telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+            }),
             shopSlug: '',
           }),
           shopSlug: '',
@@ -1270,43 +1274,41 @@ test('accept 成功时订单只有 restaurantId 也必须编辑出取餐按钮',
   });
 
   const response = await handleTelegramRiderClaim(createRequest(createCallback('accept', Date.now() + 60_000)));
-  const body = await readJson(response);
   const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.equal(response.status, 200);
+  const body = await readJson(response);
   assert.equal(body.success, true);
-  assert.equal(telegramCalls.length, 1);
+  assert.strictEqual(telegramCalls.length, 1);
   const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
-  const pickupButton = findTelegramButton(telegramPayload, '取餐');
   assert.equal(telegramPayload.shopSlug, '103');
-  assert.ok(pickupButton);
-  assert.equal(typeof pickupButton.callback_data, 'string');
-  assert.ok(String(pickupButton.callback_data || '').trim().length > 0);
+  assert.ok(findTelegramButton(telegramPayload, '取餐'));
+  assert.strictEqual(typeof findTelegramButton(telegramPayload, '取餐')?.callback_data, 'string');
+  assert.ok(findTelegramButton(telegramPayload, '取餐')?.callback_data?.trim().length);
 });
 
 test('accept 成功时写回 dispatch_meta 保留当前骑手位，并把 Telegram 原消息切到待取餐', async (t) => {
   useTestEnv(t);
   const currentAssignedAt = new Date(Date.now() - 60_000).toISOString();
   const currentExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
-  const existingRemarksJson = createRemarksJson({
-    currentAssignedAt,
-    currentExpiresAt,
-    invalidatedRiderIds: ['303'],
-    declinedRiderIds: ['404'],
-    telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
-  });
   const calls = useMockFetch(t, createFetchHandler({
     status: 'awaiting_courier',
-    remarksJson: existingRemarksJson,
+    remarksJson: createRemarksJson({
+      currentAssignedAt,
+      currentExpiresAt,
+      invalidatedRiderIds: ['303'],
+      declinedRiderIds: ['404'],
+      telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+    }),
   }));
 
   const response = await handleTelegramRiderClaim(createRequest(createCallback('accept', Date.now() + 60_000)));
-  const body = await readJson(response);
   const remarksCall = calls.find((call) => call.url.endsWith('/api/admin/orders/remarks'));
   const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
   const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.equal(response.status, 200);
+  const body = await readJson(response);
   assert.equal(body.success, true);
   assert.ok(remarksCall);
   assert.ok(updateCall);
@@ -1325,15 +1327,14 @@ test('accept 成功时写回 dispatch_meta 保留当前骑手位，并把 Telegr
   assert.deepEqual(nextMeta.declinedRiderIds, []);
   assert.equal(updateCall.headers.get('cookie'), null);
   assert.equal(updateCall.headers.get('authorization'), null);
-  assert.equal(telegramCalls.length, 1);
-  assert.equal(telegramCalls[0]?.url, 'https://example.com/api/telegram/send');
+  assert.strictEqual(telegramCalls.length, 1);
+  assert.equal(telegramCalls[0].url, 'https://example.com/api/telegram/send');
   const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
-  const pickupButton = findTelegramButton(telegramPayload, '取餐');
   assert.equal(telegramPayload.message_id, 7788);
   assert.match(telegramPayload.text || '', /状态：待取餐/);
-  assert.ok(pickupButton);
-  assert.equal(typeof pickupButton.callback_data, 'string');
-  assert.ok(String(pickupButton.callback_data || '').trim().length > 0);
+  assert.ok(findTelegramButton(telegramPayload, '取餐'));
+  assert.strictEqual(typeof findTelegramButton(telegramPayload, '取餐')?.callback_data, 'string');
+  assert.ok(findTelegramButton(telegramPayload, '取餐')?.callback_data?.trim().length);
   assert.doesNotMatch(telegramPayload.text || '', /送达/);
 });
 
@@ -1341,11 +1342,6 @@ test('accept 成功时 admin orders 未授权且回退 rider orders 仍保留取
   useTestEnv(t);
   const currentAssignedAt = new Date(Date.now() - 60_000).toISOString();
   const currentExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
-  const existingRemarksJson = createRemarksJson({
-    currentAssignedAt,
-    currentExpiresAt,
-    telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
-  });
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
 
@@ -1364,7 +1360,11 @@ test('accept 成功时 admin orders 未授权且回退 rider orders 仍保留取
           {
             ...createOrderRow({
               status: 'awaiting_courier',
-              remarksJson: existingRemarksJson,
+              remarksJson: createRemarksJson({
+                currentAssignedAt,
+                currentExpiresAt,
+                telegramMessageRef: { chatId: TEST_CHAT_ID, messageId: 7788 },
+              }),
             }),
             shopAddress: '',
             restaurantAddress: 'Bulevar 1',
@@ -1390,23 +1390,20 @@ test('accept 成功时 admin orders 未授权且回退 rider orders 仍保留取
   });
 
   const response = await handleTelegramRiderClaim(createRequest(createCallback('accept', Date.now() + 60_000)));
-  const body = await readJson(response);
   const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.equal(response.status, 200);
+  const body = await readJson(response);
   assert.equal(body.success, true);
-  assert.equal(calls.some((call) => call.url.includes('/api/rider/orders?phone=')), true);
-  assert.equal(telegramCalls.length, 1);
+  assert.ok(calls.some((call) => call.url.includes('/api/rider/orders?phone=')));
+  assert.strictEqual(telegramCalls.length, 1);
   const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
-  const pickupButton = findTelegramButton(telegramPayload, '取餐');
-  const pickupNavButton = findTelegramButton(telegramPayload, '取餐导航');
-  const deliveryNavButton = findTelegramButton(telegramPayload, '送餐导航');
   assert.match(telegramPayload.text || '', /状态：待取餐/);
-  assert.ok(pickupButton);
-  assert.equal(typeof pickupButton.callback_data, 'string');
-  assert.ok(String(pickupButton.callback_data || '').trim().length > 0);
-  assert.equal(pickupNavButton?.url, 'https://maps.example.com/shop-a');
-  assert.equal(deliveryNavButton?.text, '送餐导航');
+  assert.ok(findTelegramButton(telegramPayload, '取餐'));
+  assert.strictEqual(typeof findTelegramButton(telegramPayload, '取餐')?.callback_data, 'string');
+  assert.ok(findTelegramButton(telegramPayload, '取餐')?.callback_data?.trim().length);
+  assert.equal(findTelegramButton(telegramPayload, '取餐导航')?.url, 'https://maps.example.com/shop-a');
+  assert.equal(findTelegramButton(telegramPayload, '送餐导航')?.text, '送餐导航');
 });
 
 test('accept update_status 调用会透传 cookie 和 authorization 头', async (t) => {
@@ -1430,10 +1427,10 @@ test('accept update_status 调用会透传 cookie 和 authorization 头', async 
       chatId: TEST_CHAT_ID,
     }),
   }));
-  const body = await readJson(response);
   const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
 
   assert.equal(response.status, 200);
+  const body = await readJson(response);
   assert.equal(body.success, true);
   assert.ok(updateCall);
   assert.equal(updateCall.headers.get('cookie'), 'admin_session=abc123');

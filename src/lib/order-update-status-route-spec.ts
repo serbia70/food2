@@ -4,6 +4,7 @@ import test, { type TestContext } from 'node:test';
 import { forwardOrderUpdateStatus } from '../pages/api/order/update_status.ts';
 
 import { API_BASE_URL } from '../config.ts';
+import { parseTelegramClaimCallback } from './telegram-dispatch.ts';
 import { readDispatchMetaFromRemarks } from './rider-dispatch.ts';
 
 type FetchHandler = (request: Request) => Promise<Response>;
@@ -61,11 +62,10 @@ function useMockFetch(t: TestContext, handler: FetchHandler): MockFetchCall[] {
 
   globalThis.fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const request = input instanceof Request ? input : new Request(input, init);
-    const cloned = request.clone();
     calls.push({
       url: request.url,
       method: request.method,
-      body: await cloned.text(),
+      body: await request.clone().text(),
       headers: request.headers,
     });
     return handler(request);
@@ -90,12 +90,8 @@ function readTelegramSendPayload(call: MockFetchCall | undefined): TelegramSendP
   return JSON.parse(call.body) as TelegramSendPayload;
 }
 
-function readTelegramInlineKeyboard(payload: TelegramSendPayload): TelegramSendPayloadButton[][] {
-  return payload.replyMarkup?.inline_keyboard || payload.reply_markup?.inline_keyboard || [];
-}
-
 function findTelegramButton(payload: TelegramSendPayload, text: string): TelegramSendPayloadButton | undefined {
-  return readTelegramInlineKeyboard(payload).flat().find((button) => button.text === text);
+  return (payload.replyMarkup?.inline_keyboard || payload.reply_markup?.inline_keyboard || []).flat().find((button) => button.text === text);
 }
 
 test('forwardOrderUpdateStatus forwards cookie and authorization headers to upstream', async (t) => {
@@ -121,8 +117,8 @@ test('forwardOrderUpdateStatus forwards cookie and authorization headers to upst
   assert.equal(response.status, 200);
   const forwardCall = calls.find((call) => call.url === `${API_BASE_URL}/api/order/update_status/101`);
   assert.ok(forwardCall);
-  assert.equal(forwardCall?.headers.get('cookie'), 'admin_session=abc123');
-  assert.equal(forwardCall?.headers.get('authorization'), 'Bearer rider-token');
+  assert.equal(forwardCall.headers.get('cookie'), 'admin_session=abc123');
+  assert.equal(forwardCall.headers.get('authorization'), 'Bearer rider-token');
 });
 
 test('forwardOrderUpdateStatus coerces numeric string id in body before forwarding', async (t) => {
@@ -146,20 +142,20 @@ test('forwardOrderUpdateStatus coerces numeric string id in body before forwardi
   assert.equal(response.status, 200);
   const forwardCall = calls.find((call) => call.url === `${API_BASE_URL}/api/order/update_status/101`);
   assert.ok(forwardCall);
-  const forwarded = JSON.parse(String(forwardCall?.body || '{}')) as { id?: unknown };
-  assert.equal(forwarded.id, 101);
+  assert.equal((JSON.parse(forwardCall.body) as { id?: unknown }).id, 101);
 });
 
 test('forwardOrderUpdateStatus updates telegram rider message to delivered action after admin marks picked_up', async (t) => {
   useTestEnv(t);
   const calls = useMockFetch(t, async (request) => {
     const url = new URL(request.url);
+    const pathname = url.pathname;
 
-    if (url.pathname === '/api/order/update_status/101') {
+    if (pathname === '/api/order/update_status/101') {
       return jsonResponse({ success: true });
     }
 
-    if (url.pathname === '/api/admin/orders') {
+    if (pathname === '/api/admin/orders') {
       return jsonResponse([
         {
           id: 101,
@@ -181,7 +177,7 @@ test('forwardOrderUpdateStatus updates telegram rider message to delivered actio
       ]);
     }
 
-    if (url.pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
+    if (pathname === '/api/rider/status' && url.searchParams.get('action') === 'list_available') {
       return jsonResponse({
         success: true,
         riders: [
@@ -197,7 +193,11 @@ test('forwardOrderUpdateStatus updates telegram rider message to delivered actio
       });
     }
 
-    if (url.pathname === '/api/telegram/send') {
+    if (pathname === '/api/admin/settings/master') {
+      return jsonResponse({ success: true, settings: { server: { telegramWebhookSecret: 'remote-secret' } } });
+    }
+
+    if (pathname === '/api/telegram/send') {
       return jsonResponse({ success: true });
     }
 
@@ -209,6 +209,7 @@ test('forwardOrderUpdateStatus updates telegram rider message to delivered actio
     headers: {
       'Content-Type': 'application/json',
       cookie: 'admin_session=abc123',
+      authorization: 'Bearer admin-token',
     },
     body: JSON.stringify({
       id: '101',
@@ -220,19 +221,48 @@ test('forwardOrderUpdateStatus updates telegram rider message to delivered actio
   }));
 
   assert.equal(response.status, 200);
-  assert.equal(calls.some((call) => call.url === `${API_BASE_URL}/api/order/update_status/101`), true);
+  assert.ok(calls.some((call) => call.url === `${API_BASE_URL}/api/order/update_status/101`));
+  const masterSettingsCall = calls.find((call) => call.url === `${API_BASE_URL}/api/admin/settings/master`);
   const telegramCall = calls.find((call) => call.url === 'https://example.com/api/telegram/send');
   const telegramPayload = readTelegramSendPayload(telegramCall);
   const completeButton = findTelegramButton(telegramPayload, '送达');
-  const pickupButton = findTelegramButton(telegramPayload, '取餐');
+  assert.ok(masterSettingsCall);
+  assert.equal(masterSettingsCall.headers.get('authorization'), 'Bearer admin-token');
+  assert.equal(masterSettingsCall.headers.get('cookie'), 'admin_session=abc123');
   assert.ok(telegramCall);
-  assert.match(telegramCall?.body || '', /"message_id":7788/);
-  assert.match(telegramCall?.body || '', /"chat_id":"123456789"/);
-  assert.match(telegramCall?.body || '', /状态：配送中/);
+  assert.match(telegramCall.body, /"message_id":7788/);
+  assert.match(telegramCall.body, /"chat_id":"123456789"/);
+  assert.match(telegramCall.body, /状态：配送中/);
   assert.ok(completeButton);
-  assert.equal(typeof completeButton?.callback_data, 'string');
-  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
-  assert.equal(pickupButton, undefined);
+  assert.equal(typeof completeButton.callback_data, 'string');
+  assert.ok(completeButton.callback_data.trim().length > 0);
+  assert.ok(!findTelegramButton(telegramPayload, '取餐'));
+  assert.throws(
+    () => parseTelegramClaimCallback(completeButton.callback_data, {
+      chatId: '123456789',
+      riderPhone: '381641234567',
+      restaurantId: 'real-shop',
+    }),
+    /invalid_signature/,
+  );
+
+  const originalSecret = process.env.TELEGRAM_CALLBACK_SECRET;
+  process.env.TELEGRAM_CALLBACK_SECRET = 'remote-secret';
+  try {
+    const parsed = parseTelegramClaimCallback(completeButton.callback_data, {
+      chatId: '123456789',
+      riderPhone: '381641234567',
+      restaurantId: 'real-shop',
+    });
+    assert.equal(parsed.orderId, 101);
+    assert.equal(parsed.action, 'complete');
+  } finally {
+    if (typeof originalSecret === 'string') {
+      process.env.TELEGRAM_CALLBACK_SECRET = originalSecret;
+    } else {
+      delete process.env.TELEGRAM_CALLBACK_SECRET;
+    }
+  }
 });
 
 test('forwardOrderUpdateStatus sends new telegram rider message and persists message ref when order lacks telegramMessageRef', async (t) => {
@@ -314,18 +344,19 @@ test('forwardOrderUpdateStatus sends new telegram rider message and persists mes
 
   assert.equal(response.status, 200);
   const telegramCall = calls.find((call) => call.url === 'https://example.com/api/telegram/send');
-  const telegramPayload = readTelegramSendPayload(telegramCall);
-  const completeButton = findTelegramButton(telegramPayload, '送达');
+  const completeButton = findTelegramButton(readTelegramSendPayload(telegramCall), '送达');
   assert.ok(telegramCall);
-  assert.doesNotMatch(telegramCall?.body || '', /"message_id":/);
-  assert.match(telegramCall?.body || '', /"chatId":"123456789"/);
-  assert.match(telegramCall?.body || '', /状态：配送中/);
+  assert.doesNotMatch(telegramCall.body, /"message_id":/);
+  assert.match(telegramCall.body, /"chatId":"123456789"/);
+  assert.match(telegramCall.body, /状态：配送中/);
   assert.ok(completeButton);
-  assert.equal(typeof completeButton?.callback_data, 'string');
-  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
+  assert.equal(typeof completeButton.callback_data, 'string');
+  assert.ok(completeButton.callback_data.trim().length > 0);
   assert.equal(remarksWrites.length, 1);
-  const meta = readDispatchMetaFromRemarks(JSON.stringify(remarksWrites[0]?.remarks || []));
-  assert.deepEqual(meta.telegramMessageRef, { chatId: '123456789', messageId: 8899 });
+  assert.deepEqual(readDispatchMetaFromRemarks(JSON.stringify(remarksWrites[0].remarks || [])).telegramMessageRef, {
+    chatId: '123456789',
+    messageId: 8899,
+  });
 });
 
 test('forwardOrderUpdateStatus falls back to order courier fields when payload omits courier info', async (t) => {
@@ -404,17 +435,18 @@ test('forwardOrderUpdateStatus falls back to order courier fields when payload o
 
   assert.equal(response.status, 200);
   const telegramCall = calls.find((call) => call.url === 'https://example.com/api/telegram/send');
-  const telegramPayload = readTelegramSendPayload(telegramCall);
-  const completeButton = findTelegramButton(telegramPayload, '送达');
+  const completeButton = findTelegramButton(readTelegramSendPayload(telegramCall), '送达');
   assert.ok(telegramCall);
-  assert.match(telegramCall?.body || '', /"chatId":"1033472638"/);
-  assert.match(telegramCall?.body || '', /状态：配送中/);
+  assert.match(telegramCall.body, /"chatId":"1033472638"/);
+  assert.match(telegramCall.body, /状态：配送中/);
   assert.ok(completeButton);
-  assert.equal(typeof completeButton?.callback_data, 'string');
-  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
+  assert.equal(typeof completeButton.callback_data, 'string');
+  assert.ok(completeButton.callback_data.trim().length > 0);
   assert.equal(remarksWrites.length, 1);
-  const meta = readDispatchMetaFromRemarks(JSON.stringify(remarksWrites[0]?.remarks || []));
-  assert.deepEqual(meta.telegramMessageRef, { chatId: '1033472638', messageId: 9901 });
+  assert.deepEqual(readDispatchMetaFromRemarks(JSON.stringify(remarksWrites[0].remarks || [])).telegramMessageRef, {
+    chatId: '1033472638',
+    messageId: 9901,
+  });
 });
 
 test('forwardOrderUpdateStatus keeps delivered action button when order lacks riderId but available rider matches by phone', async (t) => {
@@ -491,10 +523,10 @@ test('forwardOrderUpdateStatus keeps delivered action button when order lacks ri
   const telegramPayload = readTelegramSendPayload(telegramCall);
   const completeButton = findTelegramButton(telegramPayload, '送达');
   assert.equal(telegramPayload.message_id, 306);
-  assert.match(String(telegramPayload.text || ''), /状态：配送中/);
+  assert.match(telegramPayload.text || '', /状态：配送中/);
   assert.ok(completeButton);
-  assert.equal(typeof completeButton?.callback_data, 'string');
-  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
+  assert.equal(typeof completeButton.callback_data, 'string');
+  assert.ok(completeButton.callback_data.trim().length > 0);
 });
 
 test('forwardOrderUpdateStatus keeps delivered action button when rider is no longer available but rider status lookup matches by phone', async (t) => {
@@ -573,8 +605,8 @@ test('forwardOrderUpdateStatus keeps delivered action button when rider is no lo
   const telegramPayload = readTelegramSendPayload(telegramCall);
   const completeButton = findTelegramButton(telegramPayload, '送达');
   assert.equal(telegramPayload.message_id, 406);
-  assert.match(String(telegramPayload.text || ''), /状态：配送中/);
+  assert.match(telegramPayload.text || '', /状态：配送中/);
   assert.ok(completeButton);
-  assert.equal(typeof completeButton?.callback_data, 'string');
-  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
+  assert.equal(typeof completeButton.callback_data, 'string');
+  assert.ok(completeButton.callback_data.trim().length > 0);
 });

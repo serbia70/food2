@@ -29,7 +29,7 @@ function createMemoryStorage(seed: Record<string, string> = {}): MemoryStorage {
 }
 
 function readStoredUser(storage: MemoryStorage) {
-  return JSON.parse(String(storage.getItem('food_order_user') || '{}')) as Record<string, unknown>;
+  return JSON.parse(storage.getItem('food_order_user') || '{}') as Record<string, unknown>;
 }
 
 test('persistUserAuthWithStorage strips password and clears session when backend omits sessionToken', () => {

@@ -1,5 +1,9 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
+import {
+  fetchProtectedAdminMasterSettings,
+  readTelegramCallbackSecretFromMasterSettings,
+} from '../../../lib/admin-master-settings.ts';
 import { readOnlineRiders } from '../../../lib/rider-assignment.ts';
 import { buildDispatchMetaRemarks, buildRiderOrderView, readDispatchMetaFromRemarks, resolveRiderUnifiedStatus } from '../../../lib/rider-dispatch.ts';
 import { buildRiderSingleMessageTelegram, buildTelegramEditMessagePayload, buildTelegramShortClaimCallback } from '../../../lib/telegram-dispatch.ts';
@@ -26,6 +30,14 @@ function readOrderShopSlug(order: Record<string, unknown>, fallback?: unknown): 
     || readTelegramSendShopSlug(order.restaurantId)
     || readTelegramSendShopSlug(order.shopId)
     || readTelegramSendShopSlug(fallback);
+}
+
+async function readProtectedTelegramCallbackSecret(request: Request): Promise<string> {
+  const cookie = request.headers.get('cookie') || '';
+  const authorization = String(request.headers.get('authorization') || '').trim();
+  if (!authorization && !cookie) return '';
+  const masterSettings = await fetchProtectedAdminMasterSettings({ authorization, cookie });
+  return readTelegramCallbackSecretFromMasterSettings(masterSettings);
 }
 
 function readTelegramMessageRefFromResponse(body: Record<string, unknown>, fallbackChatId = ''): { chatId: string; messageId: number } | null {
@@ -142,6 +154,7 @@ async function syncTelegramRiderMessageAfterStatusUpdate(
     }
   }
   const shopSlug = readOrderShopSlug(order, payload.shopSlug || payload.shop_slug);
+  const callbackSecretOverride = await readProtectedTelegramCallbackSecret(request);
   const messageRef = meta.telegramMessageRef;
   const targetChatId = messageRef?.chatId || String(matchedRider?.telegramChatId || matchedRider?.telegram_chat_id || '').trim();
   if (!targetChatId) return;
@@ -171,6 +184,7 @@ async function syncTelegramRiderMessageAfterStatusUpdate(
         restaurantId: shopSlug,
         telegramChatId: targetChatId,
         action,
+        secretOverride: callbackSecretOverride,
       })
     : '';
 

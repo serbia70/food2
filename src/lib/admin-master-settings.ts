@@ -16,6 +16,34 @@ function asObject(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function pickFirstNonEmptyString(values: unknown[]): string {
+  for (const value of values) {
+    const normalized = String(value || '').trim();
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
+export function readTelegramCallbackSecretFromMasterSettings(raw: unknown): string {
+  const settings = asObject(raw);
+  const nestedServer = asObject(settings.server);
+  const nestedTelegram = asObject(settings.telegram);
+  return pickFirstNonEmptyString([
+    settings.telegramCallbackSecret,
+    settings.telegram_callback_secret,
+    settings.telegramWebhookSecret,
+    settings.telegram_webhook_secret,
+    nestedServer.telegramCallbackSecret,
+    nestedServer.telegram_callback_secret,
+    nestedServer.telegramWebhookSecret,
+    nestedServer.telegram_webhook_secret,
+    nestedTelegram.callbackSecret,
+    nestedTelegram.callback_secret,
+    nestedTelegram.webhookSecret,
+    nestedTelegram.webhook_secret,
+  ]);
+}
+
 export async function fetchProtectedAdminMasterSettings(input: {
   authorization?: string;
   cookie?: string;

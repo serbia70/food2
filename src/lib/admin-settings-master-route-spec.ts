@@ -3,23 +3,16 @@ import test from 'node:test';
 
 import { GET, POST } from '../pages/api/admin/settings/master.ts';
 
-const cookies = {
-  get() {
-    return undefined;
-  },
-} as never;
-
 test('admin master settings route rejects browser-facing GET access', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ success: true, token: 'should-not-leak' }), {
-    status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
 
   try {
     const response = await GET({
       request: new Request('https://example.com/api/admin/settings/master'),
-      cookies,
+      cookies: {} as never,
     } as never);
     assert.equal(response.status, 404);
   } finally {
@@ -30,7 +23,6 @@ test('admin master settings route rejects browser-facing GET access', async () =
 test('admin master settings route rejects browser-facing POST access', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ success: true, token: 'should-not-leak' }), {
-    status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
 
@@ -39,9 +31,9 @@ test('admin master settings route rejects browser-facing POST access', async () 
       request: new Request('https://example.com/api/admin/settings/master', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: '{}',
+        body: JSON.stringify({}),
       }),
-      cookies,
+      cookies: {} as never,
     } as never);
     assert.equal(response.status, 404);
   } finally {

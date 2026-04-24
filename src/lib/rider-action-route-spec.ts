@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test, { type TestContext } from 'node:test';
 
 import { readDispatchMetaFromRemarks, buildDispatchMetaRemarks } from './rider-dispatch.ts';
+import { runSharedRiderProgressAction } from './rider-route-shared.ts';
 import { POST as riderActionPost } from '../pages/api/rider/action.ts';
 
 const TEST_API_BASE = 'https://api.example.com';
@@ -76,11 +78,10 @@ function useMockFetch(t: TestContext, handler: FetchHandler): MockFetchCall[] {
 
   globalThis.fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const request = input instanceof Request ? input : new Request(input, init);
-    const cloned = request.clone();
     calls.push({
       url: request.url,
       method: request.method,
-      body: await cloned.text(),
+      body: await request.clone().text(),
     });
     return handler(request);
   };
@@ -118,9 +119,9 @@ function createRemarksJson(overrides: Partial<{
     currentExpiresAt: overrides.currentExpiresAt || new Date(Date.now() + 5 * 60_000).toISOString(),
     invalidatedRiderIds: overrides.invalidatedRiderIds || [],
     lastInvalidationReason: null,
-    acceptedAt: overrides.acceptedAt || '',
-    pickedUpAt: overrides.pickedUpAt || '',
-    completedAt: overrides.completedAt || '',
+    acceptedAt: overrides.acceptedAt ?? '',
+    pickedUpAt: overrides.pickedUpAt ?? '',
+    completedAt: overrides.completedAt ?? '',
     telegramMessageRef: overrides.telegramMessageRef === undefined ? null : overrides.telegramMessageRef,
   }));
 }
@@ -153,7 +154,7 @@ function readTelegramInlineKeyboard(payload: TelegramSendPayload): TelegramSendP
 }
 
 function flattenTelegramButtonTexts(payload: TelegramSendPayload): string[] {
-  return readTelegramInlineKeyboard(payload).flat().map((button) => String(button.text || ''));
+  return readTelegramInlineKeyboard(payload).flat().map((button) => button.text ?? '');
 }
 
 function findTelegramButton(payload: TelegramSendPayload, text: string): TelegramSendPayloadButton | undefined {
@@ -166,6 +167,10 @@ function createActionRequest(body: Record<string, unknown>): Request {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+function readRouteSource(relativePath: string): string {
+  return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 }
 
 function useMockNowIso(t: TestContext, iso: string): void {
@@ -224,20 +229,27 @@ function createFetchHandler(
   };
 }
 
+test('rider/action route uses shared non-decline progress helper for accept picked_up complete', () => {
+  assert.equal(typeof runSharedRiderProgressAction, 'function');
+  const source = readRouteSource('../pages/api/rider/action.ts');
+
+  assert.match(source, /runSharedRiderProgressAction\(/);
+  assert.doesNotMatch(source, /syncTelegramDeliveryProgressMessage\(/);
+});
+
 test('accept 主链路先写 admin remarks 再 update_status，并把 Telegram 原消息切到待取餐', async (t) => {
   useTestEnv(t);
   const currentAssignedAt = new Date(Date.now() - 60_000).toISOString();
   const currentExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
-  const existingRemarksJson = createRemarksJson({
-    currentAssignedAt,
-    currentExpiresAt,
-    invalidatedRiderIds: ['303'],
-    declinedRiderIds: ['404'],
-    telegramMessageRef: { chatId: '123456789', messageId: 7788 },
-  });
   const calls = useMockFetch(t, createFetchHandler({
     status: 'awaiting_courier',
-    remarksJson: existingRemarksJson,
+    remarksJson: createRemarksJson({
+      currentAssignedAt,
+      currentExpiresAt,
+      invalidatedRiderIds: ['303'],
+      declinedRiderIds: ['404'],
+      telegramMessageRef: { chatId: '123456789', messageId: 7788 },
+    }),
   }));
 
   const response = await riderActionPost({
@@ -282,16 +294,18 @@ test('accept 主链路先写 admin remarks 再 update_status，并把 Telegram �
   assert.equal(updatePayload.expectedCurrentStatus, 'awaiting_courier');
   assert.equal(updatePayload.status, 'delivering');
   assert.equal(telegramCalls.length, 1);
-  assert.equal(telegramCalls[0]?.url, 'https://example.com/api/telegram/send');
+  assert.ok(telegramCalls[0]);
+  assert.equal(telegramCalls[0].url, 'https://example.com/api/telegram/send');
   const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
-  const pickupButton = findTelegramButton(telegramPayload, '取餐');
   assert.equal(telegramPayload.message_id, 7788);
-  assert.match(telegramPayload.text || '', /状态：待取餐/);
+  assert.ok(typeof telegramPayload.text === 'string');
+  assert.match(telegramPayload.text, /状态：待取餐/);
   const buttonTexts = flattenTelegramButtonTexts(telegramPayload);
-  assert.equal(buttonTexts.includes('取餐'), true);
-  assert.equal(typeof pickupButton?.callback_data, 'string');
-  assert.ok(String(pickupButton?.callback_data || '').trim().length > 0);
-  assert.equal(buttonTexts.includes('送达'), false);
+  assert.ok(buttonTexts.includes('取餐'));
+  assert.ok(findTelegramButton(telegramPayload, '取餐'));
+  assert.equal(typeof findTelegramButton(telegramPayload, '取餐')?.callback_data, 'string');
+  assert.ok(findTelegramButton(telegramPayload, '取餐')?.callback_data?.trim().length);
+  assert.ok(!buttonTexts.includes('送达'));
 });
 
 test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达按钮', async (t) => {
@@ -327,7 +341,7 @@ test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达�
 
   const updatePayload = JSON.parse(updateCall.body) as { id?: unknown; remarksJson?: string };
   assert.equal(updatePayload.id, TEST_ORDER_ID);
-  const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
+  const nextMeta = readDispatchMetaFromRemarks(updatePayload.remarksJson || '');
   assert.equal(nextMeta.acceptedAt, acceptedAt);
   assert.equal(nextMeta.pickedUpAt, fixedNowIso);
   assert.equal(nextMeta.completedAt, '');
@@ -335,30 +349,28 @@ test('picked_up 复用单次 nowIso 并同步编辑 telegram 原消息为送达�
 
   assert.equal(telegramCalls.length, 1);
   const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
-  const completeButton = findTelegramButton(telegramPayload, '送达');
   assert.equal(telegramPayload.message_id, 7788);
   assert.equal(telegramPayload.chat_id, '123456789');
   assert.equal(telegramPayload.shopSlug, 'real-shop');
-  assert.match(telegramPayload.text || '', /状态：配送中/);
-  assert.match(telegramPayload.text || '', /接单时间：12:03/);
-  assert.match(telegramPayload.text || '', /取餐时间：12:25/);
-  assert.doesNotMatch(telegramPayload.text || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
-  const buttonTexts = flattenTelegramButtonTexts(telegramPayload);
-  assert.equal(buttonTexts.includes('送达'), true);
-  assert.equal(typeof completeButton?.callback_data, 'string');
-  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
-  assert.equal(buttonTexts.includes('已送达'), false);
+  assert.match(telegramPayload.text, /状态：配送中/);
+  assert.match(telegramPayload.text, /接单时间：12:03/);
+  assert.match(telegramPayload.text, /取餐时间：12:25/);
+  assert.doesNotMatch(telegramPayload.text, /取餐时间：\d{4}-\d{2}-\d{2}T/);
+  assert.ok(flattenTelegramButtonTexts(telegramPayload).includes('送达'));
+  assert.ok(findTelegramButton(telegramPayload, '送达'));
+  assert.equal(typeof findTelegramButton(telegramPayload, '送达')?.callback_data, 'string');
+  assert.ok(findTelegramButton(telegramPayload, '送达')?.callback_data?.trim().length);
+  assert.ok(!flattenTelegramButtonTexts(telegramPayload).includes('已送达'));
 });
 
 test('picked_up 缺少订单 shopSlug 时使用请求体回退 shop slug 保留送达按钮', async (t) => {
   useTestEnv(t);
-  const acceptedAt = '2026-04-14T10:03:00.000Z';
   const fixedNowIso = '2026-04-14T10:40:00.000Z';
   useMockNowIso(t, fixedNowIso);
   const calls = useMockFetch(t, createFetchHandler({
     status: 'delivering',
     remarksJson: createRemarksJson({
-      acceptedAt,
+      acceptedAt: '2026-04-14T10:03:00.000Z',
       telegramMessageRef: { chatId: '123456789', messageId: 7788 },
     }),
     shopSlug: '',
@@ -382,14 +394,13 @@ test('picked_up 缺少订单 shopSlug 时使用请求体回退 shop slug 保留�
   assert.equal(body.action, 'picked_up');
   assert.equal(telegramCalls.length, 1);
   const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
-  const completeButton = findTelegramButton(telegramPayload, '送达');
   assert.equal(telegramPayload.shopSlug, 'dashboard-shop');
-  assert.match(telegramPayload.text || '', /取餐时间：12:40/);
-  assert.doesNotMatch(telegramPayload.text || '', /取餐时间：\d{4}-\d{2}-\d{2}T/);
-  const buttonTexts = flattenTelegramButtonTexts(telegramPayload);
-  assert.equal(buttonTexts.includes('送达'), true);
-  assert.equal(typeof completeButton?.callback_data, 'string');
-  assert.ok(String(completeButton?.callback_data || '').trim().length > 0);
+  assert.match(telegramPayload.text, /取餐时间：12:40/);
+  assert.doesNotMatch(telegramPayload.text, /取餐时间：\d{4}-\d{2}-\d{2}T/);
+  assert.ok(flattenTelegramButtonTexts(telegramPayload).includes('送达'));
+  assert.ok(findTelegramButton(telegramPayload, '送达'));
+  assert.equal(typeof findTelegramButton(telegramPayload, '送达')?.callback_data, 'string');
+  assert.ok(findTelegramButton(telegramPayload, '送达')?.callback_data?.trim().length);
 });
 
 test('complete 写入 completedAt 并同步编辑 telegram 原消息为只读送达态', async (t) => {
@@ -426,7 +437,7 @@ test('complete 写入 completedAt 并同步编辑 telegram 原消息为只读送
   assert.ok(updateCall);
 
   const updatePayload = JSON.parse(updateCall.body) as { remarksJson?: string };
-  const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
+  const nextMeta = readDispatchMetaFromRemarks(updatePayload.remarksJson || '');
   assert.equal(nextMeta.acceptedAt, acceptedAt);
   assert.equal(nextMeta.pickedUpAt, pickedUpAt);
   assert.equal(nextMeta.completedAt, fixedNowIso);
@@ -436,17 +447,17 @@ test('complete 写入 completedAt 并同步编辑 telegram 原消息为只读送
   const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
   assert.equal(telegramPayload.message_id, 7788);
   assert.equal(telegramPayload.chat_id, '123456789');
-  assert.match(telegramPayload.text || '', /状态：已送达/);
-  assert.match(telegramPayload.text || '', /接单时间：12:03/);
-  assert.match(telegramPayload.text || '', /取餐时间：12:19/);
-  assert.match(telegramPayload.text || '', /送达时间：12:55/);
-  assert.doesNotMatch(telegramPayload.text || '', /送达时间：\d{4}-\d{2}-\d{2}T/);
-  const buttonTexts = flattenTelegramButtonTexts(telegramPayload);
-  const deliveryNavButton = findTelegramButton(telegramPayload, '送餐导航');
-  assert.equal(buttonTexts.includes('送餐导航'), true);
-  assert.ok(deliveryNavButton?.url);
-  assert.equal(readTelegramInlineKeyboard(telegramPayload).flat().some((button) => typeof button.callback_data === 'string' && button.callback_data.trim().length > 0), false);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
+  assert.ok(telegramPayload.text);
+  assert.match(telegramPayload.text, /状态：已送达/);
+  assert.match(telegramPayload.text, /接单时间：12:03/);
+  assert.match(telegramPayload.text, /取餐时间：12:19/);
+  assert.match(telegramPayload.text, /送达时间：12:55/);
+  assert.doesNotMatch(telegramPayload.text, /送达时间：\d{4}-\d{2}-\d{2}T/);
+  assert.ok(flattenTelegramButtonTexts(telegramPayload).includes('送餐导航'));
+  assert.ok(findTelegramButton(telegramPayload, '送餐导航'));
+  assert.ok(findTelegramButton(telegramPayload, '送餐导航')?.url);
+  assert.ok(!readTelegramInlineKeyboard(telegramPayload).flat().some((button) => typeof button.callback_data === 'string' && button.callback_data.trim().length > 0));
+  assert.ok(!calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')));
 });
 
 test('decline 主链路只走 update_status + remarksJson', async (t) => {
@@ -472,7 +483,7 @@ test('decline 主链路只走 update_status + remarksJson', async (t) => {
   assert.equal(body.success, true);
   assert.equal(body.action, 'decline');
   assert.ok(updateCall);
-  assert.equal(calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')), false);
+  assert.ok(!calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')));
 
   const updatePayload = JSON.parse(updateCall.body) as {
     expectedCurrentStatus?: string;
@@ -487,10 +498,11 @@ test('decline 主链路只走 update_status + remarksJson', async (t) => {
   assert.equal(updatePayload.courierName, undefined);
   assert.equal(updatePayload.courierPhone, undefined);
 
-  const nextMeta = readDispatchMetaFromRemarks(String(updatePayload.remarksJson || ''));
-  assert.equal(nextMeta.lastRiderDecision?.action, 'declined');
-  assert.equal(nextMeta.lastRiderDecision?.riderId, String(TEST_RIDER_ID));
-  assert.equal(nextMeta.lastRiderDecision?.riderPhone, TEST_RIDER_PHONE);
+  const nextMeta = readDispatchMetaFromRemarks(updatePayload.remarksJson);
+  assert.ok(nextMeta.lastRiderDecision);
+  assert.equal(nextMeta.lastRiderDecision.action, 'declined');
+  assert.equal(nextMeta.lastRiderDecision.riderId, String(TEST_RIDER_ID));
+  assert.equal(nextMeta.lastRiderDecision.riderPhone, TEST_RIDER_PHONE);
   assert.equal(nextMeta.currentRiderId, '');
   assert.deepEqual(nextMeta.declinedRiderIds, ['404', String(TEST_RIDER_ID)]);
   assert.deepEqual(nextMeta.invalidatedRiderIds, [String(TEST_RIDER_ID)]);
@@ -517,5 +529,5 @@ test('无效入参返回 400 invalid_rider_action', async (t) => {
   assert.equal(response.status, 400);
   assert.equal(body.success, false);
   assert.equal(body.error, 'invalid_rider_action');
-  assert.equal(calls.length, 0);
+  assert.ok(!calls.length);
 });

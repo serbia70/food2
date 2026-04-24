@@ -26,6 +26,7 @@ interface MockFetchCall {
   url: string;
   method: string;
   body: string;
+  headers: Headers;
 }
 
 function useTelegramCallbackSecret(t: TestContext): void {
@@ -97,11 +98,11 @@ function useMockFetch(t: TestContext, handler: FetchHandler): MockFetchCall[] {
 
   globalThis.fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const request = input instanceof Request ? input : new Request(input, init);
-    const cloned = request.clone();
     calls.push({
       url: request.url,
       method: request.method,
-      body: await cloned.text(),
+      body: await request.clone().text(),
+      headers: request.headers,
     });
     return handler(request);
   };
@@ -125,7 +126,7 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
 }
 
 function flattenInlineButtonTexts(inlineKeyboard: Array<Array<{ text?: string }>>): string[] {
-  return inlineKeyboard.flat().map((button) => String(button.text || ''));
+  return inlineKeyboard.flat().map((button) => button.text ?? '');
 }
 
 function findInlineButton(
@@ -197,6 +198,75 @@ test('buildTelegramShortClaimCallback round-trip parses short callback', (t) => 
   assert.equal(parsed.riderName, 'Rider_1');
   assert.equal(parsed.riderPhone, '381641234567');
   assert.equal(parsed.restaurantId, 'shop-1');
+});
+
+test('buildTelegramClaimCallback 优先使用 secretOverride 而不是本地 env secret', () => {
+  const original = process.env.TELEGRAM_CALLBACK_SECRET;
+  process.env.TELEGRAM_CALLBACK_SECRET = 'local-secret';
+
+  try {
+    const callback = buildTelegramClaimCallback({
+      orderId: 101,
+      riderId: 202,
+      riderName: 'Rider 1',
+      restaurantId: 'shop-1',
+      riderPhone: '381641234567',
+      telegramChatId: TEST_CHAT_ID,
+      action: 'accept',
+      secretOverride: 'remote-secret',
+    } as Parameters<typeof buildTelegramClaimCallback>[0] & { secretOverride: string });
+
+    assert.throws(() => parseTelegramClaimCallback(callback), /invalid_signature/);
+
+    process.env.TELEGRAM_CALLBACK_SECRET = 'remote-secret';
+    const parsed = parseTelegramClaimCallback(callback);
+    assert.equal(parsed.orderId, 101);
+    assert.equal(parsed.action, 'accept');
+  } finally {
+    if (typeof original === 'string') {
+      process.env.TELEGRAM_CALLBACK_SECRET = original;
+      return;
+    }
+    delete process.env.TELEGRAM_CALLBACK_SECRET;
+  }
+});
+
+test('buildTelegramShortClaimCallback 优先使用 secretOverride 而不是本地 env secret', () => {
+  const original = process.env.TELEGRAM_CALLBACK_SECRET;
+  process.env.TELEGRAM_CALLBACK_SECRET = 'local-secret';
+
+  try {
+    const callback = buildTelegramShortClaimCallback({
+      orderId: 101,
+      riderId: 202,
+      riderName: 'Rider 1',
+      restaurantId: 'shop-1',
+      riderPhone: '381641234567',
+      telegramChatId: TEST_CHAT_ID,
+      action: 'accept',
+      secretOverride: 'remote-secret',
+    } as Parameters<typeof buildTelegramShortClaimCallback>[0] & { secretOverride: string });
+
+    assert.throws(
+      () => parseTelegramClaimCallback(callback, { chatId: TEST_CHAT_ID }),
+      /invalid_signature/,
+    );
+
+    process.env.TELEGRAM_CALLBACK_SECRET = 'remote-secret';
+    const parsed = parseTelegramClaimCallback(callback, {
+      chatId: TEST_CHAT_ID,
+      riderPhone: '381641234567',
+      restaurantId: 'shop-1',
+    });
+    assert.equal(parsed.orderId, 101);
+    assert.equal(parsed.action, 'accept');
+  } finally {
+    if (typeof original === 'string') {
+      process.env.TELEGRAM_CALLBACK_SECRET = original;
+      return;
+    }
+    delete process.env.TELEGRAM_CALLBACK_SECRET;
+  }
 });
 
 test('短 accept callback 超时后仍报 expired_callback', (t) => {
@@ -347,19 +417,18 @@ test('telegram send route 在带 message_id 时调用 editMessageText 并透传 
     }),
   } as Parameters<typeof sendTelegramRoute>[0]);
 
-  const body = await readJson(response);
   const telegramCall = calls.find((call) => call.url.includes('/editMessageText'));
 
   assert.equal(response.status, 200);
   assert.ok(telegramCall);
-  assert.equal(telegramCall?.method, 'POST');
-  assert.match(telegramCall?.url || '', /\/editMessageText$/);
-  assert.match(telegramCall?.body || '', /"chat_id":"123456789"/);
-  assert.match(telegramCall?.body || '', /"message_id":7788/);
-  assert.match(telegramCall?.body || '', /"reply_markup":/);
-  assert.match(telegramCall?.body || '', /"parse_mode":"HTML"/);
-  assert.match(telegramCall?.body || '', /"disable_web_page_preview":true/);
-  assert.equal((body.result as { message_id?: unknown })?.message_id, 7788);
+  assert.equal(telegramCall.method, 'POST');
+  assert.match(telegramCall.url, /\/editMessageText$/);
+  assert.match(telegramCall.body, /"chat_id":"123456789"/);
+  assert.match(telegramCall.body, /"message_id":7788/);
+  assert.match(telegramCall.body, /"reply_markup":/);
+  assert.match(telegramCall.body, /"parse_mode":"HTML"/);
+  assert.match(telegramCall.body, /"disable_web_page_preview":true/);
+  assert.equal(((await readJson(response)).result as { message_id?: unknown })?.message_id, 7788);
 });
 
 test('telegram send route 忽略数组 replyMarkup 与空 parseMode', async (t) => {
@@ -386,14 +455,13 @@ test('telegram send route 忽略数组 replyMarkup 与空 parseMode', async (t) 
     }),
   } as Parameters<typeof sendTelegramRoute>[0]);
 
-  const body = await readJson(response);
   const telegramCall = calls.find((call) => call.url.includes('/editMessageText'));
 
   assert.equal(response.status, 200);
   assert.ok(telegramCall);
-  assert.doesNotMatch(telegramCall?.body || '', /"reply_markup":/);
-  assert.doesNotMatch(telegramCall?.body || '', /"parse_mode":/);
-  assert.equal((body.result as { message_id?: unknown })?.message_id, 9901);
+  assert.doesNotMatch(telegramCall.body, /"reply_markup":/);
+  assert.doesNotMatch(telegramCall.body, /"parse_mode":/);
+  assert.equal(((await readJson(response)).result as { message_id?: unknown })?.message_id, 9901);
 });
 
 test('telegram send route 在前端取不到 token 时回退后端 telegram/send 并保留 message_id', async (t) => {
@@ -426,7 +494,11 @@ test('telegram send route 在前端取不到 token 时回退后端 telegram/send
   const response = await sendTelegramRoute({
     request: new Request('https://example.com/api/telegram/send', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: 'admin_session=abc123; admin_token=cookie-token',
+        authorization: 'Bearer route-token',
+      },
       body: JSON.stringify({
         shopSlug: 'shop-1',
         chat_id: TEST_CHAT_ID,
@@ -437,16 +509,17 @@ test('telegram send route 在前端取不到 token 时回退后端 telegram/send
     }),
   } as Parameters<typeof sendTelegramRoute>[0]);
 
-  const body = await readJson(response);
   const backendCall = calls.find((call) => call.url === 'https://food2api.serbia70.com/api/telegram/send');
 
   assert.equal(response.status, 200);
   assert.ok(backendCall);
-  assert.match(backendCall?.body || '', /"shopSlug":"shop-1"/);
-  assert.match(backendCall?.body || '', /"chat_id":"123456789"/);
-  assert.match(backendCall?.body || '', /"message_id":7788/);
-  assert.match(backendCall?.body || '', /"reply_markup":\{"inline_keyboard":\[\]\}/);
-  assert.equal((body.result as { message_id?: unknown })?.message_id, 7788);
+  assert.match(backendCall.body, /"shopSlug":"shop-1"/);
+  assert.match(backendCall.body, /"chat_id":"123456789"/);
+  assert.match(backendCall.body, /"message_id":7788/);
+  assert.match(backendCall.body, /"reply_markup":\{"inline_keyboard":\[\]\}/);
+  assert.equal(backendCall.headers.get('cookie'), 'admin_session=abc123; admin_token=cookie-token');
+  assert.equal(backendCall.headers.get('authorization'), 'Bearer route-token');
+  assert.equal(((await readJson(response)).result as { message_id?: unknown })?.message_id, 7788);
   assert.equal(calls.some((call) => call.url.includes('api.telegram.org')), false);
 });
 
@@ -479,14 +552,13 @@ test('telegram send route 在数字 shopSlug 场景跳过 /info 并继续走全�
     }),
   } as Parameters<typeof sendTelegramRoute>[0]);
 
-  const body = await readJson(response);
   const telegramCall = calls.find((call) => call.url.includes('/editMessageText'));
 
   assert.equal(response.status, 200);
   assert.ok(telegramCall);
-  assert.match(telegramCall?.body || '', /"message_id":7788/);
-  assert.match(telegramCall?.body || '', /"reply_markup":/);
-  assert.equal((body.result as { message_id?: unknown })?.message_id, 9902);
+  assert.match(telegramCall.body, /"message_id":7788/);
+  assert.match(telegramCall.body, /"reply_markup":/);
+  assert.equal(((await readJson(response)).result as { message_id?: unknown })?.message_id, 9902);
   assert.equal(calls.some((call) => call.url === 'https://food2api.serbia70.com/103/info'), false);
 });
 
@@ -527,14 +599,65 @@ test('telegram send route 在数字 shopSlug 且前端取不到 token 时回退�
     }),
   } as Parameters<typeof sendTelegramRoute>[0]);
 
-  const body = await readJson(response);
   const backendCall = calls.find((call) => call.url === 'https://food2api.serbia70.com/api/telegram/send');
 
   assert.equal(response.status, 200);
   assert.ok(backendCall);
-  assert.doesNotMatch(backendCall?.body || '', /"shopSlug":"103"/);
-  assert.match(backendCall?.body || '', /"message_id":7788/);
-  assert.equal((body.result as { message_id?: unknown })?.message_id, 7788);
+  assert.doesNotMatch(backendCall.body, /"shopSlug":"103"/);
+  assert.match(backendCall.body, /"message_id":7788/);
+  assert.equal(((await readJson(response)).result as { message_id?: unknown })?.message_id, 7788);
+});
+
+test('telegram send route 在已解析 token 且直连 Telegram 超时后回退后端并保留鉴权与 payload 语义', async (t) => {
+  const calls = useMockFetch(t, async (request) => {
+    const url = new URL(request.url);
+
+    if (url.hostname === 'api.telegram.org') {
+      throw new DOMException('This operation was aborted', 'AbortError');
+    }
+
+    if (url.pathname === '/api/telegram/send' && url.hostname === 'food2api.serbia70.com') {
+      return jsonResponse({
+        success: true,
+        ok: true,
+        result: { message_id: 7788 },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
+  });
+
+  const response = await sendTelegramRoute({
+    request: new Request('https://example.com/api/telegram/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: 'admin_session=abc123; admin_token=cookie-token',
+        authorization: 'Bearer route-token',
+      },
+      body: JSON.stringify({
+        shopSlug: '103',
+        chat_id: TEST_CHAT_ID,
+        message_id: 7788,
+        text: 'edited text',
+        reply_markup: { inline_keyboard: [[{ text: '送达', callback_data: 'cb-complete' }]] },
+        telegram_bot_token: 'bot-token-1',
+      }),
+    }),
+  } as Parameters<typeof sendTelegramRoute>[0]);
+
+  const backendCall = calls.find((call) => call.url === 'https://food2api.serbia70.com/api/telegram/send');
+
+  assert.equal(response.status, 200);
+  assert.ok(backendCall);
+  assert.doesNotMatch(backendCall.body, /"shopSlug":"103"/);
+  assert.match(backendCall.body, /"chat_id":"123456789"/);
+  assert.match(backendCall.body, /"message_id":7788/);
+  assert.match(backendCall.body, /"reply_markup":\{"inline_keyboard":\[\[\{"text":"送达","callback_data":"cb-complete"\}\]\]\}/);
+  assert.equal(backendCall.headers.get('cookie'), 'admin_session=abc123; admin_token=cookie-token');
+  assert.equal(backendCall.headers.get('authorization'), 'Bearer route-token');
+  assert.equal(((await readJson(response)).result as { message_id?: unknown })?.message_id, 7788);
+  assert.equal(calls.filter((call) => call.url.includes('api.telegram.org')).length, 1);
 });
 
 test('buildAdminAssignedOrderTelegramMessage only keeps bilingual item lines and other labels stay Chinese', async () => {
@@ -597,7 +720,7 @@ test('buildRiderAwaitingPickupTelegramMessage uses awaiting-pickup semantics', (
   assert.match(message.text, /金额：1200 RSD/);
   assert.match(message.text, /预计：15 分钟/);
   assert.ok(pickupButton);
-  assert.equal(pickupButton?.callback_data, 'cb-pickup');
+  assert.equal(pickupButton.callback_data, 'cb-pickup');
 });
 
 test('buildRiderDeliveringTelegramMessage uses delivering semantics', () => {
@@ -616,7 +739,7 @@ test('buildRiderDeliveringTelegramMessage uses delivering semantics', () => {
   assert.match(message.text, /金额：1200 RSD/);
   assert.match(message.text, /预计：15 分钟/);
   assert.ok(completeButton);
-  assert.equal(completeButton?.callback_data, 'cb-complete');
+  assert.equal(completeButton.callback_data, 'cb-complete');
 });
 
 test('legacy rider telegram builders delegate to renamed semantic builders', () => {

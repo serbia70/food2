@@ -1,16 +1,20 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
 import {
-  type AdminWarningShape,
   buildAdminJsonResponse,
-  buildAdminOrderUpdateFailedResponse,
-  buildAdminRidersReadFailureResponse,
-  buildAdminSimpleErrorResponse,
-  persistAdminTelegramMessageRefHandled,
-  readAdminAssignableRiders,
+  buildAdminInvalidActionResponse,
+  buildAdminNoAvailableRidersResponse,
+  buildAdminOrderFetchFailedSimpleResponse,
+  buildAdminOrderIdRequiredResponse,
+  buildAdminOrderSnapshotRequiredResponse,
+  buildAdminRiderAlreadyDeclinedResponse,
+  maybePersistAdminTelegramMessageRefWarning,
+  readAdminAssignableRidersOrResponse,
   readAdminOrderById,
-  readJsonObject,
-  updateAdminOrderStatus,
+  readProtectedTelegramCallbackSecret,
+  readTelegramRiderChatId,
+  readTelegramSendResult,
+  updateAdminOrderStatusOrResponse,
 } from '../../../lib/rider-route-shared.ts';
 import {
   buildAssignedOrderStatusPayload,
@@ -29,10 +33,6 @@ import {
 
 export const prerender = false;
 
-
-function readRiderChatId(rider: AssignableRider): string {
-  return String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
-}
 
 function readOrderSummaryItems(row: Record<string, unknown>): Array<{ name?: unknown; quantity?: unknown }> {
   if (Array.isArray(row.items)) return row.items as Array<{ name?: unknown; quantity?: unknown }>;
@@ -137,6 +137,7 @@ async function notifyAssignedRider({
   orderSummary,
   fallbackChatId,
   inlineTelegramBotToken,
+  callbackSecretOverride,
 }: {
   request: Request;
   rider: AssignableRider;
@@ -146,6 +147,7 @@ async function notifyAssignedRider({
   orderSummary: RiderAssignOrderSummary;
   fallbackChatId?: string;
   inlineTelegramBotToken?: string;
+  callbackSecretOverride?: string;
 }): Promise<
   | {
     success: true;
@@ -153,7 +155,7 @@ async function notifyAssignedRider({
   }
   | { success: false; error: string }
 > {
-  const riderChatId = readRiderChatId(rider);
+  const riderChatId = readTelegramRiderChatId(rider);
   const requestChatId = String(fallbackChatId || '').trim();
   const chatId = riderChatId || requestChatId;
   if (!chatId) return { success: false, error: 'telegram_chat_id_missing' };
@@ -171,6 +173,7 @@ async function notifyAssignedRider({
         riderPhone,
         restaurantId: shopSlug || 'admin',
         telegramChatId: chatId,
+        secretOverride: callbackSecretOverride,
       };
       claimCallbackData = buildTelegramShortClaimCallback(callbackBase);
       declineCallbackData = buildTelegramShortClaimCallback({
@@ -180,10 +183,6 @@ async function notifyAssignedRider({
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (message !== 'missing_telegram_callback_secret') throw error;
-      return {
-        success: false,
-        error: 'telegram_callback_buttons_unavailable',
-      };
     }
 
     const message = buildAdminAssignedOrderTelegramMessage({
@@ -230,39 +229,30 @@ async function notifyAssignedRider({
       return {
         response,
         responseText,
-        parsedResponse: readJsonObject(responseText),
       };
     };
 
-    let { response, responseText, parsedResponse } = await sendTelegram(requestPayload);
+    let { response, responseText } = await sendTelegram(requestPayload);
     const shouldRetryWithoutReplyMarkup = !response.ok
       && response.headers.get('content-type')?.includes('text/html')
       && responseText.includes('502');
 
     if (shouldRetryWithoutReplyMarkup) {
       const retryPayload = telegramPayloadBase;
-      ({ response, responseText, parsedResponse } = await sendTelegram(retryPayload));
+      ({ response, responseText } = await sendTelegram(retryPayload));
     }
 
-    if (!response.ok || parsedResponse?.success === false || parsedResponse?.ok === false) {
+    const sendResult = readTelegramSendResult(response, responseText);
+    if (!sendResult.ok) {
       return {
         success: false,
-        error: responseText.trim() || `telegram_send_http_${response.status}`,
+        error: sendResult.error,
       };
     }
 
-    const rawResult = parsedResponse?.result;
-    const messageId = Number(
-      (rawResult && typeof rawResult === 'object'
-        ? (rawResult as { message_id?: unknown }).message_id
-        : undefined)
-      ?? parsedResponse?.message_id
-      ?? 0,
-    );
-
     return {
       success: true,
-      ...(messageId > 0 ? { messageRef: { chatId, messageId } } : {}),
+      ...(sendResult.messageId > 0 ? { messageRef: { chatId, messageId: sendResult.messageId } } : {}),
     };
   } catch (error) {
     const errorMessage = error instanceof Error
@@ -290,25 +280,25 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const inlineTelegramBotToken = String(body.telegramBotToken || body.telegram_bot_token || '').trim();
 
   if (action !== 'manual_assign' && action !== 'auto_assign') {
-    return buildAdminSimpleErrorResponse('invalid_action', 400);
+    return buildAdminInvalidActionResponse('invalid_action');
   }
 
   if (!orderId) {
-    return buildAdminSimpleErrorResponse('order_id_required', 400);
+    return buildAdminOrderIdRequiredResponse();
   }
 
-  const ridersResult = await readAdminAssignableRiders({
+  const ridersResult = await readAdminAssignableRidersOrResponse({
     request,
     cookies,
     apiBaseUrl: API_BASE_URL,
   });
-  if (!ridersResult.success) {
-    return buildAdminRidersReadFailureResponse(ridersResult);
+  if (!ridersResult.ok) {
+    return ridersResult.response;
   }
 
   const fetchedOrderDetails = await fetchOrderDetails(request, cookies, orderId);
   if (!fetchedOrderDetails.ok) {
-    return buildAdminSimpleErrorResponse('order_fetch_failed', 502);
+    return buildAdminOrderFetchFailedSimpleResponse();
   }
 
   const eligibleRiders = filterAvailableRidersForOrder(ridersResult.riders, fetchedOrderDetails.remarksJson);
@@ -318,7 +308,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   if (action === 'manual_assign') {
     target = eligibleRiders.find(isManualRider) || null;
     if (!target && ridersResult.riders.some(isManualRider)) {
-      return buildAdminSimpleErrorResponse('rider_already_declined_this_order', 409);
+      return buildAdminRiderAlreadyDeclinedResponse();
     }
   }
 
@@ -327,14 +317,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   if (!target) {
-    return buildAdminSimpleErrorResponse('no_available_riders', 409);
+    return buildAdminNoAvailableRidersResponse();
   }
 
   if (!fetchedOrderDetails.orderSummary) {
-    return buildAdminSimpleErrorResponse('order_snapshot_required', 409);
+    return buildAdminOrderSnapshotRequiredResponse();
   }
 
-  const updateResult = await updateAdminOrderStatus({
+  const updateResult = await updateAdminOrderStatusOrResponse({
     request,
     cookies,
     apiBaseUrl: API_BASE_URL,
@@ -343,10 +333,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   });
 
   if (!updateResult.ok) {
-    return buildAdminOrderUpdateFailedResponse(updateResult, updateResult.status || 502);
+    return updateResult.response;
   }
 
-  const notifyShopSlug = normalizeNotifyShopSlug(providedShopSlug) || fetchedOrderDetails.shopSlug;
+  const notifyShopSlug = fetchedOrderDetails.shopSlug || normalizeNotifyShopSlug(providedShopSlug);
+  const callbackSecretOverride = await readProtectedTelegramCallbackSecret(request);
 
   const telegramNotification = await notifyAssignedRider({
     request,
@@ -357,20 +348,17 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     orderSummary: fetchedOrderDetails.orderSummary,
     fallbackChatId: riderTelegramChatId,
     inlineTelegramBotToken,
+    callbackSecretOverride,
   });
 
-  let warning: AdminWarningShape | undefined;
-  if (telegramNotification.success && telegramNotification.messageRef) {
-    const handled = await persistAdminTelegramMessageRefHandled({
-      request,
-      cookies,
-      apiBaseUrl: API_BASE_URL,
-      orderId,
-      messageRef: telegramNotification.messageRef,
-      warningOptions: { remarksWriteFailedOnly: true },
-    });
-    warning = handled.warning;
-  }
+  const warning = await maybePersistAdminTelegramMessageRefWarning({
+    request,
+    cookies,
+    apiBaseUrl: API_BASE_URL,
+    orderId,
+    ...(telegramNotification.success ? { messageRef: telegramNotification.messageRef } : {}),
+    warningOptions: { remarksWriteFailedOnly: true },
+  });
 
   return buildAdminJsonResponse({
     success: true,

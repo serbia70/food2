@@ -1,7 +1,24 @@
 import type { AstroCookies } from 'astro';
 import { proxyAdminRequest } from './admin-api-route.ts';
+import {
+  fetchProtectedAdminMasterSettings,
+  readTelegramCallbackSecretFromMasterSettings,
+} from './admin-master-settings.ts';
 import { type AssignableRider, readOnlineRiders } from './rider-assignment.ts';
-import { buildDispatchMetaRemarks, readDispatchMetaFromRemarks, type DispatchMeta } from './rider-dispatch.ts';
+import {
+  buildDispatchMetaRemarks,
+  buildRiderOrderView,
+  readDispatchMetaFromRemarks,
+  resolveRiderUnifiedStatus,
+  type DispatchMeta,
+  type ResolveRiderOrderActionResult,
+  type RiderOrderAction,
+} from './rider-dispatch.ts';
+import {
+  buildRiderSingleMessageTelegram,
+  buildTelegramEditMessagePayload,
+  buildTelegramShortClaimCallback,
+} from './telegram-dispatch.ts';
 
 export interface RiderRouteOrderSnapshot {
   status: string;
@@ -98,6 +115,20 @@ export function buildTelegramMessageRefPersistWarning(
   };
 }
 
+export async function readProtectedTelegramCallbackSecret(request: Request): Promise<string> {
+  const cookie = request.headers.get('cookie') || '';
+  const authorization = String(request.headers.get('authorization') || '').trim();
+  if (!authorization && !cookie) return '';
+  const masterSettings = await fetchProtectedAdminMasterSettings({ authorization, cookie });
+  return readTelegramCallbackSecretFromMasterSettings(masterSettings);
+}
+
+export function readTelegramRiderChatId(rider: { telegramChatId?: unknown; telegram_chat_id?: unknown }): string {
+  const camel = String(rider.telegramChatId || '').trim();
+  if (camel) return camel;
+  return String(rider.telegram_chat_id || '').trim();
+}
+
 export type AdminTelegramMessageRefPersistHandledResult = {
   warning?: AdminWarningShape;
   persisted?: Extract<AdminTelegramMessageRefPersistResult, { ok: true }>;
@@ -133,6 +164,33 @@ export async function persistAdminTelegramMessageRefHandled({
   return { persisted: result };
 }
 
+export async function maybePersistAdminTelegramMessageRefWarning({
+  request,
+  cookies,
+  apiBaseUrl,
+  orderId,
+  messageRef,
+  warningOptions,
+}: {
+  request: Request;
+  cookies: AstroCookies;
+  apiBaseUrl: string;
+  orderId: string;
+  messageRef?: NonNullable<DispatchMeta['telegramMessageRef']>;
+  warningOptions?: { remarksWriteFailedOnly?: boolean };
+}): Promise<AdminWarningShape | undefined> {
+  if (!messageRef) return undefined;
+  const handled = await persistAdminTelegramMessageRefHandled({
+    request,
+    cookies,
+    apiBaseUrl,
+    orderId,
+    messageRef,
+    warningOptions,
+  });
+  return handled.warning;
+}
+
 export function buildAdminOrderFetchFailedResponse(
   result: Extract<AdminOrderReadResult, { ok: false }>,
   statusOverride?: number,
@@ -146,6 +204,46 @@ export function buildAdminOrderFetchFailedResponse(
     status: statusOverride ?? result.status,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+export function buildAdminOrderSnapshotUnavailableResponse(rawText: string): Response {
+  return buildAdminJsonResponse({
+    success: false,
+    error: 'order_snapshot_unavailable',
+    raw_response_text: rawText,
+  }, 502);
+}
+
+export function buildAdminOrderFetchFailedSimpleResponse(): Response {
+  return buildAdminSimpleErrorResponse('order_fetch_failed', 502);
+}
+
+export function buildAdminForcedRiderNotFoundResponse(forcedRiderId: string): Response {
+  return buildAdminJsonResponse({
+    success: false,
+    error: 'forced_rider_not_found',
+    forcedRiderId,
+  }, 400);
+}
+
+export function buildAdminOrderIdRequiredResponse(): Response {
+  return buildAdminSimpleErrorResponse('order_id_required', 400);
+}
+
+export function buildAdminOrderSnapshotRequiredResponse(): Response {
+  return buildAdminSimpleErrorResponse('order_snapshot_required', 409);
+}
+
+export function buildAdminInvalidActionResponse(error: 'invalid_action' | 'unsupported_action'): Response {
+  return buildAdminSimpleErrorResponse(error, 400);
+}
+
+export function buildAdminRiderAlreadyDeclinedResponse(): Response {
+  return buildAdminSimpleErrorResponse('rider_already_declined_this_order', 409);
+}
+
+export function buildAdminNoAvailableRidersResponse(): Response {
+  return buildAdminSimpleErrorResponse('no_available_riders', 409);
 }
 
 export function readTelegramItemSummaryFromOrder(order: Record<string, unknown> | null | undefined): string[] {
@@ -190,6 +288,33 @@ export function readJsonObject(text: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+export function readTelegramSendResult(
+  response: Response,
+  responseText: string,
+): { ok: true; messageId: number } | { ok: false; error: string } {
+  const parsedResponse = readJsonObject(responseText);
+  if (!response.ok || parsedResponse?.success === false || parsedResponse?.ok === false) {
+    return {
+      ok: false,
+      error: responseText.trim() || `telegram_send_http_${response.status}`,
+    };
+  }
+
+  const rawResult = parsedResponse?.result;
+  const messageId = Number(
+    (rawResult && typeof rawResult === 'object'
+      ? (rawResult as { message_id?: unknown }).message_id
+      : undefined)
+    ?? parsedResponse?.message_id
+    ?? 0,
+  );
+
+  return {
+    ok: true,
+    messageId,
+  };
 }
 
 function parseJsonValue(text: string): unknown {
@@ -333,25 +458,319 @@ export async function readOrderDispatchSnapshot(
   return readOrderSnapshotRow(await readOrderDetail(request, apiBaseUrl, orderId, riderPhone));
 }
 
+function readTelegramSendShopSlug(value: unknown): string {
+  const slug = String(value || '').trim();
+  if (!slug || slug === 'admin') return '';
+  return /^[a-z0-9][a-z0-9-]*$/i.test(slug) ? slug : '';
+}
+
+function readOrderTelegramShopSlug(order: Record<string, unknown>, fallback?: unknown): string {
+  return readTelegramSendShopSlug(order.shopSlug)
+    || readTelegramSendShopSlug(order.slug)
+    || readTelegramSendShopSlug(order.restaurantSlug)
+    || readTelegramSendShopSlug(order.shop_slug)
+    || readTelegramSendShopSlug(order.restaurant_slug)
+    || readTelegramSendShopSlug(order.restaurantId)
+    || readTelegramSendShopSlug(order.shopId)
+    || readTelegramSendShopSlug(fallback);
+}
+
+export async function syncTelegramDeliveryProgressMessage({
+  request,
+  apiBaseUrl,
+  telegramSendUrl,
+  orderId,
+  rider,
+  remarksJson,
+  targetStatus,
+  fallbackShopSlug,
+  fallbackChatId,
+  fallbackOrder,
+}: {
+  request: Request;
+  apiBaseUrl: string;
+  telegramSendUrl: string | URL;
+  orderId: string;
+  rider: {
+    riderId: string;
+    riderName: string;
+    riderPhone: string;
+  };
+  remarksJson: string;
+  targetStatus: 'delivering' | 'picked_up' | 'completed';
+  fallbackShopSlug?: string;
+  fallbackChatId?: string;
+  fallbackOrder?: Record<string, unknown> | null;
+}): Promise<void> {
+  const meta = readDispatchMetaFromRemarks(remarksJson);
+  const messageRef = meta.telegramMessageRef;
+  if (!messageRef) return;
+
+  const order = fallbackOrder || await readOrderDetail(request, apiBaseUrl, orderId, rider.riderPhone);
+  if (!order) return;
+
+  const orderView = buildRiderOrderView({
+    ...order,
+    status: targetStatus,
+    remarksJson,
+    courierPhone: rider.riderPhone,
+  });
+  const unifiedStatus = resolveRiderUnifiedStatus({
+    ...order,
+    status: targetStatus,
+    remarksJson,
+    courierPhone: rider.riderPhone,
+  }, {
+    riderId: rider.riderId,
+    riderName: rider.riderName,
+    riderPhone: rider.riderPhone,
+  });
+  const shopSlug = readOrderTelegramShopSlug(order, fallbackShopSlug);
+  const chatId = String(messageRef.chatId || fallbackChatId || '').trim();
+  const primaryCallbackData = unifiedStatus.primaryAction && shopSlug
+    ? buildTelegramShortClaimCallback({
+        orderId: Number(orderId),
+        riderId: Number(rider.riderId),
+        riderName: rider.riderName,
+        riderPhone: rider.riderPhone,
+        restaurantId: shopSlug,
+        telegramChatId: chatId,
+        action: unifiedStatus.primaryAction === '送达' ? 'complete' : 'picked_up',
+      })
+    : '';
+
+  const message = buildRiderSingleMessageTelegram({
+    orderNo: String(order.orderNo || orderId || '').trim(),
+    shopName: orderView.shopName,
+    address: orderView.deliveryAddress || '未提供地址',
+    phone: String(order.userPhone || '').trim() || '-',
+    statusLabel: unifiedStatus.statusLabel,
+    acceptedAtLabel: unifiedStatus.acceptedAt,
+    pickedUpAtLabel: unifiedStatus.pickedUpAt,
+    completedAtLabel: unifiedStatus.completedAt,
+    itemSummary: readTelegramItemSummaryFromOrder(order),
+    shopMapUrl: orderView.shopMapUrl,
+    deliveryMapUrl: orderView.deliveryMapUrl,
+    primaryAction: unifiedStatus.primaryAction && primaryCallbackData
+      ? { text: unifiedStatus.primaryAction, callbackData: primaryCallbackData }
+      : null,
+    secondaryAction: null,
+  });
+
+  await fetch(telegramSendUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildForwardHeaders(request),
+    },
+    body: JSON.stringify({
+      ...(shopSlug ? { shopSlug } : {}),
+      ...buildTelegramEditMessagePayload({
+        chatId,
+        messageId: messageRef.messageId,
+        text: message.text,
+        replyMarkup: message.replyMarkup,
+      }),
+    }),
+  });
+}
+export function buildRiderActionUpdateStatusRemarks({
+  action,
+  remarksJson,
+  actionDecisionNextRemarksJson,
+  acceptedAt,
+  pickedUpAt,
+  completedAt,
+}: {
+  action: 'accept' | 'decline' | 'picked_up' | 'complete';
+  remarksJson: string;
+  actionDecisionNextRemarksJson: string;
+  acceptedAt: string;
+  pickedUpAt: string;
+  completedAt: string;
+}): string {
+  if (action === 'accept' || action === 'decline') return actionDecisionNextRemarksJson;
+
+  const currentMeta = readDispatchMetaFromRemarks(remarksJson);
+  return JSON.stringify(buildDispatchMetaRemarks(remarksJson, {
+    ...currentMeta,
+    acceptedAt,
+    pickedUpAt,
+    completedAt,
+  }));
+}
+
+export function buildRiderActionUpdateStatusPayload({
+  orderId,
+  action,
+  expectedCurrentStatus,
+  targetStatus,
+  feedbackWriteMode,
+  nextRemarksJson,
+  riderName,
+  riderPhone,
+}: {
+  orderId: string;
+  action: 'accept' | 'decline' | 'picked_up' | 'complete';
+  expectedCurrentStatus: string;
+  targetStatus: string;
+  feedbackWriteMode: 'none' | 'admin_remarks' | 'update_status_remarks';
+  nextRemarksJson: string;
+  riderName: string;
+  riderPhone: string;
+}): Record<string, unknown> {
+  const numericOrderId = Number(orderId);
+  const payload: Record<string, unknown> = {
+    id: Number.isInteger(numericOrderId) && numericOrderId > 0 ? numericOrderId : orderId,
+    expectedCurrentStatus,
+    status: targetStatus,
+  };
+
+  if (feedbackWriteMode === 'update_status_remarks' || action === 'picked_up' || action === 'complete') {
+    payload.remarksJson = nextRemarksJson;
+  }
+  if (feedbackWriteMode !== 'update_status_remarks') {
+    payload.courierName = riderName;
+    payload.courierPhone = riderPhone;
+  }
+
+  return payload;
+}
+
+export type SharedRiderProgressTargetStatus = 'delivering' | 'picked_up' | 'completed';
+
+export interface SharedRiderProgressActionOrderState {
+  status: string;
+  remarksJson: string;
+  courierPhone: string;
+}
+
+export interface SharedRiderProgressActionTelegramOptions {
+  fallbackShopSlug?: string;
+  fallbackChatId?: string;
+  fallbackOrder?: Record<string, unknown> | null;
+}
+
+export interface SharedRiderProgressActionInput {
+  request: Request;
+  apiBaseUrl: string;
+  telegramSendUrl: string | URL;
+  orderId: string;
+  action: Extract<RiderOrderAction, 'accept' | 'picked_up' | 'complete'>;
+  rider: {
+    riderId: string;
+    riderName: string;
+    riderPhone: string;
+  };
+  order: SharedRiderProgressActionOrderState;
+  actionDecision: ResolveRiderOrderActionResult;
+  nowIso: string;
+  successBody?: string;
+  telegram?: SharedRiderProgressActionTelegramOptions;
+}
+
+export async function runSharedRiderProgressAction({
+  request,
+  apiBaseUrl,
+  telegramSendUrl,
+  orderId,
+  action,
+  rider,
+  order,
+  actionDecision,
+  nowIso,
+  successBody,
+  telegram,
+}: SharedRiderProgressActionInput): Promise<Response> {
+  if (actionDecision.feedbackWriteMode === 'admin_remarks') {
+    await writeOrderDispatchRemarks(request, apiBaseUrl, orderId, actionDecision.nextRemarksJson);
+  }
+
+  const currentMeta = readDispatchMetaFromRemarks(order.remarksJson);
+  const nextRemarksJson = buildRiderActionUpdateStatusRemarks({
+    action,
+    remarksJson: order.remarksJson,
+    actionDecisionNextRemarksJson: actionDecision.nextRemarksJson,
+    acceptedAt: currentMeta.acceptedAt,
+    pickedUpAt: action === 'picked_up' ? nowIso : currentMeta.pickedUpAt,
+    completedAt: action === 'complete' ? nowIso : currentMeta.completedAt,
+  });
+
+  const payload = buildRiderActionUpdateStatusPayload({
+    orderId,
+    action,
+    expectedCurrentStatus: actionDecision.expectedCurrentStatus,
+    targetStatus: actionDecision.targetStatus,
+    feedbackWriteMode: actionDecision.feedbackWriteMode,
+    nextRemarksJson,
+    riderName: rider.riderName,
+    riderPhone: rider.riderPhone,
+  });
+
+  const upstream = await fetch(`${apiBaseUrl}/api/order/update_status/${encodeURIComponent(orderId)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildForwardHeaders(request),
+    },
+    body: JSON.stringify(payload),
+  });
+  const text = await upstream.text();
+
+  if (!upstream.ok) {
+    return buildUpstreamFailureResponse(upstream, text, {
+      success: false,
+      error: action === 'complete' ? 'order_completed' : 'order_status_updated',
+    });
+  }
+
+  try {
+    await syncTelegramDeliveryProgressMessage({
+      request,
+      apiBaseUrl,
+      telegramSendUrl,
+      orderId,
+      rider,
+      remarksJson: nextRemarksJson,
+      targetStatus: actionDecision.targetStatus === 'completed'
+        ? 'completed'
+        : (actionDecision.targetStatus === 'picked_up' ? 'picked_up' : 'delivering'),
+      fallbackShopSlug: telegram?.fallbackShopSlug,
+      fallbackChatId: telegram?.fallbackChatId,
+      fallbackOrder: telegram?.fallbackOrder,
+    });
+  } catch {
+    // 不阻断主流程成功回包
+  }
+
+  return new Response(successBody || JSON.stringify({ success: true, action }), {
+    status: upstream.status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 export async function writeOrderDispatchRemarks(
   request: Request,
   apiBaseUrl: string,
   orderId: string,
-  nextRemarksJson: string,
+  remarksJson: string,
 ): Promise<boolean> {
-  const parsedRemarks = parseJsonValue(nextRemarksJson);
-  if (!Array.isArray(parsedRemarks)) return false;
-
-  const remarks = parsedRemarks.map((item) => String(item || '')).filter(Boolean);
+  const parsedRemarks = parseJsonValue(remarksJson);
+  const remarks = Array.isArray(parsedRemarks) ? parsedRemarks : [];
   const upstream = await fetch(`${apiBaseUrl}/api/admin/orders/remarks`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...buildForwardHeaders(request),
     },
-    body: JSON.stringify({ orderId, remarks }),
+    body: JSON.stringify({
+      orderId,
+      remarks,
+    }),
   });
-  return upstream.ok;
+  const text = await upstream.text();
+  const payload = readJsonObject(text) || {};
+  return upstream.ok && payload.success !== false;
 }
 
 export async function readAdminAssignableRiders({
@@ -386,6 +805,37 @@ export async function readAdminAssignableRiders({
   return {
     success: true,
     riders: readOnlineRiders(parsed),
+  };
+}
+
+export async function readAdminAssignableRidersOrResponse({
+  request,
+  cookies,
+  apiBaseUrl,
+  coerce2xxTo502 = false,
+}: {
+  request: Request;
+  cookies: AstroCookies;
+  apiBaseUrl: string;
+  coerce2xxTo502?: boolean;
+}): Promise<
+  | { ok: true; riders: AssignableRider[] }
+  | { ok: false; response: Response }
+> {
+  const ridersResult = await readAdminAssignableRiders({
+    request,
+    cookies,
+    apiBaseUrl,
+  });
+  if (!ridersResult.success) {
+    return {
+      ok: false,
+      response: buildAdminRidersReadFailureResponse(ridersResult, { coerce2xxTo502 }),
+    };
+  }
+  return {
+    ok: true,
+    riders: ridersResult.riders,
   };
 }
 
@@ -509,6 +959,43 @@ export async function updateAdminOrderStatus({
     status: upstream.status || 200,
     bodyText,
     bodyJson,
+  };
+}
+
+export async function updateAdminOrderStatusOrResponse({
+  request,
+  cookies,
+  apiBaseUrl,
+  orderId,
+  payload,
+}: {
+  request: Request;
+  cookies: AstroCookies;
+  apiBaseUrl: string;
+  orderId: string;
+  payload: Record<string, unknown>;
+}): Promise<
+  | { ok: true; result: Extract<AdminOrderStatusUpdateResult, { ok: true }> }
+  | { ok: false; response: Response }
+> {
+  const result = await updateAdminOrderStatus({
+    request,
+    cookies,
+    apiBaseUrl,
+    orderId,
+    payload,
+  });
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      response: buildAdminOrderUpdateFailedResponse(result),
+    };
+  }
+
+  return {
+    ok: true,
+    result,
   };
 }
 

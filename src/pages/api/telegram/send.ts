@@ -176,6 +176,15 @@ function parseJsonResponse(text: string): Record<string, unknown> {
   }
 }
 
+function readProxyAuthHeaders(request: Request): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const cookie = String(request.headers.get('cookie') || '').trim();
+  const authorization = String(request.headers.get('authorization') || '').trim();
+  if (cookie) headers.cookie = cookie;
+  if (authorization) headers.authorization = authorization;
+  return headers;
+}
+
 async function postTelegramMessage(
   token: string,
   telegramPayload: Record<string, unknown>,
@@ -308,12 +317,28 @@ async function loadTelegramBotToken(request: Request, shopSlug: string, inlineTo
   };
 }
 
+function buildBackendTelegramPayload(
+  shopSlug: string,
+  numericShopSlug: boolean,
+  telegramPayload: Record<string, unknown>,
+  token?: string,
+): Record<string, unknown> {
+  return {
+    ...(!numericShopSlug && shopSlug ? { shopSlug } : {}),
+    ...(token ? { telegram_bot_token: token } : {}),
+    ...telegramPayload,
+  };
+}
+
 async function proxyTelegramSendToBackend(request: Request, payload: Record<string, unknown>): Promise<Response> {
   let upstream: Response;
   try {
     upstream = await fetch(`${API_BASE_URL}/api/telegram/send`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...readProxyAuthHeaders(request),
+      },
       body: JSON.stringify(payload),
     });
   } catch (error) {
@@ -388,21 +413,20 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   if (!token) {
-    return proxyTelegramSendToBackend(request, {
-      ...(!numericShopSlug && shopSlug ? { shopSlug } : {}),
-      ...telegramPayload,
-    });
+    return proxyTelegramSendToBackend(
+      request,
+      buildBackendTelegramPayload(shopSlug, numericShopSlug, telegramPayload),
+    );
   }
 
   let telegramRes: Response;
   try {
     telegramRes = await sendTelegramMessage(token, telegramPayload, mode);
-  } catch (error) {
-    return json({
-      success: false,
-      error: 'telegram_send_failed',
-      ...describeFetchError(error),
-    }, 502);
+  } catch {
+    return proxyTelegramSendToBackend(
+      request,
+      buildBackendTelegramPayload(shopSlug, numericShopSlug, telegramPayload, token),
+    );
   }
 
   const responseText = await telegramRes.text();

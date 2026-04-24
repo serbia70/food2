@@ -16,6 +16,10 @@ import {
   resolveRiderOrderAction,
   resolveRiderUnifiedStatus,
 } from './rider-dispatch.ts';
+import {
+  buildRiderActionUpdateStatusPayload,
+  buildRiderActionUpdateStatusRemarks,
+} from './rider-route-shared.ts';
 
 const riderDashboardSource = readFileSync(new URL('../pages/rider/dashboard.astro', import.meta.url), 'utf8');
 
@@ -183,10 +187,7 @@ test('filterRiderDashboardOrders returns pool active and today history from one 
     },
   ];
 
-  assert.deepEqual(
-    filterRiderDashboardOrders(orders, '0611', 'dashboard', '2026-04-12T12:00:00.000Z').map((item) => item.id),
-    [1, 2, 3],
-  );
+  assert.deepEqual(filterRiderDashboardOrders(orders, '0611', 'dashboard', '2026-04-12T12:00:00.000Z').map((item) => item.id), [1, 2, 3]);
 });
 
 test('filterRiderDashboardOrders treats history by Europe/Belgrade local day instead of UTC day', () => {
@@ -266,6 +267,166 @@ test('resolveRiderOrderAction rejects accept when status is empty', () => {
 
   assert.equal(result.allowed, false);
   assert.equal(result.error, 'order_status_updated');
+});
+
+test('buildRiderActionUpdateStatusRemarks reuses actionDecision remarks for accept and decline but writes progress timestamps for picked_up and complete', () => {
+  const baseRemarksJson = JSON.stringify([
+    'dispatch_meta:{"lastRiderDecision":null,"declinedRiderIds":[],"currentRiderId":"202","currentAssignedAt":"2026-04-12T10:00:00.000Z","currentExpiresAt":"2026-04-12T10:05:00.000Z","invalidatedRiderIds":[],"lastInvalidationReason":null,"acceptedAt":"2026-04-12T10:01:00.000Z","pickedUpAt":"","completedAt":"","telegramMessageRef":{"chatId":"123","messageId":7788}}',
+  ]);
+  const acceptDecision = resolveRiderOrderAction({
+    action: 'accept',
+    order: { status: 'awaiting_courier', remarksJson: baseRemarksJson, courierPhone: '381641234567' },
+    riderId: '202',
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-12T10:00:00.000Z',
+  });
+  const declineDecision = resolveRiderOrderAction({
+    action: 'decline',
+    order: { status: 'awaiting_courier', remarksJson: baseRemarksJson, courierPhone: '381641234567' },
+    riderId: '202',
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-12T10:00:00.000Z',
+  });
+  const pickedUpDecision = resolveRiderOrderAction({
+    action: 'picked_up',
+    order: { status: 'delivering', remarksJson: baseRemarksJson, courierPhone: '381641234567' },
+    riderId: '202',
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-12T10:02:00.000Z',
+  });
+  const completeDecision = resolveRiderOrderAction({
+    action: 'complete',
+    order: { status: 'picked_up', remarksJson: baseRemarksJson, courierPhone: '381641234567' },
+    riderId: '202',
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-12T10:03:00.000Z',
+  });
+
+  assert.equal(buildRiderActionUpdateStatusRemarks({ action: 'accept', remarksJson: baseRemarksJson, actionDecisionNextRemarksJson: acceptDecision.nextRemarksJson, acceptedAt: '2026-04-11T10:01:00.000Z', pickedUpAt: '', completedAt: '' }), acceptDecision.nextRemarksJson);
+  assert.equal(buildRiderActionUpdateStatusRemarks({ action: 'decline', remarksJson: baseRemarksJson, actionDecisionNextRemarksJson: declineDecision.nextRemarksJson, acceptedAt: '2026-04-11T10:01:00.000Z', pickedUpAt: '', completedAt: '' }), declineDecision.nextRemarksJson);
+
+  const pickedUpRemarks = readDispatchMetaFromRemarks(buildRiderActionUpdateStatusRemarks({
+    action: 'picked_up',
+    remarksJson: baseRemarksJson,
+    actionDecisionNextRemarksJson: pickedUpDecision.nextRemarksJson,
+    acceptedAt: '2026-04-11T10:01:00.000Z',
+    pickedUpAt: '2026-04-12T10:02:00.000Z',
+    completedAt: '',
+  }));
+  assert.equal(pickedUpRemarks.acceptedAt, '2026-04-11T10:01:00.000Z');
+  assert.equal(pickedUpRemarks.pickedUpAt, '2026-04-12T10:02:00.000Z');
+  assert.equal(pickedUpRemarks.completedAt, '');
+
+  const completeRemarks = readDispatchMetaFromRemarks(buildRiderActionUpdateStatusRemarks({
+    action: 'complete',
+    remarksJson: baseRemarksJson,
+    actionDecisionNextRemarksJson: completeDecision.nextRemarksJson,
+    acceptedAt: '2026-04-11T10:01:00.000Z',
+    pickedUpAt: '2026-04-12T10:02:00.000Z',
+    completedAt: '2026-04-12T10:03:00.000Z',
+  }));
+  assert.equal(completeRemarks.acceptedAt, '2026-04-11T10:01:00.000Z');
+  assert.equal(completeRemarks.pickedUpAt, '2026-04-12T10:02:00.000Z');
+  assert.equal(completeRemarks.completedAt, '2026-04-12T10:03:00.000Z');
+});
+
+test('buildRiderActionUpdateStatusPayload omits courier fields only for update_status_remarks mode but keeps remarks for progress actions', () => {
+  const dispatchRemarksJson = JSON.stringify([
+    'dispatch_meta:{"lastRiderDecision":null,"declinedRiderIds":[],"currentRiderId":"202","currentAssignedAt":"2026-04-12T10:00:00.000Z","currentExpiresAt":"2026-04-12T10:05:00.000Z","invalidatedRiderIds":[],"lastInvalidationReason":null,"acceptedAt":"2026-04-12T10:01:00.000Z","pickedUpAt":"","completedAt":"","telegramMessageRef":{"chatId":"123","messageId":7788}}',
+  ]);
+  const declineDecision = resolveRiderOrderAction({
+    action: 'decline',
+    order: { status: 'awaiting_courier', remarksJson: dispatchRemarksJson, courierPhone: '381641234567' },
+    riderId: '202',
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-12T10:00:00.000Z',
+  });
+  const acceptDecision = resolveRiderOrderAction({
+    action: 'accept',
+    order: { status: 'awaiting_courier', remarksJson: dispatchRemarksJson, courierPhone: '381641234567' },
+    riderId: '202',
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-12T10:00:00.000Z',
+  });
+  const pickedUpDecision = resolveRiderOrderAction({
+    action: 'picked_up',
+    order: { status: 'delivering', remarksJson: dispatchRemarksJson, courierPhone: '381641234567' },
+    riderId: '202',
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+    nowIso: '2026-04-12T10:02:00.000Z',
+  });
+
+  const declinePayload = buildRiderActionUpdateStatusPayload({
+    orderId: '101',
+    action: 'decline',
+    expectedCurrentStatus: declineDecision.expectedCurrentStatus,
+    targetStatus: declineDecision.targetStatus,
+    feedbackWriteMode: declineDecision.feedbackWriteMode,
+    nextRemarksJson: declineDecision.nextRemarksJson,
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+  });
+  assert.equal(declinePayload.id, 101);
+  assert.equal(declinePayload.expectedCurrentStatus, 'awaiting_courier');
+  assert.equal(declinePayload.status, 'awaiting_courier');
+  assert.equal(typeof declinePayload.remarksJson, 'string');
+  assert.equal(Object.hasOwn(declinePayload, 'courierName'), false);
+  assert.equal(Object.hasOwn(declinePayload, 'courierPhone'), false);
+
+  const acceptPayload = buildRiderActionUpdateStatusPayload({
+    orderId: '101',
+    action: 'accept',
+    expectedCurrentStatus: acceptDecision.expectedCurrentStatus,
+    targetStatus: acceptDecision.targetStatus,
+    feedbackWriteMode: acceptDecision.feedbackWriteMode,
+    nextRemarksJson: acceptDecision.nextRemarksJson,
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+  });
+  assert.equal(acceptPayload.id, 101);
+  assert.equal(acceptPayload.status, 'delivering');
+  assert.equal(typeof acceptPayload.remarksJson, 'undefined');
+  assert.equal(acceptPayload.courierName, 'Rider 1');
+  assert.equal(acceptPayload.courierPhone, '381641234567');
+
+  const pickedUpPayload = buildRiderActionUpdateStatusPayload({
+    orderId: '101',
+    action: 'picked_up',
+    expectedCurrentStatus: pickedUpDecision.expectedCurrentStatus,
+    targetStatus: pickedUpDecision.targetStatus,
+    feedbackWriteMode: pickedUpDecision.feedbackWriteMode,
+    nextRemarksJson: '["patched"]',
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+  });
+  assert.equal(pickedUpPayload.id, 101);
+  assert.equal(pickedUpPayload.status, 'picked_up');
+  assert.equal(pickedUpPayload.remarksJson, '["patched"]');
+  assert.equal(pickedUpPayload.courierName, 'Rider 1');
+  assert.equal(pickedUpPayload.courierPhone, '381641234567');
+
+  const stringOrderIdPayload = buildRiderActionUpdateStatusPayload({
+    orderId: 'order-101A',
+    action: 'decline',
+    expectedCurrentStatus: declineDecision.expectedCurrentStatus,
+    targetStatus: declineDecision.targetStatus,
+    feedbackWriteMode: declineDecision.feedbackWriteMode,
+    nextRemarksJson: declineDecision.nextRemarksJson,
+    riderName: 'Rider 1',
+    riderPhone: '381641234567',
+  });
+  assert.equal(stringOrderIdPayload.id, 'order-101A');
+  assert.equal(stringOrderIdPayload.status, 'awaiting_courier');
+  assert.equal(typeof stringOrderIdPayload.remarksJson, 'string');
+  assert.equal(Object.hasOwn(stringOrderIdPayload, 'courierName'), false);
+  assert.equal(Object.hasOwn(stringOrderIdPayload, 'courierPhone'), false);
 });
 
 test('resolveRiderDashboardActionState hides accept and decline when currentRiderId belongs to another rider', () => {

@@ -301,7 +301,7 @@ test('stale picked_up callback 在 delivering 且当前骑手匹配时可成功�
   const updateCall = calls.find((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`));
 
   assert.strictEqual(response.status, 200);
-  assert.ok(body.success);
+  assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.ok(updateCall);
   assert.match(updateCall.body, /"expectedCurrentStatus":"delivering"/);
@@ -319,7 +319,7 @@ test('stale accept callback 仍返回 expired_callback', async (t) => {
   const body = await readJson(response);
 
   assert.equal(response.status, 400);
-  assert.ok(!body.success);
+  assert.equal(body.success, false);
   assert.equal(body.error, 'expired_callback');
 });
 
@@ -334,7 +334,7 @@ test('stale complete callback 在订单已完成时返回 order_completed', asyn
   const body = await readJson(response);
 
   assert.equal(response.status, 409);
-  assert.ok(!body.success);
+  assert.equal(body.success, false);
   assert.equal(body.error, 'order_completed');
   assert.ok(!calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
@@ -350,7 +350,7 @@ test('配送阶段状态已变化时优先返回 order_status_updated', async (t
   const body = await readJson(response);
 
   assert.equal(response.status, 409);
-  assert.ok(!body.success);
+  assert.equal(body.success, false);
   assert.equal(body.error, 'order_status_updated');
   assert.ok(!calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
@@ -366,7 +366,7 @@ test('配送阶段当前骑手不匹配时优先返回 dispatch_invalidated', as
   const body = await readJson(response);
 
   assert.equal(response.status, 409);
-  assert.ok(!body.success);
+  assert.equal(body.success, false);
   assert.equal(body.error, 'dispatch_invalidated');
   assert.equal(body.reason, '已改派');
   assert.ok(!calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
@@ -419,7 +419,7 @@ test('配送阶段 admin orders 未授权时回退 rider orders 仍能推进 pic
   const body = await readJson(response);
 
   assert.strictEqual(response.status, 200);
-  assert.ok(body.success);
+  assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.ok(calls.some((call) => call.url.includes('/api/rider/orders?phone=')));
   assert.ok(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
@@ -437,7 +437,7 @@ test('配送阶段 remarksJson 为空但订单仍属于当前骑手时可推进 
   const body = await readJson(response);
 
   assert.strictEqual(response.status, 200);
-  assert.ok(body.success);
+  assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.ok(calls.some((call) => call.url.endsWith(`/api/order/update_status/${TEST_ORDER_ID}`)));
 });
@@ -459,7 +459,7 @@ test('picked_up writes pickedUpAt and edits original telegram message instead of
   const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.strictEqual(response.status, 200);
-  assert.ok(body.success);
+  assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.ok(updateCall);
 
@@ -542,7 +542,7 @@ test('picked_up 更新成功后即使二次读取订单失败也必须编辑原�
   const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.strictEqual(response.status, 200);
-  assert.ok(body.success);
+  assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.strictEqual(telegramCalls.length, 1);
   const telegramPayload = readTelegramSendPayload(telegramCalls[0]);
@@ -568,7 +568,7 @@ test('picked_up 编辑消息时使用订单真实 shopSlug 且 complete callback
   const telegramCall = calls.find((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.strictEqual(response.status, 200);
-  assert.ok(body.success);
+  assert.equal(body.success, true);
   assert.equal(body.action, 'picked_up');
   assert.ok(telegramCall);
   assert.match(telegramCall.body, /"shopSlug":"real-shop"/);
@@ -595,7 +595,7 @@ test('complete edits original telegram message to readonly delivered state witho
   const telegramCalls = calls.filter((call) => call.url.endsWith('/api/telegram/send'));
 
   assert.equal(response.status, 200);
-  assert.ok(body.success);
+  assert.equal(body.success, true);
   assert.equal(body.action, 'complete');
   assert.ok(updateCall);
 
@@ -838,7 +838,7 @@ test('decline 通过共享 actionDecision 的单一路径写回 update_status re
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.action, 'decline');
-  assert.equal(body.reassigned, false);
+  assert.ok(!body.reassigned);
   assert.ok(updateCall);
   assert.ok(!calls.some((call) => call.url.endsWith('/api/admin/orders/remarks')));
 
@@ -937,7 +937,7 @@ test('decline 自动续派在 rider-dispatch 返回 success true 且 telegram_di
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.action, 'decline');
-  assert.equal(body.reassigned, true);
+  assert.ok(body.reassigned);
   assert.ok(redispatchCall);
   assert.match(redispatchCall.body, new RegExp(`"forceRiderId":"${nextRiderId}"`));
 });
@@ -1017,10 +1017,11 @@ test('decline 自动续派不得再把 deliveredCount 当作 reassigned 成功�
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.action, 'decline');
-  assert.equal(body.reassigned, false);
+  assert.ok(!body.reassigned);
   assert.ok(redispatchCall);
   assert.match(redispatchCall.body, new RegExp(`"forceRiderId":"${nextRiderId}"`));
 });
+
 
 test('decline 自动续派在 rider-dispatch 返回 success true 但 telegram_dispatch 失败时必须保持 reassigned false', async (t) => {
   useTestEnv(t);
@@ -1090,7 +1091,7 @@ test('decline 自动续派在 rider-dispatch 返回 success true 但 telegram_di
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.action, 'decline');
-  assert.equal(body.reassigned, false);
+  assert.ok(!body.reassigned);
   assert.ok(redispatchCall);
   assert.match(redispatchCall.body, new RegExp(`"forceRiderId":"${nextRiderId}"`));
 });

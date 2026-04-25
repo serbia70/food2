@@ -276,8 +276,15 @@ export function pickAvailableRiders<T extends Pick<Rider, 'id' | 'name' | 'phone
   return riders.filter((rider) => rider.status === 'available' && String(rider.phone || '').trim() !== '');
 }
 
-export function buildContactableRiderRows<T extends Pick<Rider, 'id' | 'name' | 'phone' | 'status'>>(riders: T[]): T[] {
-  return pickAvailableRiders(riders);
+export function buildContactableRiderRows<
+  T extends Pick<Rider, 'id' | 'name' | 'phone' | 'status'> & { telegramChatId?: string | null; telegram_chat_id?: string | null },
+>(riders: T[]): T[] {
+  return pickAvailableRiders(riders).map((rider) => {
+    const telegramChatId = String(rider.telegramChatId || rider.telegram_chat_id || '').trim();
+    return telegramChatId && !String(rider.telegramChatId || '').trim()
+      ? { ...rider, telegramChatId }
+      : rider;
+  });
 }
 
 export function readDispatchMetaFromRemarks(remarksJson: string | null | undefined): DispatchMeta {

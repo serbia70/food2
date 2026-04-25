@@ -16,6 +16,9 @@ import {
 } from './rider-dispatch.ts';
 import {
   buildRiderSingleMessageTelegram,
+  buildTelegramClaimCallback,
+  buildTelegramDeepLink,
+  buildTelegramDispatchMessage,
   buildTelegramEditMessagePayload,
   buildTelegramShortClaimCallback,
 } from './telegram-dispatch.ts';
@@ -103,6 +106,38 @@ export type AdminWarningShape = {
   upstream_body?: string;
 };
 
+export type AdminTelegramNotificationFailure = {
+  success: false;
+  error: string;
+};
+
+export type AdminTelegramCompletionSuccessPayload<TTelegramDispatch> = {
+  warning?: AdminWarningShape;
+  telegram_notification?: AdminTelegramNotificationFailure;
+  telegram_dispatch?: TTelegramDispatch;
+};
+
+export function buildAdminTelegramCompletionResponse<TTelegramDispatch, TPublicTelegramDispatch = TTelegramDispatch>({
+  successPayload,
+  transformTelegramDispatch,
+}: {
+  successPayload: AdminTelegramCompletionSuccessPayload<TTelegramDispatch>;
+  transformTelegramDispatch?: (summary: TTelegramDispatch) => TPublicTelegramDispatch;
+}): Response {
+  const { telegram_dispatch, ...rest } = successPayload;
+  return buildAdminJsonResponse({
+    success: true,
+    ...rest,
+    ...(telegram_dispatch === undefined
+      ? {}
+      : {
+          telegram_dispatch: transformTelegramDispatch
+            ? transformTelegramDispatch(telegram_dispatch)
+            : telegram_dispatch,
+        }),
+  });
+}
+
 export function buildTelegramMessageRefPersistWarning(
   result: Extract<AdminTelegramMessageRefPersistResult, { ok: false }>,
   options: { remarksWriteFailedOnly?: boolean } = {},
@@ -127,6 +162,25 @@ export function readTelegramRiderChatId(rider: { telegramChatId?: unknown; teleg
   const camel = String(rider.telegramChatId || '').trim();
   if (camel) return camel;
   return String(rider.telegram_chat_id || '').trim();
+}
+
+export function readResolvedTelegramChatId(
+  rider: { telegramChatId?: unknown; telegram_chat_id?: unknown },
+  fallbackChatId?: string,
+): string {
+  const riderChatId = readTelegramRiderChatId(rider);
+  const requestChatId = String(fallbackChatId || '').trim();
+  return riderChatId || requestChatId;
+}
+
+export function readOptionalTelegramCallbackData(build: () => string): string {
+  try {
+    return build();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (message === 'missing_telegram_callback_secret') return '';
+    throw error;
+  }
 }
 
 export type AdminTelegramMessageRefPersistHandledResult = {
@@ -191,6 +245,43 @@ export async function maybePersistAdminTelegramMessageRefWarning({
   return handled.warning;
 }
 
+export async function finalizeAdminTelegramCompletionResponse<TTelegramDispatch, TPublicTelegramDispatch = TTelegramDispatch>({
+  request,
+  cookies,
+  apiBaseUrl,
+  orderId,
+  messageRef,
+  successPayload,
+  warningOptions,
+  transformTelegramDispatch,
+}: {
+  request: Request;
+  cookies: AstroCookies;
+  apiBaseUrl: string;
+  orderId: string;
+  messageRef?: NonNullable<DispatchMeta['telegramMessageRef']>;
+  successPayload: Omit<AdminTelegramCompletionSuccessPayload<TTelegramDispatch>, 'warning'>;
+  warningOptions?: { remarksWriteFailedOnly?: boolean };
+  transformTelegramDispatch?: (summary: TTelegramDispatch) => TPublicTelegramDispatch;
+}): Promise<Response> {
+  const warning = await maybePersistAdminTelegramMessageRefWarning({
+    request,
+    cookies,
+    apiBaseUrl,
+    orderId,
+    messageRef,
+    warningOptions,
+  });
+
+  return buildAdminTelegramCompletionResponse({
+    successPayload: {
+      ...successPayload,
+      ...(warning ? { warning } : {}),
+    },
+    transformTelegramDispatch,
+  });
+}
+
 export function buildAdminOrderFetchFailedResponse(
   result: Extract<AdminOrderReadResult, { ok: false }>,
   statusOverride?: number,
@@ -246,6 +337,18 @@ export function buildAdminNoAvailableRidersResponse(): Response {
   return buildAdminSimpleErrorResponse('no_available_riders', 409);
 }
 
+export function pickAdminSingleRiderById<TRider extends { id?: unknown }>({
+  riders,
+  riderId,
+}: {
+  riders: TRider[];
+  riderId: string;
+}): TRider | null {
+  const normalizedRiderId = String(riderId || '').trim();
+  if (!normalizedRiderId) return null;
+  return riders.find((rider) => String(rider?.id || '').trim() === normalizedRiderId) || null;
+}
+
 export function readTelegramItemSummaryFromOrder(order: Record<string, unknown> | null | undefined): string[] {
   const raw = order?.itemsJson ?? order?.items_json ?? order?.items;
   if (!raw) return [];
@@ -277,6 +380,129 @@ export function readTelegramItemSummaryFromOrder(order: Record<string, unknown> 
       return `${title} x${quantity}${priceLabel}`;
     })
     .filter(Boolean);
+}
+
+export interface AdminAssignOrderSummary {
+  orderNo: string;
+  shopName: string;
+  shopMapUrl: string;
+  address: string;
+  deliveryMapUrl: string;
+  phone: string;
+  totalAmount: number;
+  scheduledFor: string;
+  itemSummary: string[];
+}
+
+export interface AdminPublishOrderMessageInput {
+  shopName: string;
+  address: string;
+  totalAmount: number;
+  pickupEtaMinutes: number;
+  phone: string;
+  dashboardLink: string;
+  shopMapUrl: string;
+  deliveryMapUrl: string;
+}
+
+function readAdminOrderSummaryItems(row: Record<string, unknown>): Array<{ name?: unknown; quantity?: unknown }> {
+  if (Array.isArray(row.items)) return row.items as Array<{ name?: unknown; quantity?: unknown }>;
+
+  const rawItemsJson = row.itemsJson ?? row.items_json;
+  if (typeof rawItemsJson !== 'string' || !rawItemsJson.trim()) return [];
+
+  try {
+    const parsed = JSON.parse(rawItemsJson) as unknown;
+    return Array.isArray(parsed) ? parsed as Array<{ name?: unknown; quantity?: unknown }> : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeAdminOrderShopSlug(value: unknown): string {
+  const slug = String(value || '').trim();
+  return /^[a-z0-9][a-z0-9-]*$/i.test(slug) ? slug : '';
+}
+
+export function readAdminOrderShopSlug(row: Record<string, unknown> | null | undefined): string {
+  if (!row) return '';
+  return normalizeAdminOrderShopSlug(row.shopSlug || row.shop_slug || row.restaurantSlug || row.restaurant_slug || '');
+}
+
+export function readAdminAssignOrderSummary(row: Record<string, unknown>): AdminAssignOrderSummary {
+  const items = readAdminOrderSummaryItems(row);
+  const parsedTotalAmount = Number(row.totalAmount ?? row.total_amount);
+  const userPhone = String(row.userPhone ?? row.user_phone ?? '').trim();
+  const orderView = buildRiderOrderView({
+    shopName: String(row.shopName ?? row.shop_name ?? '').trim(),
+    restaurantName: String(row.restaurantName ?? row.restaurant_name ?? '').trim(),
+    shopAddress: String(row.shopAddress ?? row.shop_address ?? '').trim(),
+    restaurantAddress: String(row.restaurantAddress ?? row.restaurant_address ?? '').trim(),
+    shopMapUrl: String(row.shopMapUrl ?? row.shop_map_url ?? '').trim(),
+    tableInfo: String(row.tableInfo ?? row.table_info ?? '').trim(),
+    deliveryAddress: String(row.deliveryAddress ?? row.delivery_address ?? '').trim(),
+    deliveryMapUrl: String(row.deliveryMapUrl ?? row.delivery_map_url ?? '').trim(),
+    userPhone,
+    totalAmount: row.totalAmount ?? row.total_amount,
+  });
+
+  return {
+    orderNo: String(row.orderNo ?? row.order_no ?? '').trim(),
+    shopName: orderView.shopName,
+    shopMapUrl: orderView.shopMapUrl,
+    address: orderView.deliveryAddress || '未提供地址',
+    deliveryMapUrl: orderView.deliveryMapUrl,
+    phone: userPhone || '-',
+    totalAmount: Number.isFinite(parsedTotalAmount) ? parsedTotalAmount : 0,
+    scheduledFor: String(row.scheduledFor ?? row.scheduled_for ?? '').trim(),
+    itemSummary: items
+      .map((item) => {
+        const name = String(item?.name || '').trim();
+        const quantity = Number(item?.quantity || 0);
+        if (!name || !Number.isFinite(quantity) || quantity <= 0) return '';
+        return `${name} x${quantity}`;
+      })
+      .filter(Boolean),
+  };
+}
+
+export function readAdminPublishOrderMessageInput(
+  row: Record<string, unknown>,
+  siteBaseUrl: string,
+): AdminPublishOrderMessageInput {
+  const orderView = buildRiderOrderView({
+    shopName: String(row.shopName ?? row.shop_name ?? '').trim(),
+    restaurantName: String(row.restaurantName ?? row.restaurant_name ?? '').trim(),
+    shopAddress: String(row.shopAddress ?? row.shop_address ?? '').trim(),
+    restaurantAddress: String(row.restaurantAddress ?? row.restaurant_address ?? '').trim(),
+    shopMapUrl: String(row.shopMapUrl ?? row.shop_map_url ?? '').trim(),
+    tableInfo: String(row.tableInfo ?? row.table_info ?? '').trim(),
+    deliveryAddress: String(row.deliveryAddress ?? row.delivery_address ?? '').trim(),
+    deliveryMapUrl: String(row.deliveryMapUrl ?? row.delivery_map_url ?? '').trim(),
+    userPhone: String(row.userPhone ?? row.user_phone ?? '').trim(),
+    totalAmount: row.totalAmount ?? row.total_amount,
+  });
+  const totalAmount = Number(row.totalAmount ?? row.total_amount);
+  const pickupEtaMinutes = Number(row.pickupEtaMinutes ?? row.pickup_eta_minutes);
+  const phone = String(row.userPhone ?? row.user_phone ?? '').trim();
+  const restaurantId = readAdminOrderShopSlug(row)
+    || String(row.shopId ?? row.shop_id ?? '').trim();
+  const dashboardLink = buildTelegramDeepLink({
+    baseUrl: String(siteBaseUrl || '').trim().replace(/\/$/, '') || 'https://food2.serbia70.com',
+    restaurantId,
+    orderId: String(row.id ?? '').trim(),
+  });
+
+  return {
+    shopName: orderView.shopName,
+    address: orderView.deliveryAddress || '未提供地址',
+    totalAmount: Number.isFinite(totalAmount) ? totalAmount : 0,
+    pickupEtaMinutes: Number.isFinite(pickupEtaMinutes) ? pickupEtaMinutes : 0,
+    phone,
+    dashboardLink,
+    shopMapUrl: orderView.shopMapUrl,
+    deliveryMapUrl: orderView.deliveryMapUrl,
+  };
 }
 
 export function readJsonObject(text: string): Record<string, unknown> | null {
@@ -315,6 +541,393 @@ export function readTelegramSendResult(
     ok: true,
     messageId,
   };
+}
+
+export function readAdminTelegramSendOutcome({
+  response,
+  responseText,
+  chatId,
+}: {
+  response: Response;
+  responseText: string;
+  chatId: string;
+}): { success: true; messageRef?: NonNullable<DispatchMeta['telegramMessageRef']> } | { success: false; error: string } {
+  const sendResult = readTelegramSendResult(response, responseText);
+  if (!sendResult.ok) {
+    return {
+      success: false,
+      error: sendResult.error,
+    };
+  }
+
+  return {
+    success: true,
+    ...(sendResult.messageId > 0 ? { messageRef: { chatId, messageId: sendResult.messageId } } : {}),
+  };
+}
+
+export async function sendAdminTelegramWithReplyMarkupRetry({
+  request,
+  payloadBase,
+  replyMarkup,
+  chatId,
+}: {
+  request: Request;
+  payloadBase: Record<string, unknown>;
+  replyMarkup?: unknown;
+  chatId: string;
+}): Promise<{ success: true; messageRef?: NonNullable<DispatchMeta['telegramMessageRef']> } | { success: false; error: string }> {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...buildForwardHeaders(request),
+  };
+
+  const sendTelegram = async (payload: Record<string, unknown>) => {
+    const response = await fetch(new URL('/api/telegram/send', request.url), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const responseText = await response.text();
+    return {
+      response,
+      responseText,
+    };
+  };
+
+  let { response, responseText } = await sendTelegram({
+    ...payloadBase,
+    ...(replyMarkup === undefined ? {} : { reply_markup: replyMarkup }),
+  });
+  const shouldRetryWithoutReplyMarkup = !response.ok
+    && response.headers.get('content-type')?.includes('text/html')
+    && responseText.includes('502');
+
+  if (shouldRetryWithoutReplyMarkup) {
+    ({ response, responseText } = await sendTelegram(payloadBase));
+  }
+
+  return readAdminTelegramSendOutcome({
+    response,
+    responseText,
+    chatId,
+  });
+}
+
+export type AdminTelegramSendMessage = {
+  text: string;
+  replyMarkup?: unknown;
+};
+
+export function normalizeTelegramSendError(error: unknown): string {
+  const errorMessage = error instanceof Error
+    ? error.message
+    : typeof error === 'string'
+      ? error
+      : '';
+  return errorMessage || 'telegram_send_failed';
+}
+
+export type AdminTelegramPayloadBaseExtras = {
+  shop_slug?: string;
+  telegramBotToken?: string;
+};
+
+export function buildAdminTelegramPayloadBaseExtras({
+  shopSlug,
+  shop_slug,
+  telegramBotToken,
+}: {
+  shopSlug?: unknown;
+  shop_slug?: unknown;
+  telegramBotToken?: unknown;
+}): AdminTelegramPayloadBaseExtras {
+  const normalizedShopSlug = String(shop_slug ?? shopSlug ?? '').trim();
+  const normalizedTelegramBotToken = String(telegramBotToken || '').trim();
+
+  return {
+    ...(normalizedShopSlug ? { shop_slug: normalizedShopSlug } : {}),
+    ...(normalizedTelegramBotToken ? { telegramBotToken: normalizedTelegramBotToken } : {}),
+  };
+}
+
+export function buildAdminTelegramSendPreparation({
+  orderId,
+  rider,
+  fallbackChatId,
+  shopSlug,
+  shop_slug,
+  telegramBotToken,
+  restaurantId,
+  secretOverride,
+}: {
+  orderId: string | number;
+  rider: { id?: unknown; name?: unknown; phone?: unknown; telegramChatId?: unknown; telegram_chat_id?: unknown };
+  fallbackChatId?: unknown;
+  shopSlug?: unknown;
+  shop_slug?: unknown;
+  telegramBotToken?: unknown;
+  restaurantId?: unknown;
+  secretOverride?: unknown;
+}): {
+  chatId: string;
+  payloadBaseExtras: AdminTelegramPayloadBaseExtras;
+  callbackBase: AdminTelegramSendCallbackBase;
+} {
+  const chatId = readResolvedTelegramChatId(rider, String(fallbackChatId || ''));
+  return {
+    chatId,
+    payloadBaseExtras: buildAdminTelegramPayloadBaseExtras({
+      shopSlug,
+      shop_slug,
+      telegramBotToken,
+    }),
+    callbackBase: buildAdminTelegramCallbackBase({
+      orderId,
+      rider,
+      restaurantId: String(restaurantId ?? ''),
+      telegramChatId: chatId,
+      secretOverride: String(secretOverride || ''),
+    }),
+  };
+}
+
+export async function sendPreparedAdminTelegramToRider({
+  request,
+  rider,
+  fallbackChatId,
+  payloadBaseExtras,
+  message,
+}: {
+  request: Request;
+  rider: { telegramChatId?: unknown; telegram_chat_id?: unknown };
+  fallbackChatId?: string;
+  payloadBaseExtras?: Record<string, unknown>;
+  message: AdminTelegramSendMessage;
+}): Promise<{ success: true; messageRef?: NonNullable<DispatchMeta['telegramMessageRef']> } | { success: false; error: string }> {
+  const chatId = readResolvedTelegramChatId(rider, fallbackChatId);
+  if (!chatId) return { success: false, error: 'telegram_chat_id_missing' };
+
+  try {
+    return await sendAdminTelegramWithReplyMarkupRetry({
+      request,
+      payloadBase: {
+        ...(payloadBaseExtras || {}),
+        chat_id: chatId,
+        chatId,
+        text: message.text,
+      },
+      replyMarkup: message.replyMarkup,
+      chatId,
+    });
+  } catch (error) {
+    return {
+      success: false,
+      error: normalizeTelegramSendError(error),
+    };
+  }
+}
+
+export type AdminTelegramSendCallbackBase = {
+  orderId: number;
+  riderId: number;
+  riderName: string;
+  riderPhone: string;
+  restaurantId: string;
+  telegramChatId: string;
+  secretOverride?: string;
+};
+
+export function buildAdminTelegramCallbackBase({
+  orderId,
+  rider,
+  restaurantId,
+  telegramChatId,
+  secretOverride,
+}: {
+  orderId: string | number;
+  rider: { id?: unknown; name?: unknown; phone?: unknown };
+  restaurantId?: string;
+  telegramChatId?: string;
+  secretOverride?: string;
+}): AdminTelegramSendCallbackBase {
+  const normalizedSecretOverride = String(secretOverride || '').trim();
+
+  return {
+    orderId: Number(orderId || 0),
+    riderId: Number(rider.id || 0),
+    riderName: String(rider.name || '').trim(),
+    riderPhone: String(rider.phone || '').trim(),
+    restaurantId: String(restaurantId || '').trim() || 'admin',
+    telegramChatId: String(telegramChatId || '').trim(),
+    ...(normalizedSecretOverride ? { secretOverride: normalizedSecretOverride } : {}),
+  };
+}
+
+export function buildOptionalAdminTelegramClaimCallbackData({
+  callbackBase,
+  buildCallback,
+}: {
+  callbackBase: AdminTelegramSendCallbackBase;
+  buildCallback: (callbackBase: AdminTelegramSendCallbackBase) => string;
+}): string | undefined {
+  if (
+    callbackBase.riderId <= 0
+    || !callbackBase.riderName
+    || !callbackBase.riderPhone
+    || !callbackBase.telegramChatId
+  ) {
+    return undefined;
+  }
+
+  const callbackData = readOptionalTelegramCallbackData(() => buildCallback(callbackBase));
+  return callbackData || undefined;
+}
+
+export function buildAdminTelegramSendCallbacks({
+  rider,
+  fallbackChatId,
+  callbackBase,
+  builders,
+}: {
+  rider: { telegramChatId?: unknown; telegram_chat_id?: unknown };
+  fallbackChatId?: string;
+  callbackBase: AdminTelegramSendCallbackBase;
+  builders: {
+    claimCallbackData?: (callbackBase: AdminTelegramSendCallbackBase) => string;
+    declineCallbackData?: (callbackBase: AdminTelegramSendCallbackBase) => string;
+  };
+}): { chatId: string; claimCallbackData?: string; declineCallbackData?: string } | { error: 'telegram_chat_id_missing' } {
+  const chatId = readResolvedTelegramChatId(rider, fallbackChatId);
+  if (!chatId) return { error: 'telegram_chat_id_missing' };
+
+  const callbackBaseWithChatId = {
+    ...callbackBase,
+    telegramChatId: chatId,
+  };
+  const claimCallbackData = builders.claimCallbackData
+    ? buildOptionalAdminTelegramClaimCallbackData({
+      callbackBase: callbackBaseWithChatId,
+      buildCallback: builders.claimCallbackData,
+    })
+    : undefined;
+  const declineCallbackData = builders.declineCallbackData
+    ? buildOptionalAdminTelegramClaimCallbackData({
+      callbackBase: callbackBaseWithChatId,
+      buildCallback: builders.declineCallbackData,
+    })
+    : undefined;
+
+  return {
+    chatId,
+    ...(claimCallbackData ? { claimCallbackData } : {}),
+    ...(declineCallbackData ? { declineCallbackData } : {}),
+  };
+}
+
+export async function sendAdminDispatchTelegramToRider({
+  request,
+  rider,
+  fallbackChatId,
+  payloadBaseExtras,
+  callbackBase,
+  messageInput,
+}: {
+  request: Request;
+  rider: { telegramChatId?: unknown; telegram_chat_id?: unknown };
+  fallbackChatId?: string;
+  payloadBaseExtras?: Record<string, unknown>;
+  callbackBase: AdminTelegramSendCallbackBase;
+  messageInput: {
+    shopName: string;
+    address: string;
+    totalAmount: number;
+    pickupEtaMinutes: number;
+    phone: string;
+    dashboardLink: string;
+    shopMapUrl?: string;
+    deliveryMapUrl?: string;
+  };
+}): Promise<{ success: true; messageRef?: NonNullable<DispatchMeta['telegramMessageRef']> } | { success: false; error: string }> {
+  const callbacks = buildAdminTelegramSendCallbacks({
+    rider,
+    fallbackChatId,
+    callbackBase,
+    builders: {
+      claimCallbackData: (input) => buildTelegramClaimCallback(input),
+    },
+  });
+  if ('error' in callbacks) return { success: false, error: callbacks.error };
+
+  try {
+    const message = buildTelegramDispatchMessage({
+      ...messageInput,
+      ...(callbacks.claimCallbackData ? { claimCallbackData: callbacks.claimCallbackData } : {}),
+    });
+
+    return await sendPreparedAdminTelegramToRider({
+      request,
+      rider,
+      fallbackChatId: callbacks.chatId,
+      payloadBaseExtras,
+      message,
+    });
+  } catch (error) {
+    return {
+      success: false,
+      error: normalizeTelegramSendError(error),
+    };
+  }
+}
+
+export async function sendAdminTelegramToRider({
+  request,
+  rider,
+  fallbackChatId,
+  payloadBaseExtras,
+  callbackBase,
+  buildMessage,
+}: {
+  request: Request;
+  rider: { telegramChatId?: unknown; telegram_chat_id?: unknown };
+  fallbackChatId?: string;
+  payloadBaseExtras?: Record<string, unknown>;
+  callbackBase: AdminTelegramSendCallbackBase;
+  buildMessage: (callbacks: { claimCallbackData?: string; declineCallbackData?: string }) => AdminTelegramSendMessage;
+}): Promise<{ success: true; messageRef?: NonNullable<DispatchMeta['telegramMessageRef']> } | { success: false; error: string }> {
+  const callbacks = buildAdminTelegramSendCallbacks({
+    rider,
+    fallbackChatId,
+    callbackBase,
+    builders: {
+      claimCallbackData: (input) => buildTelegramShortClaimCallback(input),
+      declineCallbackData: (input) => buildTelegramShortClaimCallback({
+        ...input,
+        action: 'decline',
+      }),
+    },
+  });
+  if ('error' in callbacks) return { success: false, error: callbacks.error };
+
+  try {
+    const message = buildMessage({
+      ...(callbacks.claimCallbackData ? { claimCallbackData: callbacks.claimCallbackData } : {}),
+      ...(callbacks.declineCallbackData ? { declineCallbackData: callbacks.declineCallbackData } : {}),
+    });
+
+    return await sendPreparedAdminTelegramToRider({
+      request,
+      rider,
+      fallbackChatId: callbacks.chatId,
+      payloadBaseExtras,
+      message,
+    });
+  } catch (error) {
+    return {
+      success: false,
+      error: normalizeTelegramSendError(error),
+    };
+  }
 }
 
 function parseJsonValue(text: string): unknown {

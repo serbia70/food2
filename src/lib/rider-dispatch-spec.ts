@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  buildContactableRiderRows,
   buildDispatchMetaRemarks,
   buildRiderOrderMapUrl,
   buildRiderOrderView,
@@ -22,6 +23,20 @@ import {
 } from './rider-route-shared.ts';
 
 const riderDashboardSource = readFileSync(new URL('../pages/rider/dashboard.astro', import.meta.url), 'utf8');
+
+test('buildContactableRiderRows normalizes snake_case telegram chat id for admin assign entry', () => {
+  const [rider] = buildContactableRiderRows([
+    {
+      id: 202,
+      name: 'Rider 1',
+      phone: '381641234567',
+      status: 'available' as const,
+      telegram_chat_id: 'chat-snake',
+    },
+  ]);
+
+  assert.equal((rider as { telegramChatId?: string } | undefined)?.telegramChatId, 'chat-snake');
+});
 
 test('buildRiderOrderView returns shared shop and map fields', () => {
   const view = buildRiderOrderView({

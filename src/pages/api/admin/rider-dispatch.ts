@@ -1,30 +1,29 @@
 import type { APIRoute } from 'astro';
 import { API_BASE_URL, DISPATCH_AUTO_REASSIGN_MINUTES, SITE_BASE_URL } from '../../../config.ts';
-import { proxyAdminRequest } from '../../../lib/admin-api-route.ts';
 import {
-  type AdminWarningShape,
   buildAdminDispatchMetaWriteFailedResponse,
   buildAdminForcedRiderNotFoundResponse,
   buildAdminInvalidActionResponse,
-  buildAdminJsonResponse,
   buildAdminOrderFetchFailedResponse,
   buildAdminOrderIdRequiredResponse,
   buildAdminOrderSnapshotUnavailableResponse,
   buildAdminRidersReadFailureResponse,
-  maybePersistAdminTelegramMessageRefWarning,
-  readAdminAssignableRiders,
+  buildAdminTelegramCompletionResponse,
+  finalizeAdminTelegramCompletionResponse,
   readAdminAssignableRidersOrResponse,
+  readAdminPublishOrderMessageInput,
   readJsonObject,
   readAdminOrderById,
   readProtectedTelegramCallbackSecret,
   readTelegramRiderChatId,
-  readTelegramSendResult,
+  sendAdminDispatchTelegramToRider,
   updateAdminOrderStatusOrResponse,
   writeAdminDispatchMetaRemarks,
+  buildAdminTelegramSendPreparation,
+  pickAdminSingleRiderById,
 } from '../../../lib/rider-route-shared.ts';
-import { buildRiderOrderView, readDispatchMetaFromRemarks, type DispatchMeta } from '../../../lib/rider-dispatch.ts';
+import { readDispatchMetaFromRemarks, type DispatchMeta } from '../../../lib/rider-dispatch.ts';
 import { type AssignableRider } from '../../../lib/rider-assignment.ts';
-import { buildTelegramClaimCallback, buildTelegramDeepLink, buildTelegramDispatchMessage } from '../../../lib/telegram-dispatch.ts';
 
 export const prerender = false;
 
@@ -95,13 +94,7 @@ function normalizeRiderId(value: unknown): string {
 type TelegramDispatchPublicSummary = Omit<
   TelegramDispatchSummary,
   'availableRiderCount' | 'telegramBoundCount' | 'deliveredCount' | 'telegramMessageRef'
->;
-
-type TelegramDispatchPublicResponseBody = {
-  success: true;
-  telegram_dispatch: TelegramDispatchPublicSummary | TelegramDispatchSkippedSummary;
-  warning?: AdminWarningShape;
-};
+> & { attempts: Array<Omit<TelegramDispatchAttempt, 'messageRef'>> };
 
 function toPublicTelegramDispatchSummary(
   summary: TelegramDispatchSummary | TelegramDispatchSkippedSummary,
@@ -111,27 +104,24 @@ function toPublicTelegramDispatchSummary(
   delete normalized.telegramBoundCount;
   delete normalized.deliveredCount;
   delete normalized.telegramMessageRef;
+  if (Array.isArray(summary.attempts)) {
+    normalized.attempts = summary.attempts.map(({ messageRef, ...attempt }) => attempt);
+  }
   return normalized as TelegramDispatchPublicSummary | TelegramDispatchSkippedSummary;
-}
-
-function buildTelegramDispatchResponse(
-  summary: TelegramDispatchSummary | TelegramDispatchSkippedSummary,
-  warning?: AdminWarningShape,
-): Response {
-  return buildAdminJsonResponse({
-    success: true,
-    telegram_dispatch: toPublicTelegramDispatchSummary(summary),
-    ...(warning ? { warning } : {}),
-  } satisfies TelegramDispatchPublicResponseBody);
 }
 
 function buildSkippedTelegramDispatchResponse(
   skippedReason: NonNullable<TelegramDispatchSkippedSummary['skippedReason']>,
 ): Response {
-  return buildTelegramDispatchResponse({
-    failedCount: 0,
-    skippedReason,
-    attempts: [],
+  return buildAdminTelegramCompletionResponse({
+    successPayload: {
+      telegram_dispatch: {
+        failedCount: 0,
+        skippedReason,
+        attempts: [],
+      },
+    },
+    transformTelegramDispatch: toPublicTelegramDispatchSummary,
   });
 }
 
@@ -320,12 +310,13 @@ async function resolveRiderForPublish({
   }
 
   const normalizedForcedRiderId = normalizeRiderId(forcedRiderId);
-  const scopedRiders = normalizedForcedRiderId
-    ? ridersResult.riders.filter((rider) => normalizeRiderId(rider.id) === normalizedForcedRiderId)
-    : ridersResult.riders;
-  const selectedRiderId = normalizeRiderId(scopedRiders[0]?.id);
+  const forcedRider = pickAdminSingleRiderById({
+    riders: ridersResult.riders,
+    riderId: normalizedForcedRiderId,
+  });
+  const selectedRiderId = normalizeRiderId((forcedRider || ridersResult.riders[0])?.id);
 
-  if (normalizedForcedRiderId && !selectedRiderId) {
+  if (normalizedForcedRiderId && !forcedRider) {
     return {
       ok: false,
       response: buildAdminForcedRiderNotFoundResponse(forcedRiderId),
@@ -433,18 +424,8 @@ async function notifyTelegramRecipients(
     };
   }
 
-  const orderView = buildRiderOrderView(order);
-  const totalAmount = Number(order.totalAmount || 0);
-  const pickupEtaMinutes = Number(order.pickupEtaMinutes || 0);
-  const phone = String(order.userPhone || '');
-  const rawCookie = String(request.headers.get('cookie') || '').trim();
   const callbackSecretOverride = await readProtectedTelegramCallbackSecret(request);
-  const telegramSendUrl = new URL('/api/telegram/send', request.url).toString();
-  const dashboardLink = buildTelegramDeepLink({
-    baseUrl: String(SITE_BASE_URL || '').trim().replace(/\/$/, '') || 'https://food2.serbia70.com',
-    restaurantId,
-    orderId: order.id,
-  });
+  const messageInput = readAdminPublishOrderMessageInput(order, SITE_BASE_URL);
 
   const attempts = await Promise.all(telegramRiders.map(async (rider): Promise<TelegramDispatchAttempt> => {
     const riderId = Number(rider.id || 0);
@@ -457,73 +438,37 @@ async function notifyTelegramRecipients(
       riderPhone,
       telegramChatIdBound: true,
     };
-    let claimCallbackData: string | undefined;
-    if (riderId > 0 && riderName && riderPhone && riderChatId) {
-      try {
-        claimCallbackData = buildTelegramClaimCallback({
-          orderId: Number(order.id || 0),
-          riderId,
-          riderName,
-          restaurantId,
-          riderPhone,
-          telegramChatId: riderChatId,
-          secretOverride: callbackSecretOverride,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : '';
-        if (message !== 'missing_telegram_callback_secret') throw error;
-      }
-    }
-    const message = buildTelegramDispatchMessage({
-      shopName: orderView.shopName,
-      address: orderView.deliveryAddress || '未提供地址',
-      totalAmount,
-      pickupEtaMinutes,
-      phone,
-      dashboardLink,
-      shopMapUrl: orderView.shopMapUrl,
-      deliveryMapUrl: orderView.deliveryMapUrl,
-      claimCallbackData,
+    const prepared = buildAdminTelegramSendPreparation({
+      orderId: order.id,
+      rider,
+      fallbackChatId: riderChatId,
+      shopSlug: order.shopSlug,
+      restaurantId,
+      secretOverride: callbackSecretOverride,
     });
 
-    try {
-      const sendRes = await proxyAdminRequest({
-        request,
-        cookies,
-        url: telegramSendUrl,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(rawCookie ? { cookie: rawCookie } : {}),
-        },
-        body: JSON.stringify({
-          shopSlug: String(order.shopSlug || '').trim(),
-          chat_id: riderChatId,
-          ...message,
-        }),
-      });
-      const responseText = await sendRes.text();
-      const sendResult = readTelegramSendResult(sendRes, responseText);
-      if (!sendResult.ok) {
-        return {
-          ...attemptBase,
-          delivered: false,
-          error: sendResult.error,
-        };
-      }
+    const sendOutcome = await sendAdminDispatchTelegramToRider({
+      request,
+      rider,
+      fallbackChatId: prepared.chatId,
+      payloadBaseExtras: prepared.payloadBaseExtras,
+      callbackBase: prepared.callbackBase,
+      messageInput,
+    });
 
-      return {
-        ...attemptBase,
-        delivered: true,
-        ...(sendResult.messageId > 0 ? { messageRef: { chatId: riderChatId, messageId: sendResult.messageId } } : {}),
-      };
-    } catch (error) {
+    if (!sendOutcome.success) {
       return {
         ...attemptBase,
         delivered: false,
-        error: error instanceof Error ? error.message : 'telegram_send_failed',
+        error: sendOutcome.error,
       };
     }
+
+    return {
+      ...attemptBase,
+      delivered: true,
+      ...(sendOutcome.messageRef ? { messageRef: sendOutcome.messageRef } : {}),
+    };
   }));
 
   const mergedAttempts = baseSummary.attempts.map((attempt) => {
@@ -736,17 +681,19 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return buildTelegramDispatchFailureResponse(telegramResult);
     }
 
-    const warning = action === 'publish'
-      ? await maybePersistAdminTelegramMessageRefWarning({
-          request,
-          cookies,
-          apiBaseUrl: API_BASE_URL,
-          orderId,
-          messageRef: telegramResult.summary.telegramMessageRef,
-        })
-      : undefined;
-
-    return buildTelegramDispatchResponse(telegramResult.summary, warning);
+    return finalizeAdminTelegramCompletionResponse({
+      request,
+      cookies,
+      apiBaseUrl: API_BASE_URL,
+      orderId,
+      ...(action === 'publish' && telegramResult.summary.telegramMessageRef
+        ? { messageRef: telegramResult.summary.telegramMessageRef }
+        : {}),
+      successPayload: {
+        telegram_dispatch: telegramResult.summary,
+      },
+      transformTelegramDispatch: toPublicTelegramDispatchSummary,
+    });
   }
 
   return buildAdminInvalidActionResponse('unsupported_action');

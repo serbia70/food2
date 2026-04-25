@@ -1,7 +1,7 @@
 
-import { registerAdminGlobal, showAdminToast } from './globals';
+import { registerAdminGlobal, showAdminToast } from './globals.ts';
 import { readDispatchMetaFromRemarks } from '../../lib/rider-dispatch.ts';
-import { fetchAvailableRiders, assignRider, autoAssignRider } from './orders';
+import { fetchAvailableRiders, assignRider, autoAssignRider } from './orders.ts';
 
 const DELIVERY_ETA_OPTIONS = [10, 15, 20, 30, 45];
 

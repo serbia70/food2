@@ -5,11 +5,9 @@ import {
 } from '../../../lib/rider-dispatch.ts';
 import {
   readOrderDispatchSnapshot,
+  runSharedRiderDeclineFeedbackAction,
   runSharedRiderProgressAction,
-  buildUpstreamFailureResponse,
-  buildForwardHeaders,
-  buildRiderActionUpdateStatusPayload,
-} from '../../../lib/rider-route-shared.ts';
+} from '../../../lib/rider-route-progress.ts';
 
 export const prerender = false;
 
@@ -102,34 +100,20 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  const payload = buildRiderActionUpdateStatusPayload({
+  const declineResult = await runSharedRiderDeclineFeedbackAction({
+    request,
+    apiBaseUrl,
     orderId,
-    action: 'decline',
-    expectedCurrentStatus: actionDecision.expectedCurrentStatus,
-    targetStatus: actionDecision.targetStatus,
-    feedbackWriteMode: actionDecision.feedbackWriteMode,
-    nextRemarksJson: actionDecision.nextRemarksJson,
-    riderName,
-    riderPhone,
-  });
-
-  const upstream = await fetch(`${apiBaseUrl}/api/order/update_status/${encodeURIComponent(orderId)}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...buildForwardHeaders(request),
+    rider: {
+      riderName,
+      riderPhone,
     },
-    body: JSON.stringify(payload),
+    actionDecision,
   });
-  const text = await upstream.text();
-
-  if (!upstream.ok) {
-    return buildUpstreamFailureResponse(upstream, text, { success: false, error: 'order_status_updated' });
-  }
+  if (!declineResult.ok) return declineResult.response;
 
   return new Response(JSON.stringify({ success: true, action }), {
-    status: upstream.status,
+    status: declineResult.status,
     headers: { 'Content-Type': 'application/json' },
   });
 };
-

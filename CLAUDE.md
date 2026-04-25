@@ -80,3 +80,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - 现在是真的完成/阻塞/高风险了吗？
    - 如果不是，就不该停，应该继续下一刀。
 5. 不能只口头承认“知道了”“不会再犯”，却在后续执行里重复把结果汇报发成暂停点；如果同类错误已经发生过多次，必须直接用行为修正，而不是再次用认错代替修正。
+
+##测试
+测试系统可以使用下面命令打开chrome浏览器，密码是admin
+本地测试
+后台地址是  playwright-cli open localhost:3000/admin/103 --headed
+
+点餐地址是 playwright-cli open localhost:3000//103 --headed
+
+线上测试
+后台地址是 playwright-cli open food2.serbia70.com/admin/103 --headed
+
+点餐地址是 playwright-cli open food2.serbia70.com/103 --headed

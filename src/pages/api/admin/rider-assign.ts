@@ -2,22 +2,23 @@ import type { APIRoute } from 'astro';
 import { API_BASE_URL } from '../../../config.ts';
 import {
   buildAdminInvalidActionResponse,
-  buildAdminNoAvailableRidersResponse,
-  buildAdminOrderFetchFailedSimpleResponse,
   buildAdminOrderIdRequiredResponse,
-  buildAdminOrderSnapshotRequiredResponse,
-  buildAdminRiderAlreadyDeclinedResponse,
-  finalizeAdminTelegramCompletionResponse,
-  readAdminAssignOrderSummary,
+  buildAdminSimpleErrorResponse,
+} from '../../../lib/rider-route-admin-http.ts';
+import {
+  runAdminSingleRiderExecution,
+} from '../../../lib/rider-route-admin-execution.ts';
+import {
+  readAdminAssignOrderDetails,
+} from '../../../lib/rider-route-admin-orders.ts';
+import {
+  sendAdminAssignedOrderTelegramToRider,
+} from '../../../lib/rider-route-admin-telegram.ts';
+import {
   readAdminAssignableRidersOrResponse,
-  readAdminOrderById,
-  readAdminOrderShopSlug,
   readProtectedTelegramCallbackSecret,
-  sendAdminTelegramToRider,
-  updateAdminOrderStatusOrResponse,
-  buildAdminTelegramSendPreparation,
-  pickAdminSingleRiderById,
-} from '../../../lib/rider-route-shared.ts';
+  resolveAdminRequestedRiderSelection,
+} from '../../../lib/rider-route-admin-state.ts';
 import {
   buildAssignedOrderStatusPayload,
   pickNextAvailableRider,
@@ -26,98 +27,8 @@ import {
 import {
   filterAvailableRidersForOrder,
 } from '../../../lib/rider-dispatch.ts';
-import {
-  buildAdminAssignedOrderTelegramMessage,
-} from '../../../lib/telegram-dispatch.ts';
 
 export const prerender = false;
-
-type RiderAssignOrderSummary = {
-  orderNo: string;
-  shopName: string;
-  shopMapUrl: string;
-  address: string;
-  deliveryMapUrl: string;
-  phone: string;
-  totalAmount: number;
-  scheduledFor: string;
-  itemSummary: string[];
-};
-
-async function fetchOrderDetails(request: Request, cookies: Parameters<APIRoute['POST']>[0]['cookies'], orderId: string): Promise<{
-  ok: boolean;
-  shopSlug: string;
-  remarksJson: string;
-  orderSummary: RiderAssignOrderSummary | null;
-}> {
-  const result = await readAdminOrderById({
-    request,
-    cookies,
-    apiBaseUrl: API_BASE_URL,
-    orderId,
-  });
-  if (!result.ok) return { ok: false, shopSlug: '', remarksJson: '', orderSummary: null };
-  return {
-    ok: true,
-    shopSlug: readAdminOrderShopSlug(result.order),
-    remarksJson: result.remarksJson,
-    orderSummary: result.order ? readAdminAssignOrderSummary(result.order) : null,
-  };
-}
-
-async function notifyAssignedRider({
-  request,
-  rider,
-  shopSlug,
-  orderId,
-  pickupEtaMinutes,
-  orderSummary,
-  fallbackChatId,
-  inlineTelegramBotToken,
-  callbackSecretOverride,
-}: {
-  request: Request;
-  rider: AssignableRider;
-  shopSlug: string;
-  orderId: string;
-  pickupEtaMinutes: number;
-  orderSummary: RiderAssignOrderSummary;
-  fallbackChatId?: string;
-  inlineTelegramBotToken?: string;
-  callbackSecretOverride?: string;
-}) {
-  const prepared = buildAdminTelegramSendPreparation({
-    orderId,
-    rider,
-    fallbackChatId,
-    shopSlug,
-    telegramBotToken: inlineTelegramBotToken,
-    restaurantId: shopSlug,
-    secretOverride: callbackSecretOverride,
-  });
-
-  return sendAdminTelegramToRider({
-    request,
-    rider,
-    fallbackChatId: prepared.chatId,
-    payloadBaseExtras: prepared.payloadBaseExtras,
-    callbackBase: prepared.callbackBase,
-    buildMessage: ({ claimCallbackData, declineCallbackData }) => buildAdminAssignedOrderTelegramMessage({
-      orderNo: orderSummary.orderNo,
-      shopName: orderSummary.shopName,
-      address: orderSummary.address,
-      totalAmount: orderSummary.totalAmount,
-      phone: orderSummary.phone,
-      pickupEtaMinutes,
-      scheduledFor: orderSummary.scheduledFor,
-      itemSummary: orderSummary.itemSummary,
-      shopMapUrl: orderSummary.shopMapUrl,
-      deliveryMapUrl: orderSummary.deliveryMapUrl,
-      claimCallbackData,
-      declineCallbackData,
-    }),
-  });
-}
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
@@ -148,18 +59,29 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return ridersResult.response;
   }
 
-  const fetchedOrderDetails = await fetchOrderDetails(request, cookies, orderId);
+  const fetchedOrderDetails = await readAdminAssignOrderDetails({
+    request,
+    cookies,
+    apiBaseUrl: API_BASE_URL,
+    orderId,
+  });
   if (!fetchedOrderDetails.ok) {
-    return buildAdminOrderFetchFailedSimpleResponse();
+    return buildAdminSimpleErrorResponse('order_fetch_failed', 502);
   }
 
   const eligibleRiders = filterAvailableRidersForOrder(ridersResult.riders, fetchedOrderDetails.remarksJson);
   let target: AssignableRider | null = null;
 
   if (action === 'manual_assign') {
-    target = pickAdminSingleRiderById({ riders: eligibleRiders, riderId: manualRiderId });
-    if (!target && pickAdminSingleRiderById({ riders: ridersResult.riders, riderId: manualRiderId })) {
-      return buildAdminRiderAlreadyDeclinedResponse();
+    const selected = resolveAdminRequestedRiderSelection({
+      riderId: manualRiderId,
+      eligibleRiders,
+      allRiders: ridersResult.riders,
+    });
+    if (selected.kind === 'selected') {
+      target = selected.rider;
+    } else if (selected.kind === 'declined') {
+      return buildAdminSimpleErrorResponse('rider_already_declined_this_order', 409);
     }
   }
 
@@ -168,50 +90,45 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   if (!target) {
-    return buildAdminNoAvailableRidersResponse();
+    return buildAdminSimpleErrorResponse('no_available_riders', 409);
   }
 
   if (!fetchedOrderDetails.orderSummary) {
-    return buildAdminOrderSnapshotRequiredResponse();
+    return buildAdminSimpleErrorResponse('order_snapshot_required', 409);
   }
 
-  const updateResult = await updateAdminOrderStatusOrResponse({
+  return runAdminSingleRiderExecution({
     request,
     cookies,
     apiBaseUrl: API_BASE_URL,
     orderId,
-    payload: buildAssignedOrderStatusPayload({ rider: target, pickupEtaMinutes }),
-  });
+    updatePayload: buildAssignedOrderStatusPayload({ rider: target, pickupEtaMinutes }),
+    sendTelegram: async () => {
+      const notifyShopSlug = fetchedOrderDetails.shopSlug || String(providedShopSlug || '').trim();
+      const callbackSecretOverride = await readProtectedTelegramCallbackSecret(request);
 
-  if (!updateResult.ok) {
-    return updateResult.response;
-  }
-
-  const notifyShopSlug = fetchedOrderDetails.shopSlug || String(providedShopSlug || '').trim();
-  const callbackSecretOverride = await readProtectedTelegramCallbackSecret(request);
-
-  const telegramNotification = await notifyAssignedRider({
-    request,
-    rider: target,
-    shopSlug: notifyShopSlug,
-    orderId,
-    pickupEtaMinutes,
-    orderSummary: fetchedOrderDetails.orderSummary,
-    fallbackChatId: riderTelegramChatId,
-    inlineTelegramBotToken,
-    callbackSecretOverride,
-  });
-
-  return finalizeAdminTelegramCompletionResponse({
-    request,
-    cookies,
-    apiBaseUrl: API_BASE_URL,
-    orderId,
-    ...(telegramNotification.success ? { messageRef: telegramNotification.messageRef } : {}),
-    successPayload: {
-      ...(!telegramNotification.success ? { telegram_notification: telegramNotification } : {}),
+      return {
+        ok: true,
+        result: await sendAdminAssignedOrderTelegramToRider({
+          request,
+          rider: target,
+          shopSlug: notifyShopSlug,
+          orderId,
+          pickupEtaMinutes,
+          orderSummary: fetchedOrderDetails.orderSummary,
+          fallbackChatId: riderTelegramChatId,
+          inlineTelegramBotToken,
+          callbackSecretOverride,
+        }),
+      };
     },
-    warningOptions: { remarksWriteFailedOnly: true },
+    finalize: ({ result: telegramNotification }) => ({
+      ...(telegramNotification.success && telegramNotification.messageRef ? { messageRef: telegramNotification.messageRef } : {}),
+      successPayload: {
+        ...(!telegramNotification.success ? { telegram_notification: telegramNotification } : {}),
+      },
+    }),
   });
 };
+
 

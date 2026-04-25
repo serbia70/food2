@@ -3,13 +3,14 @@ import { timingSafeEqual } from 'node:crypto';
 import { API_BASE_URL } from '../../../config.ts';
 import { resolveRiderOrderAction } from '../../../lib/rider-dispatch.ts';
 import {
-  buildForwardHeaders,
-  buildRiderActionUpdateStatusPayload,
-  buildUpstreamFailureResponse,
-  readJsonObject,
   readOrderDetail,
+  runSharedRiderDeclineFeedbackAction,
   runSharedRiderProgressAction,
-} from '../../../lib/rider-route-shared.ts';
+} from '../../../lib/rider-route-progress.ts';
+import {
+  buildForwardHeaders,
+  readJsonObject,
+} from '../../../lib/rider-route-admin-telegram-core.ts';
 import { parseTelegramClaimCallback } from '../../../lib/telegram-dispatch.ts';
 import { pickNextAvailableRider, readOnlineRiders, type AssignableRider } from '../../../lib/rider-assignment.ts';
 import { readTelegramRequestSecret } from '../../../lib/telegram-secrets.ts';
@@ -195,32 +196,17 @@ export async function handleTelegramRiderClaim(request: Request): Promise<Respon
   }
 
   if (isDeclineAction) {
-    const declinePayload = buildRiderActionUpdateStatusPayload({
+    const declineResult = await runSharedRiderDeclineFeedbackAction({
+      request,
+      apiBaseUrl: readInternalApiBaseUrl(),
       orderId: orderIdText,
-      action: callback.action,
-      expectedCurrentStatus: actionDecision.expectedCurrentStatus,
-      targetStatus: actionDecision.targetStatus,
-      feedbackWriteMode: actionDecision.feedbackWriteMode,
-      nextRemarksJson: actionDecision.nextRemarksJson,
-      riderName: resolvedName,
-      riderPhone: resolvedPhone,
-    });
-    const upstream = await fetch(`${readInternalApiBaseUrl()}/api/order/update_status/${encodeURIComponent(orderIdText)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...buildForwardHeaders(request),
+      rider: {
+        riderName: resolvedName,
+        riderPhone: resolvedPhone,
       },
-      body: JSON.stringify(declinePayload),
+      actionDecision,
     });
-
-    if (!upstream.ok) {
-      const text = await upstream.text();
-      return new Response(text || JSON.stringify({ success: false, error: 'decline_feedback_failed' }), {
-        status: upstream.status,
-        headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
-      });
-    }
+    if (!declineResult.ok) return declineResult.response;
 
     let reassigned = false;
     try {
@@ -305,4 +291,3 @@ export const POST: APIRoute = async ({ request }) => {
 
   return handleTelegramRiderClaim(request);
 };
-

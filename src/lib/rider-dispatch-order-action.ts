@@ -5,6 +5,13 @@ import {
   type DispatchMeta,
 } from './rider-dispatch-meta.ts';
 import {
+  buildAcceptActionResult,
+  buildDeclineActionResult,
+  buildDisallowedResult,
+  hasDispatchMetaConstraints,
+  readProgressStatuses,
+} from './rider-dispatch-order-action-helpers.ts';
+import {
   buildContactableRiderRows,
 } from './rider-dispatch-view.ts';
 import {
@@ -24,18 +31,6 @@ export interface ResolveRiderOrderActionResult {
   nextRemarksJson: string;
   feedbackWriteMode: 'none' | 'admin_remarks' | 'update_status_remarks';
   excludedRiderIds: string[];
-}
-
-function hasDispatchMetaConstraints(_remarksJson: string, meta: DispatchMeta): boolean {
-  return !!(
-    meta.lastRiderDecision
-    || meta.declinedRiderIds.length > 0
-    || meta.currentRiderId
-    || meta.currentAssignedAt
-    || meta.currentExpiresAt
-    || meta.invalidatedRiderIds.length > 0
-    || meta.lastInvalidationReason
-  );
 }
 
 export function resolveRiderOrderAction(input: {
@@ -71,65 +66,46 @@ export function resolveRiderOrderAction(input: {
     nowIso,
     riderPhone,
   );
-  const enforceDispatchConstraints = hasDispatchMetaConstraints(remarksJson, meta);
+  const enforceDispatchConstraints = hasDispatchMetaConstraints(meta);
   const deliveryProgressAllowedWithoutDispatchMeta = (action === 'picked_up' || action === 'complete')
     && !enforceDispatchConstraints
     && !!courierPhone
     && courierPhone === riderPhone;
 
   if (action === 'picked_up' || action === 'complete') {
+    const { expectedCurrentStatus, targetStatus } = readProgressStatuses(action);
     if (status === 'completed') {
-      return {
-        allowed: false,
+      return buildDisallowedResult({
         error: 'order_completed',
-        reason: '',
-        expectedCurrentStatus: action === 'picked_up' ? 'delivering' : 'picked_up',
-        targetStatus: action === 'picked_up' ? 'picked_up' : 'completed',
-        nextRemarksJson: '',
-        feedbackWriteMode: 'none',
-        excludedRiderIds: [],
-      };
-    }
-
-    const expectedCurrentStatus = action === 'picked_up' ? 'delivering' : 'picked_up';
-    const targetStatus = action === 'picked_up' ? 'picked_up' : 'completed';
-    if (status && status !== expectedCurrentStatus) {
-      return {
-        allowed: false,
-        error: 'order_status_updated',
-        reason: '',
         expectedCurrentStatus,
         targetStatus,
-        nextRemarksJson: '',
-        feedbackWriteMode: 'none',
-        excludedRiderIds: [],
-      };
+      });
+    }
+
+    if (status && status !== expectedCurrentStatus) {
+      return buildDisallowedResult({
+        error: 'order_status_updated',
+        expectedCurrentStatus,
+        targetStatus,
+      });
     }
 
     if (dispatchState.invalidReason) {
-      return {
-        allowed: false,
+      return buildDisallowedResult({
         error: 'dispatch_invalidated',
         reason: dispatchState.invalidReason,
         expectedCurrentStatus,
         targetStatus,
-        nextRemarksJson: '',
-        feedbackWriteMode: 'none',
-        excludedRiderIds: [],
-      };
+      });
     }
 
     if (!deliveryProgressAllowedWithoutDispatchMeta && !dispatchState.canComplete) {
-      return {
-        allowed: false,
+      return buildDisallowedResult({
         error: 'dispatch_invalidated',
         reason: '已改派',
         expectedCurrentStatus,
         targetStatus,
-        nextRemarksJson: '',
-        feedbackWriteMode: 'none',
-        excludedRiderIds: [],
-      };
+      });
     }
 
     return {
@@ -145,113 +121,51 @@ export function resolveRiderOrderAction(input: {
   }
 
   if (status !== 'awaiting_courier') {
-    return {
-      allowed: false,
+    return buildDisallowedResult({
       error: status === 'completed' ? 'order_completed' : 'order_status_updated',
-      reason: '',
       expectedCurrentStatus: 'awaiting_courier',
       targetStatus: action === 'accept' ? 'delivering' : 'awaiting_courier',
-      nextRemarksJson: '',
-      feedbackWriteMode: 'none',
-      excludedRiderIds: [],
-    };
+    });
   }
 
   if (dispatchState.invalidReason) {
-    return {
-      allowed: false,
+    return buildDisallowedResult({
       error: 'dispatch_invalidated',
       reason: dispatchState.invalidReason,
       expectedCurrentStatus: 'awaiting_courier',
       targetStatus: action === 'accept' ? 'delivering' : 'awaiting_courier',
-      nextRemarksJson: '',
-      feedbackWriteMode: 'none',
-      excludedRiderIds: [],
-    };
+    });
   }
 
   const actionAllowed = action === 'decline' ? dispatchState.canDecline : dispatchState.canAccept;
   if ((action === 'decline' || enforceDispatchConstraints) && !actionAllowed) {
-    return {
-      allowed: false,
+    return buildDisallowedResult({
       error: 'dispatch_invalidated',
       reason: '已改派',
       expectedCurrentStatus: 'awaiting_courier',
       targetStatus: action === 'accept' ? 'delivering' : 'awaiting_courier',
-      nextRemarksJson: '',
-      feedbackWriteMode: 'none',
-      excludedRiderIds: [],
-    };
+    });
   }
 
   if (action === 'decline') {
-    const declinedRiderIds = Array.from(new Set([
-      ...meta.declinedRiderIds,
+    return buildDeclineActionResult({
+      remarksJson,
+      meta,
       riderId,
-    ].filter(Boolean)));
-    const invalidatedRiderIds = Array.from(new Set([
-      ...meta.invalidatedRiderIds,
-      riderId,
-    ].filter(Boolean)));
-
-    return {
-      allowed: true,
-      error: '',
-      reason: '',
-      expectedCurrentStatus: 'awaiting_courier',
-      targetStatus: 'awaiting_courier',
-      nextRemarksJson: JSON.stringify(buildDispatchMetaRemarks(remarksJson, {
-        lastRiderDecision: {
-          action: 'declined',
-          riderId,
-          riderName,
-          riderPhone,
-          at: nowIso,
-        },
-        declinedRiderIds,
-        currentRiderId: '',
-        currentAssignedAt: '',
-        currentExpiresAt: '',
-        invalidatedRiderIds,
-        lastInvalidationReason: 'declined',
-        acceptedAt: meta.acceptedAt,
-        pickedUpAt: meta.pickedUpAt,
-        completedAt: meta.completedAt,
-        telegramMessageRef: meta.telegramMessageRef,
-      })),
-      feedbackWriteMode: 'update_status_remarks',
-      excludedRiderIds: Array.from(new Set([...declinedRiderIds, ...invalidatedRiderIds])),
-    };
+      riderName,
+      riderPhone,
+      nowIso,
+    });
   }
 
-  return {
-    allowed: true,
-    error: '',
-    reason: '',
-    expectedCurrentStatus: 'awaiting_courier',
-    targetStatus: 'delivering',
-    nextRemarksJson: JSON.stringify(buildDispatchMetaRemarks(remarksJson, {
-      lastRiderDecision: {
-        action: 'accepted',
-        riderId,
-        riderName,
-        riderPhone,
-        at: nowIso,
-      },
-      declinedRiderIds: [],
-      currentRiderId: riderId,
-      currentAssignedAt: meta.currentAssignedAt,
-      currentExpiresAt: meta.currentExpiresAt,
-      invalidatedRiderIds: meta.invalidatedRiderIds,
-      lastInvalidationReason: meta.lastInvalidationReason,
-      acceptedAt: meta.acceptedAt,
-      pickedUpAt: meta.pickedUpAt,
-      completedAt: meta.completedAt,
-      telegramMessageRef: meta.telegramMessageRef,
-    })),
-    feedbackWriteMode: 'admin_remarks',
-    excludedRiderIds: [],
-  };
+  return buildAcceptActionResult({
+    remarksJson,
+    meta,
+    riderId,
+    riderName,
+    riderPhone,
+    nowIso,
+  });
 }
 
 export function filterAvailableRidersForOrder<T extends Pick<Rider, 'id' | 'name' | 'phone' | 'status'>>(

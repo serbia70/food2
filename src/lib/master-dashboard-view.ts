@@ -1,5 +1,14 @@
 import { buildMasterSettingsView, type MasterSettingsView } from './master-settings-view.ts';
 import { buildMasterShopView, type MasterShopView } from './master-shop-view.ts';
+import {
+  buildMasterDashboardNotices,
+  buildMasterDashboardOverview,
+  buildMasterDashboardPageState,
+  buildMasterDashboardPanels,
+  type MasterDashboardNotice,
+  type MasterDashboardPageState,
+  type MasterDashboardTab,
+} from './master-dashboard-view-helpers.ts';
 
 type MasterDashboardShopInput = {
   id?: unknown;
@@ -34,34 +43,12 @@ type MasterDashboardSettingsInput = {
   defaultShopTier?: unknown;
 };
 
-export type MasterDashboardTab = 'overview' | 'shops' | 'settings' | 'backup' | 'dispatch' | 'riders';
-
 export type MasterDashboardBuildInput = {
   shops: MasterDashboardShopInput[];
   settings: MasterDashboardSettingsInput;
   activeTab: MasterDashboardTab;
   isUnauthorized: boolean;
   loadError: string;
-};
-
-export type MasterDashboardAction =
-  | { key: 'login'; kind: 'link'; label: string; href: string; className: string }
-  | {
-      key: 'logout' | 'refresh';
-      kind: 'button';
-      label: string;
-      handler: 'logoutMaster' | 'reloadPage';
-      className: string;
-    };
-
-export type MasterDashboardPageState =
-  | { kind: 'ready' }
-  | { kind: 'unauthorized'; message: string; actions: MasterDashboardAction[] }
-  | { kind: 'load_error'; message: string; actions: MasterDashboardAction[] };
-
-export type MasterDashboardNotice = {
-  kind: 'info' | 'warning' | 'error';
-  message: string;
 };
 
 export type MasterDashboardView = {
@@ -79,7 +66,16 @@ export type MasterDashboardView = {
   };
   settings: MasterSettingsView;
   notices: MasterDashboardNotice[];
-  actions: MasterDashboardAction[];
+  actions: Array<
+    | { key: 'login'; kind: 'link'; label: string; href: string; className: string }
+    | {
+        key: 'logout' | 'refresh';
+        kind: 'button';
+        label: string;
+        handler: 'logoutMaster' | 'reloadPage';
+        className: string;
+      }
+  >;
   panels: {
     shopEdit: {
       defaultsFromSettings: boolean;
@@ -104,93 +100,8 @@ export type MasterDashboardView = {
   };
 };
 
-function toNumber(value: unknown): number {
-  const n = Number(value ?? 0);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function buildOverview(shops: MasterDashboardShopInput[]): MasterDashboardView['overview'] {
-  return shops.reduce(
-    (acc, shop) => {
-      acc.totalShops += 1;
-      acc.todayRevenue += toNumber(shop.today_revenue);
-      acc.todayOrders += toNumber(shop.today_order_count);
-      acc.monthCommission += toNumber(shop.commission_month_rsd);
-      acc.totalBalance += toNumber(shop.billing_balance_rsd);
-      return acc;
-    },
-    {
-      totalShops: 0,
-      todayRevenue: 0,
-      todayOrders: 0,
-      monthCommission: 0,
-      totalBalance: 0,
-    },
-  );
-}
-
-const LOGIN_ACTION: MasterDashboardAction = {
-  key: 'login',
-  kind: 'link',
-  label: '去登录',
-  href: '/master/login',
-  className: 'primary-btn',
-};
-
-const LOGOUT_ACTION: MasterDashboardAction = {
-  key: 'logout',
-  kind: 'button',
-  label: '退出',
-  handler: 'logoutMaster',
-  className: 'ghost-btn',
-};
-
-const REFRESH_ACTION: MasterDashboardAction = {
-  key: 'refresh',
-  kind: 'button',
-  label: '刷新页面',
-  handler: 'reloadPage',
-  className: 'ghost-btn',
-};
-
-function buildErrorActions(): MasterDashboardAction[] {
-  return [LOGIN_ACTION, LOGOUT_ACTION, REFRESH_ACTION];
-}
-
-function buildPageState(input: MasterDashboardBuildInput): MasterDashboardPageState {
-  if (input.isUnauthorized) {
-    return {
-      kind: 'unauthorized',
-      message: input.loadError || '未授权，请重新登录',
-      actions: buildErrorActions(),
-    };
-  }
-
-  const canKeepTabReadyOnTransientInitError = input.loadError
-    && (input.activeTab === 'dispatch' || input.activeTab === 'riders')
-    && input.shops.length > 0;
-  if (canKeepTabReadyOnTransientInitError) {
-    return { kind: 'ready' };
-  }
-
-  if (input.loadError) {
-    return {
-      kind: 'load_error',
-      message: input.loadError,
-      actions: buildErrorActions(),
-    };
-  }
-
-  return { kind: 'ready' };
-}
-
-function buildNotices(pageState: MasterDashboardPageState): MasterDashboardNotice[] {
-  if (pageState.kind === 'ready') return [];
-  return [{ kind: pageState.kind === 'unauthorized' ? 'warning' : 'error', message: pageState.message }];
-}
-
 export function buildMasterDashboardView(input: MasterDashboardBuildInput): MasterDashboardView {
-  const pageState = buildPageState(input);
+  const pageState = buildMasterDashboardPageState(input);
   const settings = buildMasterSettingsView(input.settings);
   const shopManagementShops = input.shops.map((shop) =>
     buildMasterShopView(shop, {
@@ -206,35 +117,14 @@ export function buildMasterDashboardView(input: MasterDashboardBuildInput): Mast
 
   return {
     pageState,
-    overview: buildOverview(input.shops),
+    overview: buildMasterDashboardOverview(input.shops),
     shopManagement: {
       shops: shopManagementShops,
       activeTab: input.activeTab,
     },
     settings,
-    notices: buildNotices(pageState),
+    notices: buildMasterDashboardNotices(pageState),
     actions,
-    panels: {
-      shopEdit: {
-        defaultsFromSettings: true,
-        defaults: {
-          reservationPlan: settings.reservationPlan,
-          deliveryPlan: settings.deliveryPlan,
-          defaultShopTier: settings.defaultShopTier,
-        },
-        resetDefaults: {
-          reservationCommissionType: settings.reservationPlan.commissionType,
-          reservationCommissionValue: settings.reservationPlan.commissionValue,
-          deliveryCommissionType: settings.deliveryPlan.commissionType,
-          deliveryCommissionValue: settings.deliveryPlan.commissionValue,
-        },
-      },
-      shopTopup: {
-        openHint: '充值成功后建议刷新页面确认余额变化。',
-      },
-      shopDineIn: {
-        openHint: '请选择要执行的堂食订阅操作。',
-      },
-    },
+    panels: buildMasterDashboardPanels(settings),
   };
 }

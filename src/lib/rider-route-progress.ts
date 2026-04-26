@@ -17,9 +17,11 @@ export type {
   SharedRiderProgressTargetStatus,
 } from './rider-route-progress-actions.ts';
 export {
-  buildRiderActionUpdateStatusPayload,
-  buildRiderActionUpdateStatusRemarks,
-  buildUpstreamFailureResponse,
   runSharedRiderDeclineFeedbackAction,
   runSharedRiderProgressAction,
 } from './rider-route-progress-actions.ts';
+export {
+  buildRiderActionUpdateStatusPayload,
+  buildRiderActionUpdateStatusRemarks,
+  buildUpstreamFailureResponse,
+} from './rider-route-progress-payloads.ts';

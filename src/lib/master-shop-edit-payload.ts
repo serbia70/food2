@@ -1,59 +1,21 @@
 import { toNormalizedBoolean, toNormalizedNumber } from './master-field-normalizers.ts';
+import {
+  buildName,
+  MASTER_SHOP_FEE_FALLBACKS,
+  resolveCommissionDefaults,
+  resolveEffectiveCommissionMode,
+  toCommissionMode,
+  toShopTier,
+  toShopTierMode,
+  toType,
+  type MasterShopEditDefaults,
+  type MasterShopEditPayloadOptions,
+} from './master-shop-edit-payload-helpers.ts';
 
 type MasterShopEditInput = Record<string, unknown>;
 
-export const MASTER_SHOP_FEE_FALLBACKS = {
-  reservationCommissionType: 'percentage',
-  reservationCommissionValue: 3,
-  deliveryCommissionType: 'percentage',
-  deliveryCommissionValue: 5,
-} as const;
-
-type MasterShopEditDefaults = {
-  reservationPlan?: {
-    enabled?: unknown;
-    commissionType?: unknown;
-    commissionValue?: unknown;
-  };
-  deliveryPlan?: {
-    enabled?: unknown;
-    commissionType?: unknown;
-    commissionValue?: unknown;
-  };
-  defaultShopTier?: unknown;
-};
-
-type MasterShopEditPayloadOptions = {
-  defaults?: MasterShopEditDefaults;
-};
-
-function toType(value: unknown, fallback = 'percentage'): string {
-  const raw = String(value ?? '').trim();
-  if (raw === 'percentage' || raw === 'per_order') return raw;
-  return fallback;
-}
-
-function buildName(value: unknown): string {
-  return String(value ?? '').trim();
-}
-
-function toCommissionMode(value: unknown, fallback = 'override'): string {
-  const raw = String(value ?? '').trim().toLowerCase();
-  if (raw === 'global' || raw === 'override') return raw;
-  return fallback;
-}
-
-function toShopTier(value: unknown, fallback: 'subscription' | 'business' = 'subscription') {
-  const raw = String(value ?? '').trim().toLowerCase();
-  if (raw === 'subscription' || raw === 'business') return raw;
-  return fallback;
-}
-
-function toShopTierMode(value: unknown, fallback: 'global' | 'override' = 'global') {
-  const raw = String(value ?? '').trim().toLowerCase();
-  if (raw === 'global' || raw === 'override') return raw;
-  return fallback;
-}
+export { MASTER_SHOP_FEE_FALLBACKS };
+export type { MasterShopEditDefaults, MasterShopEditPayloadOptions };
 
 export function buildMasterShopEditPayload(input: MasterShopEditInput, options: MasterShopEditPayloadOptions = {}) {
   const reservationEnabled = toNormalizedBoolean(input.reservationEnabled, true);
@@ -77,46 +39,25 @@ export function buildMasterShopEditPayload(input: MasterShopEditInput, options: 
   const inputCommissionMode = toCommissionMode(input.commissionMode, 'override');
   const enableDeliveryInput = input.enableDelivery ?? input.deliveryEnabled;
   const enableReservationInput = input.enableReservation ?? input.reservationEnabled;
-
-  const defaultsReservationType = toType(
-    options.defaults?.reservationPlan?.commissionType,
-    MASTER_SHOP_FEE_FALLBACKS.reservationCommissionType,
-  );
-  const defaultsReservationValue = toNormalizedNumber(
-    options.defaults?.reservationPlan?.commissionValue,
-    MASTER_SHOP_FEE_FALLBACKS.reservationCommissionValue,
-  );
-  const defaultsDeliveryType = toType(
-    options.defaults?.deliveryPlan?.commissionType,
-    MASTER_SHOP_FEE_FALLBACKS.deliveryCommissionType,
-  );
-  const defaultsDeliveryValue = toNormalizedNumber(
-    options.defaults?.deliveryPlan?.commissionValue,
-    MASTER_SHOP_FEE_FALLBACKS.deliveryCommissionValue,
-  );
-
-  const defaultsReservationEnabled = toNormalizedBoolean(options.defaults?.reservationPlan?.enabled, true);
-  const defaultsDeliveryEnabled = toNormalizedBoolean(options.defaults?.deliveryPlan?.enabled, true);
-
-  const hasReservationOverride =
-    reservationEnabled !== defaultsReservationEnabled ||
-    reservationCommissionType !== defaultsReservationType ||
-    reservationCommissionValue !== defaultsReservationValue;
-  const hasDeliveryOverride =
-    deliveryEnabled !== defaultsDeliveryEnabled ||
-    deliveryCommissionType !== defaultsDeliveryType ||
-    deliveryCommissionValue !== defaultsDeliveryValue;
-  const commissionMode =
-    inputCommissionMode === 'global' && (hasReservationOverride || hasDeliveryOverride) ? 'override' : inputCommissionMode;
+  const defaults = resolveCommissionDefaults(options.defaults);
+  const commissionMode = resolveEffectiveCommissionMode({
+    inputCommissionMode,
+    reservationEnabled,
+    reservationCommissionType,
+    reservationCommissionValue,
+    deliveryEnabled,
+    deliveryCommissionType,
+    deliveryCommissionValue,
+    defaults,
+  });
 
   const password = buildName(input.password);
   const hasShopTierMode = input.shopTierMode !== undefined && String(input.shopTierMode ?? '').trim() !== '';
   const hasShopTierOverride = input.shopTierOverride !== undefined && String(input.shopTierOverride ?? '').trim() !== '';
   const hasExplicitShopTier = hasShopTierMode || hasShopTierOverride;
-  const defaultShopTier = toShopTier(options.defaults?.defaultShopTier, 'subscription');
   const shopTierMode = toShopTierMode(input.shopTierMode, 'global');
-  const shopTierOverride = toShopTier(input.shopTierOverride, defaultShopTier);
-  const effectiveShopTier = shopTierMode === 'override' ? shopTierOverride : defaultShopTier;
+  const shopTierOverride = toShopTier(input.shopTierOverride, defaults.defaultShopTier);
+  const effectiveShopTier = shopTierMode === 'override' ? shopTierOverride : defaults.defaultShopTier;
 
   return {
     id: toNormalizedNumber(input.id, 0),
@@ -141,7 +82,7 @@ export function buildMasterShopEditPayload(input: MasterShopEditInput, options: 
     business_enabled: deliveryEnabled ? 1 : 0,
     business_delivery_commission_type: deliveryCommissionType,
     business_delivery_commission_value: deliveryCommissionValue,
-    commissionMode: commissionMode,
+    commissionMode,
     commissionType: deliveryCommissionType,
     commissionValue: deliveryCommissionValue,
     commission_type: deliveryCommissionType,

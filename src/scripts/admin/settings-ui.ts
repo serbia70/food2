@@ -8,6 +8,22 @@ type SettingsSubmitOptions = {
   reload?: boolean;
 };
 
+function generateMQTTSecret() {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const random = new Uint32Array(20);
+  crypto.getRandomValues(random);
+  return Array.from(random, (value) => chars[value % chars.length]).join('');
+}
+
+function updateMQTTTopicPreview() {
+  const topicNode = document.getElementById('mqttTopicPreview') as HTMLElement | null;
+  const mqttSecretNode = document.getElementById('mqttSecretInput') as HTMLInputElement | null;
+  if (!topicNode) return;
+  const shopSlug = String(topicNode.dataset.shopSlug || '').trim() || 'default';
+  const secret = String(mqttSecretNode?.value || '').trim();
+  topicNode.textContent = `restaurant/${shopSlug}/${secret || '<secret>'}/order`;
+}
+
 async function fetchJSONWithRetry(url: string, init?: RequestInit) {
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -244,13 +260,40 @@ export function initSettingsUI(onSaved: () => void) {
 
   registerAdminGlobal('update-mqtt-secret', async () => {
     const mqttSecretNode = document.getElementById('mqttSecretInput') as HTMLInputElement | null;
-    await submitPayload(
+    const nextSecret = String(mqttSecretNode?.value || '').trim();
+    const saved = await submitPayload(
       buildAdminSensitiveSettingsPatch({
-        mqttSecret: mqttSecretNode?.value || '',
+        mqttSecret: nextSecret,
       }),
-      { successMessage: '打印机 Secret 已保存' },
+      { successMessage: '打印机 Secret 已保存', reload: false },
     );
+    if (!saved) return;
+    const summaryNode = document.getElementById('mqttSecretSummary');
+    if (summaryNode) {
+      summaryNode.textContent = nextSecret
+        ? `当前 Secret 已保存：${nextSecret}`
+        : '当前 Secret 已清空。';
+    }
+    updateMQTTTopicPreview();
   });
+
+  registerAdminGlobal('generate-mqtt-secret', () => {
+    const mqttSecretNode = document.getElementById('mqttSecretInput') as HTMLInputElement | null;
+    if (!mqttSecretNode) return;
+    mqttSecretNode.value = generateMQTTSecret();
+    updateMQTTTopicPreview();
+    const summaryNode = document.getElementById('mqttSecretSummary');
+    if (summaryNode) {
+      summaryNode.textContent = '已生成新的 Secret，请点击“修改 Secret”保存。';
+    }
+  });
+
+  const mqttSecretNode = document.getElementById('mqttSecretInput') as HTMLInputElement | null;
+  if (mqttSecretNode) {
+    mqttSecretNode.addEventListener('input', () => {
+      updateMQTTTopicPreview();
+    });
+  }
 
   registerAdminGlobal('save-payment-settings', async () => {
     const form = document.getElementById('settings-form') as HTMLFormElement | null;

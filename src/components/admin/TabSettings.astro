@@ -131,10 +131,12 @@ const sensitiveSettingsView = buildAdminSensitiveSettingsView({
       <h3>🖨️ 打印机配置</h3>
       <div style="background:#f8f9fa; padding:15px; border-radius:6px; font-size:13px; color:#555;">
         <p><strong>Broker:</strong> {brokerIp}</p>
-        <p><strong>Topic:</strong> <code style="background:#eee; padding:2px 5px; color:#d63384;">{sensitiveSettingsView.mqttTopicPreview}</code></p>
+        <p><strong>Topic:</strong> <code id="mqttTopicPreview" data-shop-slug={shop?.slug || ''} style="background:#eee; padding:2px 5px; color:#d63384;">{sensitiveSettingsView.mqttTopicPreview}</code></p>
+        <p id="mqttSecretSummary" style="margin-top:8px; color:#666;">{sensitiveSettingsView.mqttSecretSummary}</p>
 
         <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
           <input type="text" id="mqttSecretInput" value={sensitiveSettingsView.mqttSecretValue} placeholder={sensitiveSettingsView.mqttSecretPlaceholder} style="padding:5px; border:1px solid #ddd; border-radius:4px;" />
+          <button type="button" data-admin-action="generate-mqtt-secret" style="padding:5px 10px; background:#0d6efd; color:white; border:none; border-radius:4px; cursor:pointer;">生成 Secret</button>
           <button type="button" data-admin-action="update-mqtt-secret" style="padding:5px 10px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer;">修改 Secret</button>
         </div>
       </div>

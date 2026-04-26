@@ -9,6 +9,8 @@ export type AdminSensitiveSettingsView = {
   mqttTopicPreview: string;
   mqttSecretValue: string;
   mqttSecretPlaceholder: string;
+  mqttSecretConfigured: boolean;
+  mqttSecretSummary: string;
   telegramTokenValue: string;
   telegramTokenPlaceholder: string;
   telegramChatIdValue: string;
@@ -26,10 +28,18 @@ function cleanString(value: unknown): string {
 
 export function buildAdminSensitiveSettingsView(input: SensitiveSettingsViewInput): AdminSensitiveSettingsView {
   const shopSlug = cleanString(input.shopSlug) || 'default';
+  const mqttSecret = cleanString(input.mqttSecret);
+  const mqttSecretConfigured = mqttSecret !== '';
   return {
-    mqttTopicPreview: `restaurant/${shopSlug}/<secret>/order`,
-    mqttSecretValue: '',
-    mqttSecretPlaceholder: '输入新 Secret，留空不修改',
+    mqttTopicPreview: `restaurant/${shopSlug}/${mqttSecretConfigured ? mqttSecret : '<secret>'}/order`,
+    mqttSecretValue: mqttSecret,
+    mqttSecretPlaceholder: mqttSecretConfigured
+      ? '可直接复制当前 Secret，或生成/输入新 Secret 后点击保存'
+      : '输入或生成新 Secret，然后点击保存',
+    mqttSecretConfigured,
+    mqttSecretSummary: mqttSecretConfigured
+      ? `当前已配置 Secret：${mqttSecret}`
+      : '当前未配置 Secret，请先生成或手动输入一个新的 Secret',
     telegramTokenValue: '',
     telegramTokenPlaceholder: '输入新 Bot Token，留空不修改',
     telegramChatIdValue: cleanString(input.telegramChatId),

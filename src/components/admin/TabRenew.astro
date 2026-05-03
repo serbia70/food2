@@ -1,0 +1,119 @@
+---
+const {
+  lastMonthCommission,
+  thisMonthCommission,
+  debtAmount = 0,
+  billingAlertLevel = 'normal',
+  billingBalanceRSD = 0,
+  billingPlanType = 'subscription',
+  walletCopy = '预订 / 外卖余额',
+  walletHint = '仅用于预订 / 外卖技术服务费，不包含堂食年费',
+  balanceReminderText = '',
+  balanceReminderLevel = 'normal',
+  reservationPlan = { displayText: '' },
+  deliveryPlan = { displayText: '' },
+} = Astro.props;
+
+const isSubscriptionPlan = String(billingPlanType || 'subscription').toLowerCase() === 'subscription';
+
+const billingColor =
+  balanceReminderLevel === 'overdue' ? '#742a2a' :
+  balanceReminderLevel === 'critical' ? '#c53030' :
+  balanceReminderLevel === 'warning' ? '#b7791f' : '#2f855a';
+
+const billingBg =
+  balanceReminderLevel === 'overdue' ? '#fff5f5' :
+  balanceReminderLevel === 'critical' ? '#fff5f5' :
+  balanceReminderLevel === 'warning' ? '#fffaf0' : '#f0fff4';
+
+const alertText =
+  billingAlertLevel === 'overdue' ? '欠费宽限中，请尽快充值' :
+    billingAlertLevel === 'critical' ? '余额不足，请立即充值' :
+    billingAlertLevel === 'warning' ? '余额较低，建议尽快充值' : '余额充足';
+const walletLabel = String(walletCopy || '预订 / 外卖余额').replace(/[：:].*$/, '').trim();
+const walletAmountColor = billingBalanceRSD < 1000 ? '#dc2626' : '#2f855a';
+---
+<div id="tab-renew" class="tab-content">
+  <div class="settings-card" style="text-align:center; max-width:800px; margin:0 auto;">
+    <h3 style="margin-bottom:20px;">💰 费用管理 / Fee Management</h3>
+
+    {/* 1. 订阅钱包卡片 */}
+    <div style={`background:${billingBg}; border:2px solid ${billingColor}; border-radius:12px; margin-bottom:20px; padding:20px;`}>
+      <div style="margin:0 0 10px; color:#111827; font-size:24px; font-weight:800; line-height:1.2;">
+        💳 {walletLabel}：<span style={`color:${walletAmountColor};`}>{billingBalanceRSD} RSD</span>
+      </div>
+      {(balanceReminderLevel !== 'normal' || balanceReminderText) && (
+        <p style={`margin:0; font-size:14px; color:${billingColor}; font-weight:700;`}>{balanceReminderText || alertText}</p>
+      )}
+
+      <div style="margin-top:15px; padding-top:15px; border-top:1px solid rgba(0,0,0,0.05); font-size:14px; color:#64748b; display:flex; justify-content:space-around; gap:12px; flex-wrap:wrap;">
+        <div>预订：<strong style="color:#dc2626;">{reservationPlan.displayText || '未设置'}</strong></div>
+        <div>外卖：<strong style="color:#dc2626;">{deliveryPlan.displayText || '未设置'}</strong></div>
+      </div>
+      <div style="margin-top:10px; font-size:14px; color:#475569; text-align:left;">{walletHint}</div>
+    </div>
+
+    {/* 2. 佣金统计卡片 */}
+    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; text-align:left; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+      <div style="background:#f8fafc; padding:15px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+        <h4 style="margin:0; color:#1e293b; font-size:15px;">📊 佣金统计与明细 / Commission</h4>
+        <button type="button" data-admin-action="show-commission-records" style="font-size:12px; padding:6px 12px; border:1px solid #cbd5e1; background:#fff; border-radius:6px; cursor:pointer; color:#475569; font-weight:600;">
+          🔍 查看每单明细
+        </button>
+      </div>
+
+      <div style="padding:20px;">
+        {/* 费用结算状态 */}
+        <div style="background:#fffcf5; border:1px solid #fef3c7; border-radius:10px; padding:15px; margin-bottom:20px; text-align:center;">
+          {debtAmount > 0 ? (
+            <>
+              <p style="margin:0 0 5px; color:#d32f2f; font-size:13px; font-weight:bold;">⚠️ 当前欠缴费用 (待充值补扣)</p>
+              <div style="display:flex; align-items:baseline; justify-content:center; gap:5px;">
+                <span style="font-size:36px; font-weight:900; color:#d32f2f;">{debtAmount}</span>
+                <span style="color:#d32f2f; font-weight:600;">RSD</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <p style="margin:0 0 5px; color:#2f855a; font-size:13px; font-weight:bold;">✅ 费用已结清 (已从余额扣除)</p>
+              <div style="display:flex; align-items:baseline; justify-content:center; gap:5px;">
+                <span style="font-size:36px; font-weight:900; color:#2f855a;">0</span>
+                <span style="color:#2f855a; font-weight:600;">RSD</span>
+              </div>
+            </>
+          )}
+
+          <div style="margin-top:12px; display:flex; justify-content:center; gap:20px; font-size:12px; color:#64748b;">
+            <div>上月累计扣费: <strong>{lastMonthCommission}</strong></div>
+            <div>本月累计扣费: <strong>{thisMonthCommission}</strong></div>
+          </div>
+        </div>
+
+        {/* 每日汇总 */}
+        <h5 style="margin:0 0 12px; font-size:14px; color:#334155; display:flex; align-items:center; gap:6px;">
+          📝 近期扣费流水记录 (Recent Records)
+        </h5>
+        <div id="fee-daily-summary" style="min-height:100px;">
+          <div style="padding:30px; text-align:center; color:#94a3b8; font-size:13px;">加载数据中...</div>
+        </div>
+      </div>
+    </div>
+
+    {/* 3. 商务版操作 (仅订阅版可见) */}
+    {isSubscriptionPlan && (
+      <div style="margin-top:20px; padding:15px; background:#eff6ff; border-radius:10px; text-align:left; border:1px solid #dbeafe;">
+        <h4 style="margin:0 0 8px; color:#1e40af; font-size:14px;">🚀 升级到商务版</h4>
+        <p style="margin:0; font-size:12px; color:#3b82f6;">解锁营销工具、会员系统、以及更高级的数据分析功能。</p>
+        <button data-admin-action="upgrade-business" style="margin-top:10px; border:none; border-radius:6px; background:#2563eb; color:#fff; padding:8px 16px; cursor:pointer; font-weight:bold; font-size:13px;">立即升级</button>
+      </div>
+    )}
+  </div>
+</div>
+
+<style>
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+</style>

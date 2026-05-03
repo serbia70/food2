@@ -1,0 +1,36 @@
+# build output
+dist/
+
+# dependencies
+node_modules/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+wrangler-dev.log
+
+dev-server.log
+dev-server.err.log
+
+# Cloudflare Wrangler
+.wrangler/
+
+# environment variables
+.env
+.env.production
+.env.local
+.claude/settings.local.json
+
+# macOS-specific files
+.DS_Store
+
+# Astro
+.astro/
+meituanGo
+.playwright-cli
+docs
+# git worktrees
+.worktrees/
+worktrees/

@@ -1,0 +1,200 @@
+---
+import type { MasterSettingsView } from '../../lib/master-settings-view';
+
+const { settings } = Astro.props as { settings: MasterSettingsView };
+---
+
+<section class="settings-card">
+  <div class="settings-head">
+    <div>
+      <div class="settings-title">套餐与提成设置</div>
+      <div class="settings-subtitle">分别管理预订和外卖的全局默认技术服务费，0 代表免费。</div>
+    </div>
+  </div>
+
+  <form id="master-pricing-settings-form" class="settings-form" onsubmit="return window.submitMasterPricingSettings ? window.submitMasterPricingSettings(this) : false;">
+    <section class="plan-card">
+      <div class="plan-card-head">
+        <div>
+          <div class="plan-card-title">店铺版本默认值</div>
+          <div class="plan-card-subtitle">当前：{settings.defaultShopTierText} · 新注册店铺的默认版本</div>
+        </div>
+      </div>
+      <label>
+        <span>默认版本</span>
+        <select name="defaultShopTier">
+          <option value="subscription" selected={settings.defaultShopTier === 'subscription'}>会员版</option>
+          <option value="business" selected={settings.defaultShopTier === 'business'}>商务版</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="plan-card">
+      <div class="plan-card-head">
+        <div>
+          <div class="plan-card-title">预订</div>
+          <div class="plan-card-subtitle">当前：{settings.reservationPlan.displayText} · {settings.reservationPlan.sourceLabel}</div>
+        </div>
+      </div>
+      <label>
+        <span>启用</span>
+        <select name="reservationEnabled">
+          <option value="1" selected={settings.reservationPlan.enabled}>开启</option>
+          <option value="0" selected={!settings.reservationPlan.enabled}>关闭</option>
+        </select>
+      </label>
+      <label>
+        <span>提成类型</span>
+        <select name="reservationCommissionType">
+          <option value="percentage" selected={settings.reservationPlan.commissionType === 'percentage'}>按百分比</option>
+          <option value="per_order" selected={settings.reservationPlan.commissionType === 'per_order'}>按单固定额</option>
+        </select>
+      </label>
+      <label>
+        <span>提成数值</span>
+        <input name="reservationCommissionValue" type="number" min="0" step="0.1" value={settings.reservationPlan.commissionValue} />
+      </label>
+    </section>
+
+    <section class="plan-card">
+      <div class="plan-card-head">
+        <div>
+          <div class="plan-card-title">外卖</div>
+          <div class="plan-card-subtitle">当前：{settings.deliveryPlan.displayText} · {settings.deliveryPlan.sourceLabel}</div>
+        </div>
+      </div>
+      <label>
+        <span>启用</span>
+        <select name="deliveryEnabled">
+          <option value="1" selected={settings.deliveryPlan.enabled}>开启</option>
+          <option value="0" selected={!settings.deliveryPlan.enabled}>关闭</option>
+        </select>
+      </label>
+      <label>
+        <span>提成类型</span>
+        <select name="deliveryCommissionType">
+          <option value="percentage" selected={settings.deliveryPlan.commissionType === 'percentage'}>按百分比</option>
+          <option value="per_order" selected={settings.deliveryPlan.commissionType === 'per_order'}>按单固定额</option>
+        </select>
+      </label>
+      <label>
+        <span>提成数值</span>
+        <input name="deliveryCommissionValue" type="number" min="0" step="0.1" value={settings.deliveryPlan.commissionValue} />
+      </label>
+    </section>
+
+    <div class="settings-actions">
+      <button type="submit" class="settings-submit">保存套餐与提成设置</button>
+      <div id="master-pricing-settings-feedback" class="settings-feedback">单独保存，避免把所有系统设置绑成一次大提交。</div>
+    </div>
+  </form>
+</section>
+
+<style>
+  .settings-card {
+    background: #fff;
+    border: 1px solid #d7dee7;
+    border-left: 4px solid #7c3aed;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+  }
+
+  .settings-head {
+    margin-bottom: 14px;
+  }
+
+  .settings-title {
+    font-size: 20px;
+    font-weight: 900;
+    color: #0f172a;
+  }
+
+  .settings-subtitle {
+    margin-top: 4px;
+    font-size: 13px;
+    color: #64748b;
+  }
+
+  .settings-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .plan-card {
+    display: grid;
+    gap: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 14px;
+    background: #f8fafc;
+  }
+
+  .plan-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .plan-card-title {
+    font-size: 16px;
+    font-weight: 900;
+    color: #0f172a;
+  }
+
+  .plan-card-subtitle {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  .settings-form label {
+    display: grid;
+    gap: 6px;
+  }
+
+  .settings-form span {
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+  }
+
+  .settings-form input,
+  .settings-form select {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    background: #fff;
+  }
+
+  .settings-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 8px;
+  }
+
+  .settings-submit {
+    border: none;
+    border-radius: 10px;
+    padding: 12px 16px;
+    background: #7c3aed;
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .settings-feedback {
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  @media (max-width: 860px) {
+    .settings-form {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

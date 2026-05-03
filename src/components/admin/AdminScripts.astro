@@ -1,0 +1,46 @@
+---
+const { shopId, shopSlug, tableConfig, settings, brokerIp } = Astro.props;
+---
+<script src="/vendor/mqttws31.min.js" is:inline></script>
+<script define:vars={{ shopId, shopSlug, tableConfig, settings, brokerIp }} is:inline>
+  window.__adminRuntime = {
+    ...(window.__adminRuntime || {}),
+    shopId,
+    shopSlug,
+    tableConfig,
+    currentSettings: settings,
+    brokerIp,
+  };
+
+  // 初始化下拉框选中状态
+  if (settings && settings.menu_layout) {
+      setTimeout(() => {
+          const el = document.getElementById('admin-menu-layout-select');
+          if (el) el.value = settings.menu_layout;
+      }, 500);
+  }
+</script>
+
+<script>
+  import { registerAdminGlobal } from '../../scripts/admin/globals';
+  import '../../scripts/admin/admin-entry.ts';
+
+  registerAdminGlobal('saveMenuLayout', async (layout: string) => {
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ menu_layout: layout })
+      });
+      if (res.ok) {
+        const adminHandlers = (window as any).__adminHandlers;
+        const toast = adminHandlers && adminHandlers.showToast;
+        if (typeof toast === 'function') toast('菜单布局已保存');
+      } else {
+        alert('保存布局失败');
+      }
+    } catch {
+      alert('网络错误');
+    }
+  });
+</script>

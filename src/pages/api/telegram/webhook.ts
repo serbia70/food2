@@ -1,0 +1,163 @@
+import type { APIRoute } from 'astro';
+import { SITE_BASE_URL } from '../../../config.ts';
+import { readTelegramRequestSecret } from '../../../lib/telegram-secrets.ts';
+import { handleTelegramRiderClaim } from './rider-claim.ts';
+
+export const prerender = false;
+
+type TelegramWebhookBody = {
+  message?: {
+    text?: unknown;
+    chat?: {
+      id?: unknown;
+    };
+  };
+  callback_query?: {
+    id?: unknown;
+    data?: unknown;
+    message?: {
+      chat?: {
+        id?: unknown;
+      };
+    };
+  };
+};
+
+type TelegramClaimErrorPayload = {
+  error?: unknown;
+  reason?: unknown;
+};
+
+export function mapTelegramClaimErrorToCallbackText(payload: TelegramClaimErrorPayload | null | undefined): string {
+  const error = String(payload?.error || '').trim();
+  const reason = String(payload?.reason || '').trim();
+
+  if (error === 'expired_callback') return '操作已过期';
+  if (error === 'dispatch_invalidated') {
+    if (reason === '接单超时') return '接单超时';
+    if (reason === '已改派') return '已改派';
+    return '操作失败';
+  }
+  if (error === 'order_status_updated') return '订单状态已更新';
+  if (error === 'order_completed') return '订单已完成';
+  if (error === 'rider_identity_mismatch') return '当前订单不属于你';
+  return '操作失败';
+}
+
+function isTrustedTelegramRequest(request: Request): boolean {
+  const expected = readTelegramRequestSecret();
+  const provided = String(request.headers.get('x-telegram-bot-api-secret-token') || '').trim();
+  return expected !== '' && provided === expected;
+}
+
+function buildJsonResponse(body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function readTelegramSiteOrigin(request: Request): string {
+  const configured = String(SITE_BASE_URL || '').trim().replace(/\/$/, '');
+  return configured || new URL(request.url).origin;
+}
+
+function getBindToken(text: string): string {
+  const raw = String(text || '').trim();
+  const prefix = '/start bind_';
+  if (!raw.startsWith(prefix)) return '';
+  return raw.slice('/start '.length).trim().replace(/^bind_/, '');
+}
+
+export const POST: APIRoute = async ({ request }) => {
+  if (!isTrustedTelegramRequest(request)) {
+    return buildJsonResponse({ success: false, error: 'unauthorized_telegram_request' }, 401);
+  }
+
+  const body = await request.json().catch(() => ({})) as TelegramWebhookBody;
+  const origin = readTelegramSiteOrigin(request);
+  const requestSecret = readTelegramRequestSecret();
+
+  const callbackId = String(body.callback_query?.id || '').trim();
+  const callbackData = String(body.callback_query?.data || '').trim();
+  const callbackChatId = String(body.callback_query?.message?.chat?.id || '').trim();
+  if (callbackData && callbackChatId) {
+    const claimRequest = new Request(`${origin}/api/telegram/rider-claim`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-telegram-claim-secret': requestSecret,
+        'cookie': request.headers.get('cookie') || '',
+        'authorization': request.headers.get('authorization') || '',
+      },
+      body: JSON.stringify({
+        callbackData,
+        chatId: callbackChatId,
+      }),
+    });
+    const upstream = await handleTelegramRiderClaim(claimRequest);
+
+    const upstreamText = await upstream.text();
+    let upstreamJson: Record<string, unknown> | null = null;
+    if (upstreamText) {
+      try {
+        const parsed = JSON.parse(upstreamText) as unknown;
+        upstreamJson = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+      } catch {
+        upstreamJson = null;
+      }
+    }
+    if (!upstream.ok) {
+      const errorText = String(upstreamJson?.error || '').trim();
+      const text = mapTelegramClaimErrorToCallbackText(upstreamJson);
+      return buildJsonResponse(
+        callbackId
+          ? { method: 'answerCallbackQuery', callback_query_id: callbackId, text }
+          : { success: false, error: errorText || 'rider_claim_failed' },
+      );
+    }
+
+    const action = String(upstreamJson?.action || '').trim();
+    const text = action === 'decline'
+      ? '已拒单'
+      : action === 'picked_up'
+        ? '已取餐'
+        : action === 'complete'
+          ? '已送达'
+          : '已接单';
+    return buildJsonResponse(
+      callbackId
+        ? { method: 'answerCallbackQuery', callback_query_id: callbackId, text }
+        : { success: true, route: 'rider-claim' },
+    );
+  }
+
+  const text = String(body.message?.text || '').trim();
+  const chatId = String(body.message?.chat?.id || '').trim();
+  const bindToken = getBindToken(text);
+  if (bindToken && chatId) {
+    const upstream = await fetch(`${origin}/api/telegram/rider-bind`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-telegram-bot-api-secret-token': requestSecret,
+      },
+      body: JSON.stringify({
+        bindToken,
+        chatId,
+      }),
+    });
+
+    if (!upstream.ok) {
+      const textBody = await upstream.text();
+      return new Response(textBody, {
+        status: upstream.status,
+        headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
+      });
+    }
+
+    return buildJsonResponse({ success: true, route: 'rider-bind' });
+  }
+
+  return buildJsonResponse({ success: true, ignored: true });
+};

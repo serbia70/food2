@@ -1,0 +1,30 @@
+{
+  "name": "meituan-astro",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "dev:force": "astro dev --force",
+    "dev:reset": "node -e \"const fs=require('node:fs');for (const p of ['node_modules/.vite','node_modules/.astro']) fs.rmSync(p,{recursive:true,force:true});\" && astro dev --force",
+    "build": "astro build",
+    "preview": "astro preview",
+    "test:security": "node tests/lib/admin-dispatch/admin-rider-dispatch-route-spec.ts && node tests/lib/auth/auth-session-response-spec.ts && node tests/lib/master/master-rider-status-loader.test.ts && node tests/lib/rider/rider-action-route-spec.ts && node tests/lib/rider/rider-dispatch-spec.ts && node tests/lib/telegram/telegram-dispatch-spec.ts && node tests/lib/telegram/telegram-rider-claim-route-spec.ts && node tests/lib/telegram/telegram-webhook-route-spec.ts && node tests/lib/auth/user-auth-browser-spec.ts"
+  },
+  "dependencies": {
+    "@astrojs/preact": "^4.1.3",
+    "@aws-sdk/client-s3": "^3.988.0",
+    "@nanostores/preact": "^1.0.0",
+    "astro": "^5.17.1",
+    "jsonwebtoken": "^9.0.3",
+    "mqtt": "^5.15.0",
+    "nanostores": "^1.1.0",
+    "preact": "^10.28.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@astrojs/cloudflare": "^12.6.12",
+    "@types/jsonwebtoken": "^9.0.10",
+    "sharp": "^0.34.5",
+    "wrangler": "^4.64.0"
+  }
+}

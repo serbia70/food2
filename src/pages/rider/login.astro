@@ -1,0 +1,145 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="Rider Login" manifest="/rider-manifest.json">
+  <div class="login-container">
+    <div class="login-box">
+      <h1>🛵 骑手登录 / Rider Login</h1>
+      
+      <div class="form-group">
+        <label>手机号 / Phone</label>
+        <input type="tel" id="phone" class="form-control" placeholder="06xxxxxxx" />
+      </div>
+
+      <div class="form-group">
+        <label>密码 / Password</label>
+        <input type="password" id="password" class="form-control" placeholder="****" />
+      </div>
+
+      <button onclick="login()" class="btn-primary">登录 / Login</button>
+      
+      <div class="links">
+        <a href="/rider/register">注册新骑手 / Register New Rider</a>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    body { background: #f4f6f8; }
+    .login-container { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+    .login-box { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+    h1 { text-align: center; color: #333; margin-bottom: 30px; font-size: 24px; }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+    .form-control { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+    .btn-primary { width: 100%; padding: 14px; background: #2196f3; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    .btn-primary:hover { background: #1976d2; }
+    .links { text-align: center; margin-top: 20px; }
+    .links a { color: #2196f3; text-decoration: none; }
+  </style>
+
+  <script>
+    import { isValidRiderSession, normalizeRiderSession } from '../../lib/rider-session';
+
+    function parseRiderAuthResponse(payload) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      return {
+        success: source.success === true,
+        error: typeof source.error === 'string' ? source.error : '',
+        rider: source.rider && typeof source.rider === 'object' ? source.rider : null,
+      };
+    }
+
+    function getStorage(kind) {
+      try {
+        return kind === 'local' ? window.localStorage : window.sessionStorage;
+      } catch {
+        return null;
+      }
+    }
+
+    function safeGetStorage(kind, key) {
+      const storage = getStorage(kind);
+      if (!storage) return null;
+      try {
+        return storage.getItem(key);
+      } catch {
+        return null;
+      }
+    }
+
+    function safeSetStorage(kind, key, value) {
+      const storage = getStorage(kind);
+      if (!storage) return;
+      try {
+        storage.setItem(key, value);
+      } catch {}
+    }
+
+    function safeRemoveStorage(kind, key) {
+      const storage = getStorage(kind);
+      if (!storage) return;
+      try {
+        storage.removeItem(key);
+      } catch {}
+    }
+
+    const savedSession = safeGetStorage('local', 'rider_session');
+    if (savedSession) {
+      try {
+        const parsed = JSON.parse(savedSession);
+        if (isValidRiderSession(parsed)) {
+          location.href = '/rider/dashboard';
+        } else {
+          safeRemoveStorage('local', 'rider_session');
+        }
+      } catch {
+        safeRemoveStorage('local', 'rider_session');
+      }
+    }
+
+    const regPhone = safeGetStorage('session', 'rider_register_phone');
+    if (regPhone) {
+      const phoneNode = document.getElementById('phone');
+      if (phoneNode instanceof HTMLInputElement) phoneNode.value = regPhone;
+      safeRemoveStorage('session', 'rider_register_phone');
+    }
+
+    async function login() {
+      const phoneNode = document.getElementById('phone');
+      const passwordNode = document.getElementById('password');
+      const phone = phoneNode instanceof HTMLInputElement ? phoneNode.value.trim() : '';
+      const password = passwordNode instanceof HTMLInputElement ? passwordNode.value.trim() : '';
+
+      if (!phone || !password) return alert('Please fill all fields');
+
+      try {
+        const res = await fetch('/api/rider/auth', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ action: 'login', phone, password })
+        });
+        const payload = await res.json().catch(() => ({}));
+        const data = parseRiderAuthResponse(payload);
+
+        if (data.success) {
+          const session = normalizeRiderSession(data.rider || {});
+          if (!isValidRiderSession(session)) {
+            safeRemoveStorage('local', 'rider_session');
+            alert('登录成功但骑手资料不完整');
+            return;
+          }
+          safeSetStorage('local', 'rider_session', JSON.stringify(session));
+          location.href = '/rider/dashboard';
+        } else {
+          alert('Login failed: ' + (data.error || 'unknown'));
+        }
+      } catch (e) {
+        alert('Network error: ' + (e instanceof Error ? e.message : 'unknown'));
+      }
+    }
+
+    window.login = login;
+  </script>
+</Layout>

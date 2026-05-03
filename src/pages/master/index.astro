@@ -1,0 +1,807 @@
+---
+import MasterCreateShopCard from '../../components/master/MasterCreateShopCard.astro';
+import MasterCategoriesSettingsCard from '../../components/master/MasterCategoriesSettingsCard.astro';
+import MasterFooterSettingsCard from '../../components/master/MasterFooterSettingsCard.astro';
+import MasterOverview from '../../components/master/MasterOverview.astro';
+import MasterPaymentSettingsCard from '../../components/master/MasterPaymentSettingsCard.astro';
+import MasterPricingSettingsCard from '../../components/master/MasterPricingSettingsCard.astro';
+import MasterRateSettingsCard from '../../components/master/MasterRateSettingsCard.astro';
+import MasterSecurityCard from '../../components/master/MasterSecurityCard.astro';
+import MasterServerSettingsCard from '../../components/master/MasterServerSettingsCard.astro';
+import MasterStorageSettingsCard from '../../components/master/MasterStorageSettingsCard.astro';
+import MasterBackupSettingsCard from '../../components/master/MasterBackupSettingsCard.astro';
+import MasterCodeBackupCard from '../../components/master/MasterCodeBackupCard.astro';
+import MasterDataBackupCard from '../../components/master/MasterDataBackupCard.astro';
+import MasterDangerConfirm from '../../components/master/MasterDangerConfirm.astro';
+import MasterRiderStatusPanel from '../../components/master/MasterRiderStatusPanel.astro';
+import MasterShopEditPanel from '../../components/master/MasterShopEditPanel.astro';
+import MasterShopManagementTable from '../../components/master/MasterShopManagementTable.astro';
+import MasterShopTopupPanel from '../../components/master/MasterShopTopupPanel.astro';
+import MasterShopDineInPanel from '../../components/master/MasterShopDineInPanel.astro';
+import MasterWechatSettingsCard from '../../components/master/MasterWechatSettingsCard.astro';
+import MasterShopDefaultsSettingsCard from '../../components/master/MasterShopDefaultsSettingsCard.astro';
+import { normalizeMasterTab } from '../../lib/master-active-tab';
+import { resolveMasterAuth } from '../../lib/master-auth';
+import { buildMasterDashboardView } from '../../lib/master-dashboard-view';
+import { buildMasterDispatchPageView, loadMasterDispatchData, type MasterDispatchPayload } from '../../lib/master-dispatch-loader';
+import { loadMasterRiderStatusData } from '../../lib/master-rider-status-loader';
+import { buildMasterRiderStatusView } from '../../lib/master-rider-status-view';
+
+export const prerender = false;
+
+const masterTokenCookie = Astro.cookies.get('master_token');
+if (!(masterTokenCookie && masterTokenCookie.value)) {
+  return Astro.redirect('/master/login', 302);
+}
+
+type ShopSummary = {
+  id?: number;
+  name?: string;
+  slug?: string;
+  billing_status?: string;
+  today_revenue?: number;
+  today_order_count?: number;
+  delivery_revenue?: number;
+  delivery_order_count?: number;
+  dine_in_revenue?: number;
+  dine_in_order_count?: number;
+  commission_month_rsd?: number;
+  commission_total_rsd?: number;
+  unsettled_commission_rsd?: number;
+  billing_balance_rsd?: number;
+  avg_order_amount?: number;
+  total_order_count?: number;
+};
+
+let shops: ShopSummary[] = [];
+let loadError = '';
+let masterSettings: Record<string, unknown> = {};
+let masterDispatch: MasterDispatchPayload = { awaiting: [], delivering: [], pools: [] };
+let masterDispatchView: MasterDispatchPageView = { awaiting: [], delivering: [], pools: [] };
+let dispatchLoadError = '';
+let masterRiders = buildMasterRiderStatusView({ summary: {}, groups: { available: [], busy: [], offline: [] } });
+let ridersLoadError = '';
+
+const MASTER_INIT_PROXY_PATH = '/api/master/init';
+const MASTER_DISPATCH_PROXY_PATH = '/api/master/dispatch';
+const MASTER_INIT_COOKIE_HEADER = 'cookie';
+const activeTab = normalizeMasterTab(Astro.url.searchParams.get('tab'));
+
+if (activeTab !== 'dispatch') {
+  try {
+    const auth = resolveMasterAuth(Astro.request, Astro.cookies);
+    const cookie = Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER) || '';
+    const initUrl = new URL(MASTER_INIT_PROXY_PATH, Astro.url);
+    let res: Response | null = null;
+    let lastInitError: unknown = null;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        res = await fetch(initUrl, {
+          method: 'GET',
+          headers: {
+            ...(auth ? { Authorization: auth } : {}),
+            ...(cookie ? { cookie } : {}),
+          },
+        });
+        if (res.ok || res.status === 401 || res.status === 403) break;
+      } catch (error) {
+        lastInitError = error;
+      }
+    }
+
+    if (res?.ok) {
+      const data = await res.json().catch(() => ({}));
+      const isOkEnvelope = data && typeof data === 'object' && 'ok' in data && data.ok === true;
+      const isLegacyEnvelope = data && typeof data === 'object' && 'success' in data && data.success === true;
+      const initData = isOkEnvelope && 'data' in data && data.data && typeof data.data === 'object'
+        ? data.data
+        : isLegacyEnvelope && data && typeof data === 'object'
+          ? data
+          : null;
+      const dataShops = initData && (initData.shops || initData.rows || initData.items);
+      shops = Array.isArray(dataShops) ? dataShops : [];
+      const dataSettings = initData && initData.settings;
+      masterSettings = dataSettings && typeof dataSettings === 'object' ? dataSettings : {};
+    } else if (res) {
+      loadError = `加载失败 (${res.status})`;
+    } else if (lastInitError) {
+      throw lastInitError;
+    }
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : '加载失败';
+  }
+}
+
+const masterCookie = Astro.cookies.get('master_token');
+const hasMasterCookie = Boolean(masterCookie && masterCookie.value);
+const isUnauthorized = loadError === '加载失败 (401)';
+const shouldKeepMasterTabVisible = activeTab === 'dispatch' || activeTab === 'riders';
+const canLoadProtectedMasterActions = hasMasterCookie && !isUnauthorized;
+
+if (activeTab === 'riders' && shops.length === 0 && !isUnauthorized) {
+  try {
+    const auth = resolveMasterAuth(Astro.request, Astro.cookies);
+    const cookie = Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER) || '';
+    const retryInitUrl = new URL(MASTER_INIT_PROXY_PATH, Astro.url);
+    const retryInitRes = await fetch(retryInitUrl, {
+      method: 'GET',
+      headers: {
+        ...(auth ? { Authorization: auth } : {}),
+        ...(cookie ? { cookie } : {}),
+      },
+    });
+    if (retryInitRes.ok) {
+      const retryInitData = await retryInitRes.json().catch(() => ({}));
+      const isRetryOkEnvelope = retryInitData && typeof retryInitData === 'object' && 'ok' in retryInitData && retryInitData.ok === true;
+      const isRetryLegacyEnvelope = retryInitData && typeof retryInitData === 'object' && 'success' in retryInitData && retryInitData.success === true;
+      const retryData = isRetryOkEnvelope && 'data' in retryInitData && retryInitData.data && typeof retryInitData.data === 'object'
+        ? retryInitData.data
+        : isRetryLegacyEnvelope && retryInitData && typeof retryInitData === 'object'
+          ? retryInitData
+          : null;
+      const retryDataShops = retryData && (retryData.shops || retryData.rows || retryData.items);
+      shops = Array.isArray(retryDataShops) ? retryDataShops : shops;
+      const retryDataSettings = retryData && retryData.settings;
+      masterSettings = retryDataSettings && typeof retryDataSettings === 'object' ? retryDataSettings : masterSettings;
+    }
+  } catch {
+    // keep original loadError and continue with tab-level fallbacks
+  }
+}
+
+if (!isUnauthorized && activeTab === 'dispatch') {
+  const auth = resolveMasterAuth(Astro.request, Astro.cookies);
+  const cookie = Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER) || '';
+  const dispatchData = await loadMasterDispatchData({
+    requestUrl: Astro.url,
+    authHeader: auth,
+    cookieHeader: cookie,
+    shopRows: shops,
+  });
+  masterDispatch = dispatchData.payload;
+  masterDispatchView = buildMasterDispatchPageView(dispatchData.payload);
+  dispatchLoadError = dispatchData.error;
+}
+
+if (!isUnauthorized && activeTab === 'riders') {
+  const auth = resolveMasterAuth(Astro.request, Astro.cookies);
+  const cookie = Astro.request.headers.get(MASTER_INIT_COOKIE_HEADER) || '';
+  const riderStatusData = await loadMasterRiderStatusData({
+    requestUrl: Astro.url,
+    authHeader: auth,
+    cookieHeader: cookie,
+    shopRows: shops,
+  });
+  masterRiders = buildMasterRiderStatusView(riderStatusData.payload);
+  ridersLoadError = riderStatusData.error;
+}
+
+const dashboardView = buildMasterDashboardView({
+  shops,
+  settings: masterSettings,
+  activeTab,
+  isUnauthorized,
+  loadError,
+});
+const shopViewsData = JSON.stringify(dashboardView.shopManagement.shops);
+const shopEditPanelData = JSON.stringify(dashboardView.panels.shopEdit);
+const shopTopupPanelData = JSON.stringify(dashboardView.panels.shopTopup);
+const shopDineInPanelData = JSON.stringify(dashboardView.panels.shopDineIn);
+
+const shouldShowMasterContent = dashboardView.pageState.kind === 'ready' || shouldKeepMasterTabVisible;
+const hasDashboardNotices = dashboardView.notices.length > 0;
+const activeNotice = hasDashboardNotices ? dashboardView.notices[0] : null;
+const dashboardActions = dashboardView.actions;
+const heroActions =
+  shouldShowMasterContent
+    ? [
+        { key: 'login', kind: 'link' as const, label: hasMasterCookie ? '重新登录' : '登录', href: '/master/login', className: 'primary-btn' },
+        ...(hasMasterCookie
+          ? [{ key: 'logout', kind: 'button' as const, label: '退出', handler: 'logoutMaster' as const, className: 'danger-btn' }]
+          : []),
+        { key: 'refresh', kind: 'button' as const, label: '刷新页面', handler: 'reloadPage' as const, className: 'ghost-btn' },
+      ]
+    : dashboardActions;
+
+const NOTICE_KIND_CLASSNAME: Record<'info' | 'warning' | 'error', string> = {
+  info: 'notice-info',
+  warning: 'notice-warning',
+  error: 'notice-error',
+};
+---
+
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Master Dashboard</title>
+    <style>
+      :root {
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #64748b;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+        color: var(--text);
+      }
+
+      .page {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 28px 20px 48px;
+      }
+
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+
+      .hero-title {
+        font-size: 34px;
+        font-weight: 900;
+        line-height: 1.05;
+        margin: 0;
+      }
+
+      .hero-subtitle {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .ghost-btn {
+        border: 1px solid #cbd5e1;
+        background: rgba(255,255,255,.82);
+        color: #0f172a;
+        padding: 10px 14px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      .primary-btn {
+        border: 1px solid #0f172a;
+        background: #0f172a;
+        color: #fff;
+        padding: 10px 14px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .danger-btn {
+        border: 1px solid #ef4444;
+        background: #fff5f5;
+        color: #b91c1c;
+        padding: 10px 14px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 800;
+      }
+
+      .notice {
+        border: 1px dashed #cbd5e1;
+        background: rgba(255,255,255,.78);
+        border-radius: 16px;
+        padding: 24px;
+        text-align: center;
+        color: var(--muted);
+      }
+
+      .notice-warning {
+        border-color: #f59e0b;
+        background: #fffbeb;
+        color: #92400e;
+      }
+
+      .notice-error {
+        border-color: #ef4444;
+        background: #fff5f5;
+        color: #991b1b;
+      }
+
+      .notice-actions {
+        margin-top: 16px;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+
+      .tab-btn {
+        border: 1px solid #d4dbe4;
+        background: #e2e8f0;
+        color: #334155;
+        padding: 10px 16px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 800;
+      }
+
+      .tab-btn.active {
+        background: #0f172a;
+        border-color: #0f172a;
+        color: #fff;
+      }
+
+      .master-stack {
+        display: grid;
+        gap: 18px;
+      }
+
+      .master-stack[hidden],
+      .settings-grid[hidden] {
+        display: none !important;
+      }
+
+      .settings-grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .dispatch-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 18px;
+      }
+
+      .dispatch-card {
+        background: rgba(255,255,255,.92);
+        border: 1px solid #dbe4ee;
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+      }
+
+      .dispatch-card h3 {
+        margin: 0 0 14px;
+        font-size: 18px;
+      }
+
+      .dispatch-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .dispatch-item {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 12px;
+        background: #f8fafc;
+      }
+
+      .dispatch-item strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .dispatch-meta {
+        font-size: 13px;
+        color: #475569;
+        line-height: 1.6;
+      }
+    </style>
+    <script define:vars={{ shopViewsData, shopEditPanelData, shopTopupPanelData, shopDineInPanelData, canLoadProtectedMasterActions, activeTab }} is:inline>
+      window.__masterRuntime = {
+        shopViewsData,
+        shopEditPanelData,
+        shopTopupPanelData,
+        shopDineInPanelData,
+        canLoadProtectedMasterActions,
+        activeTab,
+      };
+    </script>
+    <script>
+      import { buildEditShopSuccessMessage } from '../../lib/master-edit-feedback';
+      import { buildMasterPricingSettingsPayload } from '../../lib/master-pricing-settings-payload';
+      import {
+  buildMasterShopEditPayload,
+  MASTER_SHOP_FEE_FALLBACKS,
+  resetMasterShopFeeOverrides,
+} from '../../lib/master-shop-edit-payload';
+      import { initMasterShopPanels } from '../../scripts/master/shop-panels';
+      import { initMasterBackupActions } from '../../scripts/master/backup-actions';
+      import { createMasterSettingsActions } from '../../scripts/master/settings-actions';
+      import { initMasterSettingsForms } from '../../scripts/master/settings-forms';
+      import { initMasterShopAdminActions } from '../../scripts/master/shop-admin-actions';
+      import { initMasterShopTableActions } from '../../scripts/master/shop-table-actions';
+      import { initMasterUploadActions } from '../../scripts/master/upload-actions';
+      import { initMasterSecurityActions } from '../../scripts/master/security-actions';
+      import { initMasterShopCreateActions } from '../../scripts/master/shop-create-actions';
+      import { initMasterPricingActions } from '../../scripts/master/pricing-actions';
+      import { createMasterRuntimeHelpers } from '../../scripts/master/runtime-helpers';
+      import { initMasterRuntimeActions } from '../../scripts/master/runtime-actions';
+      import { initMasterDispatchActions } from '../../scripts/master/dispatch-actions';
+      import { initMasterRiderStatusActions } from '../../scripts/master/rider-status-actions';
+
+      const runtimeHelpers = createMasterRuntimeHelpers({
+        logoutPath: '/api/master/logout',
+        loginPath: '/master/login',
+      });
+      const runtimeState = runtimeHelpers.createRuntimeState(window.__masterRuntime || {});
+      const masterRequestGuards = {
+        isUnauthorizedResponse: runtimeHelpers.isUnauthorizedResponse,
+        handleMasterUnauthorized: runtimeHelpers.handleMasterUnauthorized,
+      };
+      const shopEditPanelDefaults = runtimeHelpers.parseRuntimeObject(runtimeState.shopEditPanelData);
+
+      const masterSettingsActions = createMasterSettingsActions(masterRequestGuards);
+
+      const shopPanelBindings = initMasterShopPanels({
+        shopViews: runtimeHelpers.parseRuntimeArray(runtimeState.shopViewsData),
+        shopEditPanelDefaults,
+        shopTopupPanelDefaults: runtimeHelpers.parseRuntimeObject(runtimeState.shopTopupPanelData),
+        shopDineInPanelDefaults: runtimeHelpers.parseRuntimeObject(runtimeState.shopDineInPanelData),
+        buildMasterShopEditPayload,
+        buildEditShopSuccessMessage,
+        ...masterRequestGuards,
+      });
+
+      const settingsFormBindings = initMasterSettingsForms(masterSettingsActions);
+
+      const backupActionBindings = initMasterBackupActions({
+        ...masterSettingsActions,
+        ...masterRequestGuards,
+        canLoadProtectedMasterActions: runtimeState.canLoadProtectedMasterActions,
+      });
+
+      const shopAdminBindings = initMasterShopAdminActions(masterRequestGuards);
+
+      const shopTableBindings = initMasterShopTableActions({
+        canLoadProtectedMasterActions: runtimeState.canLoadProtectedMasterActions,
+      });
+
+      const uploadActionBindings = initMasterUploadActions(masterRequestGuards);
+
+      const securityActionBindings = initMasterSecurityActions(masterRequestGuards);
+
+      const shopCreateBindings = initMasterShopCreateActions(masterRequestGuards);
+
+      const pricingActionBindings = initMasterPricingActions({
+        buildMasterPricingSettingsPayload,
+        ...masterRequestGuards,
+      });
+
+      const runtimeActionBindings = initMasterRuntimeActions({
+        resetMasterShopFeeOverrides,
+        masterShopFeeFallbacks: MASTER_SHOP_FEE_FALLBACKS,
+        shopEditPanelDefaults,
+        handleMasterUnauthorized: masterRequestGuards.handleMasterUnauthorized,
+      });
+
+      const dispatchActionBindings = initMasterDispatchActions({
+        ...masterRequestGuards,
+        shopAdminBindings,
+        runtimeActionBindings,
+      });
+
+      Object.assign(window, {
+        openMasterShopEdit: shopPanelBindings.openMasterShopEdit,
+        openMasterShopTopup: shopPanelBindings.openMasterShopTopup,
+        openMasterShopDineIn: shopPanelBindings.openMasterShopDineIn,
+        submitMasterShopEdit: shopPanelBindings.submitMasterShopEdit,
+        submitMasterShopTopup: shopPanelBindings.submitMasterShopTopup,
+        submitMasterShopDineIn: shopPanelBindings.submitMasterShopDineIn,
+        submitMasterShopTier: shopPanelBindings.submitMasterShopTier,
+        submitMasterCategoriesSettings: settingsFormBindings.submitMasterCategoriesSettings,
+        submitMasterServerSettings: settingsFormBindings.submitMasterServerSettings,
+        submitMasterFooterSettings: settingsFormBindings.submitMasterFooterSettings,
+        submitMasterRateSettings: settingsFormBindings.submitMasterRateSettings,
+        submitMasterWechatSettings: settingsFormBindings.submitMasterWechatSettings,
+        submitMasterPaymentSettings: settingsFormBindings.submitMasterPaymentSettings,
+        submitMasterStorageSettings: settingsFormBindings.submitMasterStorageSettings,
+        submitMasterShopDefaultsSettings: settingsFormBindings.submitMasterShopDefaultsSettings,
+        submitMasterBackupSettings: backupActionBindings.submitMasterBackupSettings,
+        createMasterCodeBackup: backupActionBindings.createMasterCodeBackup,
+        deleteMasterCodeBackup: backupActionBindings.deleteMasterCodeBackup,
+        triggerMasterDataBackup: backupActionBindings.triggerMasterDataBackup,
+        triggerMasterRestore: backupActionBindings.triggerMasterRestore,
+        impersonateMasterShop: shopAdminBindings.impersonateMasterShop,
+        deleteMasterShop: shopAdminBindings.deleteMasterShop,
+        openMasterStorefront: shopTableBindings.openMasterStorefront,
+        triggerMasterUpload: uploadActionBindings.triggerMasterUpload,
+        submitMasterSecuritySettings: securityActionBindings.submitMasterSecuritySettings,
+        submitMasterCreateShop: shopCreateBindings.submitMasterCreateShop,
+        submitMasterPricingSettings: pricingActionBindings.submitMasterPricingSettings,
+        resetMasterShopFeeDefaults: runtimeActionBindings.resetMasterShopFeeDefaults,
+        reloadPage: runtimeActionBindings.reloadPage,
+        logoutMaster: runtimeActionBindings.logoutMaster,
+        masterDispatchRepublish: dispatchActionBindings.masterDispatchRepublish,
+      });
+
+      document.addEventListener('click', (event) => {
+        backupActionBindings.handleDocumentClick(event);
+        shopPanelBindings.handleDocumentClick(event);
+        dispatchActionBindings.handleDocumentClick(event);
+      });
+
+      document.addEventListener('DOMContentLoaded', () => {
+        shopTableBindings.handleDomContentLoaded();
+        if (runtimeState.activeTab === 'backup') backupActionBindings.handleDomContentLoaded();
+        initMasterRiderStatusActions(document);
+      });
+    </script>
+    <style is:inline>
+      [data-status='success'] {
+        background: #ecfdf3 !important;
+        color: #166534 !important;
+      }
+
+      [data-status='error'] {
+        background: #fff1f2 !important;
+        color: #b91c1c !important;
+      }
+
+      [data-status='muted'] {
+        background: #f8fafc !important;
+        color: #64748b !important;
+      }
+
+      .backup-empty {
+        padding: 14px;
+        text-align: center;
+        color: #64748b;
+      }
+
+      .backup-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 10px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .backup-row:last-child {
+        border-bottom: none;
+      }
+
+      .backup-row-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .backup-row-meta {
+        margin-top: 4px;
+        font-size: 12px;
+        color: #64748b;
+      }
+
+      .backup-row-delete {
+        border: 1px solid #fecaca;
+        background: #fff1f2;
+        color: #b91c1c;
+        border-radius: 10px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <h1 class="hero-title">Master Dashboard</h1>
+          <div class="hero-subtitle">Astro 原生首页一期：店铺经营摘要与总览</div>
+        </div>
+        <div class="hero-actions">
+          {heroActions.map((action) =>
+            action.kind === 'link' ? (
+              <a class={action.className} href={action.href}>{action.label}</a>
+            ) : (
+              <button class={action.className} type="button" onclick={`${action.handler}()`}>{action.label}</button>
+            )
+          )}
+        </div>
+      </section>
+
+      <section class="tabs" aria-label="Master sections">
+        <a class:list={["tab-btn", activeTab === 'shops' && 'active']} href="/master?tab=shops">店铺管理</a>
+        <a class:list={["tab-btn", activeTab === 'overview' && 'active']} href="/master?tab=overview">经营总览</a>
+        <a class:list={["tab-btn", activeTab === 'settings' && 'active']} href="/master?tab=settings">全局设置</a>
+        <a class:list={["tab-btn", activeTab === 'dispatch' && 'active']} href="/master?tab=dispatch">调度总览</a>
+        <a class:list={["tab-btn", activeTab === 'riders' && 'active']} href="/master?tab=riders">骑手状态</a>
+        <a class:list={["tab-btn", activeTab === 'backup' && 'active']} href="/master?tab=backup">备份管理</a>
+      </section>
+
+      <div class="master-stack" data-master-panel="shops" hidden={activeTab !== 'shops' || !shouldShowMasterContent}>
+        <MasterCreateShopCard />
+        {dashboardView.shopManagement.shops.length > 0 ? (
+          <MasterShopManagementTable shops={dashboardView.shopManagement.shops} />
+        ) : (
+          <div class:list={['notice', activeNotice && NOTICE_KIND_CLASSNAME[activeNotice.kind]]}>
+            {activeNotice ? activeNotice.message : '暂无店铺经营数据'}
+            {dashboardActions.length > 0 ? (
+              <div class="notice-actions">
+                {dashboardActions.map((action) =>
+                  action.kind === 'link' ? (
+                    <a class={action.className} href={action.href}>{action.label}</a>
+                  ) : (
+                    <button class={action.className} type="button" onclick={`${action.handler}()`}>{action.label}</button>
+                  )
+                )}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      <div class="master-stack" data-master-panel="overview" hidden={activeTab !== 'overview' || !shouldShowMasterContent}>
+        <MasterOverview
+          totalShops={dashboardView.overview.totalShops}
+          todayRevenue={dashboardView.overview.todayRevenue}
+          todayOrders={dashboardView.overview.todayOrders}
+          monthCommission={dashboardView.overview.monthCommission}
+          totalBalance={dashboardView.overview.totalBalance}
+        />
+      </div>
+
+      <div class="settings-grid" data-master-panel="settings" hidden={activeTab !== 'settings' || !shouldShowMasterContent}>
+        <MasterPricingSettingsCard settings={dashboardView.settings} />
+        <MasterShopDefaultsSettingsCard settings={dashboardView.settings.shopDefaults} />
+        <MasterCategoriesSettingsCard settings={dashboardView.settings.categories} />
+        <MasterServerSettingsCard settings={dashboardView.settings.server} />
+        <MasterFooterSettingsCard settings={dashboardView.settings.footer} />
+        <MasterRateSettingsCard settings={dashboardView.settings.rate} />
+        <MasterWechatSettingsCard settings={dashboardView.settings.wechat} />
+        <MasterPaymentSettingsCard settings={dashboardView.settings.wechat} />
+        <MasterStorageSettingsCard settings={dashboardView.settings.storage} />
+        <MasterSecurityCard />
+      </div>
+
+      <div class="master-stack" data-master-panel="dispatch" hidden={activeTab !== 'dispatch' || !shouldShowMasterContent}>
+        {dispatchLoadError ? (
+          <div class="notice notice-error">{dispatchLoadError}</div>
+        ) : (
+          <div class="dispatch-grid">
+            <section class="dispatch-card">
+              <h3>待接单（{masterDispatch.awaiting.length}）</h3>
+              {masterDispatch.awaiting.length > 0 ? (
+                <div class="dispatch-list">
+                  {masterDispatchView.awaiting.map((order) => (
+                    <div class="dispatch-item">
+                      <strong>{order.shopName || `店铺 #${order.shopId || 0}`}</strong>
+                      <div class="dispatch-meta">订单 #{order.orderNo}</div>
+                      <div class="dispatch-meta">调度状态：{order.dispatchStatus}</div>
+                      <div class="dispatch-meta">轮次：{order.dispatchRound}</div>
+                      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                        <button
+                          class="ghost-btn"
+                          type="button"
+                          data-master-dispatch-action="impersonate"
+                          data-master-dispatch-shop-id={String(order.shopId || 0)}
+                        >处理调度</button>
+                        <button
+                          class="ghost-btn"
+                          type="button"
+                          data-master-dispatch-action="assign"
+                          data-master-dispatch-order-id={String(order.id || '')}
+                          data-master-dispatch-shop-id={String(order.shopId || 0)}
+                        >指派骑手</button>
+                        <button
+                          class="ghost-btn"
+                          type="button"
+                          data-master-dispatch-action="auto-assign"
+                          data-master-dispatch-order-id={String(order.id || '')}
+                          data-master-dispatch-shop-id={String(order.shopId || 0)}
+                          data-master-dispatch-last-rider-id={order.lastDispatchedRiderId}
+                        >自动派单</button>
+                        <button
+                          class="ghost-btn"
+                          type="button"
+                          data-master-dispatch-action="remind"
+                          data-master-dispatch-order-id={String(order.id || '')}
+                          data-master-dispatch-shop-id={String(order.shopId || 0)}
+                        >再次催单</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div class="notice">当前无待接单订单</div>
+              )}
+            </section>
+
+            <section class="dispatch-card">
+              <h3>配送中（{masterDispatch.delivering.length}）</h3>
+              {masterDispatch.delivering.length > 0 ? (
+                <div class="dispatch-list">
+                  {masterDispatchView.delivering.map((order) => (
+                    <div class="dispatch-item">
+                      <strong>{order.shopName || `店铺 #${order.shopId || 0}`}</strong>
+                      <div class="dispatch-meta">订单 #{order.orderNo}</div>
+                      <div class="dispatch-meta">最近骑手：{order.lastDispatchedRiderId}</div>
+                      <div class="dispatch-meta">状态：{order.status}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div class="notice">当前无配送中订单</div>
+              )}
+            </section>
+
+            <section class="dispatch-card">
+              <h3>骑手池（{masterDispatch.pools.length}）</h3>
+              {masterDispatch.pools.length > 0 ? (
+                <div class="dispatch-list">
+                  {masterDispatchView.pools.map((pool) => (
+                    <div class="dispatch-item">
+                      <strong>{pool.shopName || `店铺 #${pool.shopId || 0}`}</strong>
+                      <div class="dispatch-meta">总人数：{pool.poolCount}</div>
+                      <div class="dispatch-meta">可接单：{pool.availableCount}</div>
+                      <div class="dispatch-meta">忙碌：{pool.busyCount}，离线：{pool.offlineCount}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div class="notice">当前未拿到骑手池统计</div>
+              )}
+            </section>
+          </div>
+        )}
+      </div>
+
+      <div class="master-stack" data-master-panel="riders" hidden={activeTab !== 'riders' || !shouldShowMasterContent}>
+        {ridersLoadError ? (
+          <div class="notice notice-error">{ridersLoadError}</div>
+        ) : (
+          <MasterRiderStatusPanel view={masterRiders} />
+        )}
+      </div>
+
+      <div class="settings-grid" data-master-panel="backup" hidden={activeTab !== 'backup' || !shouldShowMasterContent}>
+        <MasterBackupSettingsCard settings={dashboardView.settings.backup} />
+        <MasterDataBackupCard />
+        <MasterCodeBackupCard />
+      </div>
+
+      {!shouldShowMasterContent ? (
+        <div class:list={['notice', activeNotice && NOTICE_KIND_CLASSNAME[activeNotice.kind]]}>
+          {activeNotice ? activeNotice.message : '主控数据加载失败'}
+          {dashboardActions.length > 0 ? (
+            <div class="notice-actions">
+              {dashboardActions.map((action) =>
+                action.kind === 'link' ? (
+                  <a class={action.className} href={action.href}>{action.label}</a>
+                ) : (
+                  <button class={action.className} type="button" onclick={`${action.handler}()`}>{action.label}</button>
+                )
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </main>
+    <MasterShopEditPanel />
+    <MasterShopTopupPanel />
+    <MasterShopDineInPanel />
+    <MasterDangerConfirm />
+  </body>
+</html>

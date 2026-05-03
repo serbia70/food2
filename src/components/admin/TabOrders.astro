@@ -1,0 +1,173 @@
+---
+import {
+  formatPickupEtaLabel,
+  getAdminDispatchStatusCopy,
+  isAwaitingCourierOrder,
+  readDispatchMetaFromRemarks,
+} from '../../lib/rider-dispatch.ts';
+
+const { orders, useSimpleHallLabel = false } = Astro.props;
+const sortedOrders = [...orders].sort((a: any, b: any) => Number(b.id || 0) - Number(a.id || 0));
+const firstActiveOrder = sortedOrders
+  .filter((o: any) => o.isDeleted !== 1)
+  .find(
+    (o: any) =>
+      o.status !== 'completed' &&
+      o.status !== 'cancelled' &&
+      o.status !== 'archived' &&
+      o.status !== 'paid',
+  );
+const latestActiveId = firstActiveOrder?.id || 0;
+
+const belgradeTime = new Intl.DateTimeFormat('sr-RS', {
+  timeZone: 'Europe/Belgrade',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+function formatBelgradeHHmm(v: any) {
+  if (!v) return '--:--';
+  const raw = String(v).replace(' ', 'T');
+  const d = new Date(raw.endsWith('Z') ? raw : `${raw}Z`);
+  if (Number.isNaN(d.getTime())) return String(v).slice(11, 16);
+  return belgradeTime.format(d);
+}
+
+function formatScheduledLabel(v: any) {
+  if (!v) return '';
+  const raw = String(v).trim();
+  if (!raw) return '';
+  const normalized = raw.replace(' ', 'T');
+  const d = new Date(normalized.endsWith('Z') ? normalized : `${normalized}Z`);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleString('sr-RS', {
+    timeZone: 'Europe/Belgrade',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function formatTableLabel(tableInfo: any) {
+  const raw = String(tableInfo || '').trim();
+  if (!raw) return '--';
+
+  const cleaned = raw
+    .replace(/\s*(号桌|桌号|桌)\s*$/u, '')
+    .trim();
+
+  const match = cleaned.match(/^(.*?)\s*(\d+)$/u);
+  if (match) {
+    const area = String(match[1] || '').trim();
+    const num = String(Number(match[2] || '0') || match[2]);
+    const areaLower = area.toLowerCase();
+    const isHall = area === '大厅' || area === '大堂' || areaLower === 'hall' || areaLower === 'main hall';
+    if (useSimpleHallLabel && isHall) return `${num}号桌`;
+    if (area) return `${area} ${num}号桌`;
+    return `${num}号桌`;
+  }
+
+  if (/^\d+$/.test(cleaned)) {
+    return `${String(Number(cleaned))}号桌`;
+  }
+
+  return cleaned;
+}
+---
+
+<div id="tab-orders" class="tab-content">
+  <div style="margin-bottom:15px; padding:10px; background:#f5f5f5; border-radius:6px; color:#666; font-size:13px;">
+    订单列表 - 总数: {sortedOrders.length}
+  </div>
+
+  <div class="order-list">
+    {sortedOrders.filter((o: any) => o.isDeleted !== 1).map((o: any) => {
+      const oTime = new Date(o.createdAt).getTime();
+      const isNewest = o.id === latestActiveId;
+      const isCancelled = o.status === 'cancelled';
+      const dispatchMeta = readDispatchMetaFromRemarks(o.remarksJson);
+      const lastRiderDecision = dispatchMeta.lastRiderDecision;
+      let items: any[] = [];
+      try {
+        const parsed = JSON.parse(o.itemsJson || '{}');
+        items = Object.values(parsed).filter((i: any) => i != null);
+      } catch {}
+
+      return (
+        <div class={`order-card ${isNewest ? 'new-order-highlight' : ''}`} data-order-time={oTime} data-oid={o.id} style={isCancelled ? 'opacity:0.6; filter:grayscale(0.8); background:#f5f5f5;' : ''}>
+          <div class="order-header">
+            <span class={`order-type-tag ${o.orderType === 'delivery' ? 'delivery' : 'dine'}`}>
+              {o.orderType === 'delivery' ? '外卖' : '堂食'}
+            </span>
+            <div style="display:flex; flex-direction:column; margin-left:10px;">
+              <span class="order-no" style={`font-size:12px; color:#999; text-decoration:${isCancelled ? 'line-through' : 'none'};`}>
+                #{o.orderNo || o.id}
+              </span>
+              <span style="font-weight:bold; color:#333; font-size:12px;">
+                取餐号: <span style="color:#d32f2f; font-size:16px;">{String(o.orderNo || o.id).slice(-3)}</span>
+              </span>
+            </div>
+            {isNewest && <span class="latest-order-badge">最新 / Najnovije</span>}
+            <span class="order-time">{formatBelgradeHHmm(o.createdAt)}</span>
+          </div>
+
+          <div class="order-items-list" style={isCancelled ? 'text-decoration: line-through; color:#999;' : ''}>
+            {items.map((i: any) => (
+              <div class="order-item-row">
+                <span class="item-name">{i.name}</span>
+                <span class="item-subname">{i.subName}</span>
+                <span class="item-price">{i.price}</span>
+                <span class="item-qty">x{i.quantity}</span>
+              </div>
+            ))}
+          </div>
+
+          <div class="order-footer">
+            <div class="footer-left" style="display:flex; gap:5px; align-items:center;">
+              <span class={`status-tag status-${o.status || 'pending'}`}>
+                {getAdminDispatchStatusCopy(o.status)}
+              </span>
+              {o.userPhone && (
+                <button
+                  data-admin-action="open-chat"
+                  data-phone={o.userPhone}
+                  title="发消息"
+                  style="height:24px; width:24px; font-size:12px; background:#0891b2; color:#fff; border:none; border-radius:4px; cursor:pointer;"
+                >💬</button>
+              )}
+              <button class="btn-action" data-admin-action="print-order" data-order-id={o.id} title="打印" style="height:24px; width:24px; font-size:12px;">🖨️</button>
+            </div>
+
+            {o.orderType !== 'delivery' && <span class="footer-table-info">桌号: {formatTableLabel(o.tableInfo)}</span>}
+
+            <div class="footer-right">
+              <span class="order-amount">{o.totalAmount} RSD</span>
+            </div>
+
+            <span class="hidden-data" data-oid={o.id} data-order-id={o.id} data-order-no={o.orderNo} data-items={o.itemsJson} data-remarks={o.remarksJson} data-total={o.totalAmount} data-table={o.tableInfo} data-status={o.status} data-user-phone={o.userPhone} data-scheduled-for={o.scheduledFor}></span>
+          </div>
+
+          {o.orderType === 'delivery' && <div class="order-address-row">地址: {o.tableInfo}</div>}
+          {isAwaitingCourierOrder(o) && formatPickupEtaLabel(o.pickupEtaMinutes) && (
+            <div class="order-address-row" style="margin-top:6px; color:#7c3aed; font-weight:700;">
+              {formatPickupEtaLabel(o.pickupEtaMinutes)}
+            </div>
+          )}
+          {o.orderType === 'delivery' && o.scheduledFor && (
+            <div class="order-address-row" style="margin-top:4px; color:#1565c0;">
+              预约送达: {formatScheduledLabel(o.scheduledFor)}
+            </div>
+          )}
+          {o.orderType === 'delivery' && lastRiderDecision && (
+            <div class="order-address-row" style="margin-top:4px; color:#6b7280;">
+              骑手反馈：{lastRiderDecision?.riderName}{lastRiderDecision?.action === 'declined' ? '已拒单' : '已接单'} {formatBelgradeHHmm(lastRiderDecision?.at)}
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </div>
+</div>

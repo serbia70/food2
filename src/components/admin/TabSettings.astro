@@ -1,0 +1,242 @@
+---
+import { buildAdminSensitiveSettingsView } from '../../lib/admin-sensitive-settings.ts';
+
+const props: any = Astro.props;
+const { shop, settings, shopCategories, brokerIp, cities, resolvedDisplaySettings } = props;
+const sensitiveSettingsView = buildAdminSensitiveSettingsView({
+  shopSlug: shop?.slug,
+  mqttSecret: settings?.mqttSecret || shop?.mqttSecret,
+  telegramToken: settings?.telegram?.token || shop?.telegramToken,
+  telegramChatId: settings?.telegram?.chatId || shop?.telegramChatId,
+});
+---
+<div id="tab-settings" class="tab-content" style="margin-top:0;">
+  <form id="settings-form">
+
+    <div class="settings-card">
+      <h3>🍽️ 桌台管理</h3>
+      <div style="background:#fff3e0; padding:10px; margin-bottom:10px; border-radius:4px; font-size:13px; color:#e65100;">
+        ⚠️ 修改桌台配置后，请刷新页面以生效。
+      </div>
+      <div id="zones-container">
+        <!-- Zones will be rendered here by JS -->
+      </div>
+      <div style="margin-top:15px; display:flex; gap:10px;">
+        <button type="button" class="btn-blue" data-admin-action="add-zone">➕ 添加区域</button>
+        <button type="button" class="btn-save" data-admin-action="save-table-config">💾 保存桌台设置</button>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>📍 店铺位置与配送范围</h3>
+      <div class="form-group">
+        <label>所在城市</label>
+        <select id="shop-city">
+          <option value="">请选择城市</option>
+          {Object.keys(cities || {}).map(c => <option value={c} selected={resolvedDisplaySettings?.city === c}>{c}</option>)}
+        </select>
+        {!resolvedDisplaySettings?.hasShopCityOverride && resolvedDisplaySettings?.city && (
+          <small style="color:#666; display:block; margin-top:5px;">当前使用全局默认城市</small>
+        )}
+      </div>
+      <div class="form-group">
+        <label>配送区域 (可填多个，用逗号隔开)</label>
+        <input id="shop-zone" value={settings?.zone || shop.zone || ''} placeholder="例如: New Belgrade, Zemun" />
+      </div>
+      <div class="form-group">
+        <label>详细地址</label>
+        <input id="shop-address" value={settings?.address || shop.address || ''} placeholder="街道名称和门牌号" />
+      </div>
+      <div class="form-group">
+        <label>地图链接 (Google/Apple)</label>
+        <input
+          id="shop-map-url"
+          name="contact_map_url"
+          value={settings?.contact?.mapUrl || settings?.mapUrl || shop?.contact?.mapUrl || shop.mapUrl || ''}
+          placeholder="https://maps.google.com/..."
+        />
+        <small style="color:#666; display:block; margin-top:5px;">用于客户端底部“地图”按钮跳转。</small>
+      </div>
+      <button type="button" class="btn-save" data-admin-action="save-location">保存位置信息</button>
+    </div>
+
+    <div class="settings-card">
+      <h3>💰 汇率与支付</h3>
+      <div class="form-group">
+        <label>微信二维码链接</label>
+        <input name="wechat_qr" value={settings.currency?.wechatQr || ''} placeholder="https://..." />
+      </div>
+      <div class="rate-box">
+        <div class="form-group">
+          <label>基础汇率 (1 RSD = ? CNY)</label>
+          <div style="display:flex; gap:10px;">
+            <input id="rate-input" name="rate" value={settings.currency?.rate || ''} step="0.0001" />
+            <button type="button" data-admin-action="fetch-rate" style="white-space:nowrap;">🔄 获取</button>
+          </div>
+          <small id="rate-msg" style="color:#666;"></small>
+        </div>
+      </div>
+      <button type="button" class="btn-save" data-admin-action="save-payment-settings">保存汇率与支付</button>
+    </div>
+
+    <div class="settings-card">
+      <h3>🏠 店铺基本信息</h3>
+      <div class="form-group">
+        <label>店铺名称</label>
+        <div style="display:flex; gap:10px;">
+          <input id="shop-name-input" value={shop.name} />
+          <button type="button" class="btn-blue" data-admin-action="update-shop-name">修改</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>店铺 Logo</label>
+        <div style="display:flex; gap:10px; align-items: center;">
+          <div style="width: 60px; height: 60px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
+            <img id="shop-logo-preview" src={settings?.logo || shop.logo || ''} style="width:100%; height:100%; object-fit:cover;" />
+          </div>
+          <div style="flex: 1;">
+            <input type="file" id="shop-logo-input" accept="image/*" style="display: none;" />
+            <button type="button" class="btn-blue" data-admin-action="open-logo-upload">上传新 Logo</button>
+            <div style="font-size: 12px; color: #999; margin-top: 5px;">建议尺寸: 200x200px, 支持 JPG/PNG</div>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>店铺分类</label>
+        <div style="display:flex; gap:10px;">
+          <select id="shop-category-input" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:4px;">
+            {/* @ts-ignore */}
+            {shopCategories.map((c: any) => (
+              <option value={c.id} selected={(settings?.category || shop?.category) === c.id}>{c.icon} {c.name}</option>
+            ))}
+          </select>
+          <button type="button" class="btn-blue" data-admin-action="update-shop-category">修改</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>联系电话</label>
+        <input name="contact_phone" value={settings?.contact?.phone || shop?.contact?.phone || shop.phone || ''} placeholder="061..." />
+      </div>
+      <div class="form-group" style="display:flex; align-items:center; gap:10px; border-top:1px solid #eee; padding-top:15px; margin-top:10px;">
+        <input type="checkbox" name="menu_text_mode" id="menu-text-mode" checked={settings.menuTextMode || false} style="width:auto;" />
+        <div style="display:flex; flex-direction:column;">
+          <label for="menu-text-mode" style="margin:0; font-weight:bold;">纯文字菜单模式 (Text-only Menu)</label>
+          <small style="color:#666; font-size:12px;">适用于没有图片素材的店铺。开启后，客户端和后台都将隐藏图片区域，排版更紧凑。</small>
+        </div>
+      </div>
+      <button type="button" class="btn-save" data-admin-action="save-shop-basics">保存店铺基本信息</button>
+    </div>
+
+    <div class="settings-card">
+      <h3>🖨️ 打印机配置</h3>
+      <div style="background:#f8f9fa; padding:15px; border-radius:6px; font-size:13px; color:#555;">
+        <p><strong>Broker:</strong> {brokerIp}</p>
+        <p><strong>Topic:</strong> <code id="mqttTopicPreview" data-shop-slug={shop?.slug || ''} style="background:#eee; padding:2px 5px; color:#d63384;">{sensitiveSettingsView.mqttTopicPreview}</code></p>
+        <p id="mqttSecretSummary" style="margin-top:8px; color:#666;">{sensitiveSettingsView.mqttSecretSummary}</p>
+
+        <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
+          <input type="text" id="mqttSecretInput" value={sensitiveSettingsView.mqttSecretValue} placeholder={sensitiveSettingsView.mqttSecretPlaceholder} style="padding:5px; border:1px solid #ddd; border-radius:4px;" />
+          <button type="button" data-admin-action="generate-mqtt-secret" style="padding:5px 10px; background:#0d6efd; color:white; border:none; border-radius:4px; cursor:pointer;">生成 Secret</button>
+          <button type="button" data-admin-action="update-mqtt-secret" style="padding:5px 10px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer;">修改 Secret</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>🖨️ 打印设置</h3>
+      <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+        <input type="checkbox" name="print_on_checkout" id="print-on-checkout" checked={settings.printOnCheckout || false} style="width:auto;" />
+        <label for="print-on-checkout" style="margin:0;">结账时自动打印客户小票</label>
+      </div>
+      <small style="color:#666; display:block; margin-top:5px;">
+        开启后，点击"结账"按钮会自动打印客户小票。关闭后仅更新订单状态，不打印。
+      </small>
+      <button type="button" class="btn-save" data-admin-action="save-print-settings">保存打印设置</button>
+    </div>
+
+    <div class="settings-card">
+      <h3>🤖 Telegram 通知</h3>
+      <div class="form-group">
+        <label>Bot Token</label>
+        <input name="tg_token" value={sensitiveSettingsView.telegramTokenValue} placeholder={sensitiveSettingsView.telegramTokenPlaceholder} />
+      </div>
+      <div class="form-group">
+        <label>Chat ID</label>
+        <input name="tg_chatId" value={sensitiveSettingsView.telegramChatIdValue} placeholder="-100xxxxxx" />
+      </div>
+      <button type="button" class="btn-save" data-admin-action="save-telegram-settings">保存 Telegram 设置</button>
+    </div>
+
+    <div class="settings-card">
+      <h3>🛵 配送设置</h3>
+      <div class="form-group">
+        <label>配送方式</label>
+        <select id="delivery-type" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+          <option value="merchant" selected={!(settings?.deliveryType || shop.deliveryType) || (settings?.deliveryType || shop.deliveryType) === 'merchant'}>🏪 商家配送</option>
+          <option value="platform" selected={(settings?.deliveryType || shop.deliveryType) === 'platform'}>🚀 平台配送</option>
+        </select>
+        <small style="color:#666; display:block; margin-top:5px;">商家配送：店铺自行安排配送人员。平台配送：由平台统一派单配送。</small>
+      </div>
+      <div class="form-group">
+        <label>外卖配送费 (RSD)</label>
+        <input name="fee" type="number" value={settings.delivery?.fee || shop.deliveryFee || ''} />
+      </div>
+      <div class="form-group">
+        <label>免运费门槛 (RSD)</label>
+        <input name="freeThreshold" type="number" value={settings.delivery?.freeThreshold || shop.freeThreshold || ''} />
+      </div>
+      <div class="form-group">
+        <label>配送区域</label>
+        <textarea name="zones" rows="3">{settings.delivery?.zones || ''}</textarea>
+      </div>
+      <button type="button" class="btn-save" data-admin-action="save-delivery-type">保存配送设置</button>
+    </div>
+
+    <div class="settings-card">
+      <h3>🛵 骑手管理</h3>
+      <div style="background:#f8f9fa; padding:12px; border-radius:6px; margin-bottom:12px; font-size:13px; color:#555;">
+        这里现在直接读取派单使用的真实骑手数据源。只有 <strong>状态为 available</strong> 且 <strong>已绑定 Telegram</strong> 的骑手，才能收到送餐通知。<br />
+        <span style="color:#d32f2f; font-weight:700;">显示“Telegram: 未绑定” = 一定收不到通知。</span><br />
+        <span style="color:#e65100;">这里不会显示 offline / busy 骑手；若列表为空，先去骑手端把状态切到 available。</span>
+      </div>
+      <div id="drivers-dispatch-summary" style="margin-bottom:12px;"></div>
+      <div id="drivers-list" style="margin-bottom:15px;"></div>
+      <div style="display:flex; gap:10px;">
+        <button type="button" class="btn-blue" data-admin-action="load-drivers" style="flex:1;">🔄 刷新骑手状态</button>
+        <a href="/rider/register" class="btn-blue" style="flex:1; text-align:center; text-decoration:none; line-height:36px;">➕ 注册新骑手</a>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>⏰ 营业时间</h3>
+      <div class="form-group">
+        <label>开门 / 关门</label>
+        <div style="display:flex; gap:10px">
+          <input name="open" type="time" value={resolvedDisplaySettings?.hours?.open || ''} />
+          <input name="close" type="time" value={resolvedDisplaySettings?.hours?.close || ''} />
+        </div>
+        {!resolvedDisplaySettings?.hasShopHoursOverride && resolvedDisplaySettings?.hours?.open && resolvedDisplaySettings?.hours?.close && (
+          <small style="color:#666; display:block; margin-top:5px;">当前使用全局默认营业时间</small>
+        )}
+      </div>
+      <button type="button" class="btn-save" data-admin-action="save-hours-settings">保存营业时间</button>
+    </div>
+
+    <div class="settings-card" style="border-left: 3px solid #ff5722;">
+      <h3>🎌 节假日/休息日设置</h3>
+      <div class="form-group">
+        <label>全天不营业日期 (多个日期用逗号分隔，格式: YYYY-MM-DD)</label>
+        <input name="closed_dates" value={settings.holidays?.closed_dates || ''} placeholder="例如: 2024-12-25, 2024-01-01" />
+      </div>
+      <div class="form-group">
+        <label>休息提醒语 (客户端显示)</label>
+        <input name="holiday_message" value={settings.holidays?.message || ''} placeholder="例如: 休息中，明天恢复营业" />
+      </div>
+      <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+        <input type="checkbox" name="holiday_enabled" id="holiday-enabled" checked={settings.holidays?.enabled || false} style="width:auto;" />
+        <label for="holiday-enabled" style="margin:0;">启用节假日设置</label>
+      </div>
+      <button type="button" class="btn-save" data-admin-action="save-holiday-settings">保存节假日设置</button>
+    </div>
+  </form>
+</div>

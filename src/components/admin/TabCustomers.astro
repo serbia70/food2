@@ -1,0 +1,422 @@
+---
+interface Props {
+  shopSlug: string;
+}
+
+const { shopSlug } = Astro.props;
+---
+
+<div id="tab-customers" class="tab-content" style="display: none">
+  <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <h3 style="margin: 0; color: #1d4ed8;">👥 客户管理</h3>
+      <div style="display: flex; gap: 10px;">
+        <button
+          data-admin-action="open-add-customer"
+          style="background: #7c3aed; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-weight: 600;"
+        >
+          + 添加客户
+        </button>
+        <button
+          data-admin-action="export-customers"
+          style="background: #059669; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-weight: 600;"
+        >
+          📥 导出CSV
+        </button>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <input
+        type="text"
+        id="customer-search"
+        placeholder="搜索手机号..."
+        data-admin-action="filter-customers"
+        style="padding: 10px 15px; border: 1px solid #d1d5db; border-radius: 8px; width: 300px;"
+      />
+    </div>
+
+    <div id="customers-list">
+      <div style="text-align: center; color: #64748b; padding: 40px;">加载中...</div>
+    </div>
+  </div>
+
+  <div style="background: #fff; border-radius: 12px; padding: 20px;">
+    <h3 style="margin: 0 0 15px; color: #7c3aed;">✏️ 手动操作</h3>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px;">
+        <h4 style="margin: 0 0 10px; color: #166534;">赠送积分</h4>
+        <input type="text" id="gift-points-phone" placeholder="手机号" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box;" />
+        <input type="number" id="gift-points-amount" placeholder="积分数量" min="1" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box;" />
+        <button data-admin-action="gift-points" style="width: 100%; padding: 8px; background: #16a34a; color: #fff; border: none; border-radius: 6px; cursor: pointer;">确认赠送</button>
+      </div>
+
+      <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px;">
+        <h4 style="margin: 0 0 10px; color: #7c3aed;">设为VIP</h4>
+        <input type="text" id="set-vip-phone" placeholder="手机号" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box;" />
+        <select id="set-vip-discount" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box;">
+          <option value="95">95折</option>
+          <option value="90">9折</option>
+          <option value="85">85折</option>
+          <option value="80">8折</option>
+        </select>
+        <button data-admin-action="set-customer-vip" style="width: 100%; padding: 8px; background: #7c3aed; color: #fff; border: none; border-radius: 6px; cursor: pointer;">确认为VIP</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="background: #fff; border-radius: 12px; padding: 20px;">
+    <h3 style="margin: 0 0 15px; color: #0891b2;">💬 客户聊天</h3>
+    <p style="color: #64748b; font-size: 13px; margin-bottom: 15px;">
+      点击客户后打开统一聊天面板（每周一05:00自动清理历史消息）
+    </p>
+    <div id="chat-customer-list" style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; min-height: 280px; background: #fff;">
+      <div style="padding: 10px; color: #64748b; font-size: 12px;">点击客户开始聊天</div>
+    </div>
+  </div>
+</div>
+
+<div id="add-customer-modal" class="modal" style="display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); position: fixed; inset: 0; z-index: 1000;">
+  <div style="background: #fff; border-radius: 12px; padding: 24px; max-width: 400px; width: 90%;">
+    <h3 style="margin: 0 0 20px;">添加客户</h3>
+    <form id="add-customer-form">
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">手机号 *</label>
+        <input type="text" id="new-customer-phone" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+      </div>
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: 600;">初始积分</label>
+        <input type="number" id="new-customer-points" value="0" min="0" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;" />
+      </div>
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <input type="checkbox" id="new-customer-vip" />
+          <span>设为VIP</span>
+        </label>
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button type="button" data-admin-action="close-add-customer" style="padding: 10px 20px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer;">取消</button>
+        <button type="submit" style="padding: 10px 20px; border: none; border-radius: 6px; background: #7c3aed; color: #fff; cursor: pointer; font-weight: 600;">添加</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script define:vars={{ shopSlug }}>
+  let customersData = [];
+
+  function setStyles(el, styles) {
+    Object.entries(styles).forEach(([key, value]) => {
+      el.style[key] = value;
+    });
+  }
+
+  function textCell(text, styles = {}) {
+    const td = document.createElement('td');
+    const safeText = text === undefined || text === null ? '' : text;
+    td.textContent = String(safeText);
+    setStyles(td, styles);
+    return td;
+  }
+
+  function clearChildren(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
+  }
+
+  function renderEmptyState(container, text, styles = {}) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    setStyles(div, styles);
+    clearChildren(container);
+    container.appendChild(div);
+  }
+
+  async function fetchJSONWithRetry(url, init) {
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const res = await fetch(url, init);
+        const data = await res.json();
+        return { res, data };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
+
+  async function loadCustomers() {
+    try {
+      const { res, data } = await fetchJSONWithRetry('/api/admin/customers');
+      if (res.status === 401 || res.status === 403) {
+        window.location.href = `${window.location.pathname.replace(/\/?$/, '')}/login`;
+        return;
+      }
+      if (!res.ok || !data.success) {
+        throw new Error('load_customers_failed');
+      }
+      customersData = data.customers || [];
+      renderCustomers(customersData);
+      renderChatCustomerList(customersData);
+    } catch (e) {
+      console.error('Failed to load customers:', e);
+    }
+  }
+
+  window.loadCustomers = loadCustomers;
+
+  function renderCustomers(customers) {
+    const container = document.getElementById('customers-list');
+    if (!customers.length) {
+      renderEmptyState(container, '暂无客户数据', { textAlign: 'center', color: '#64748b', padding: '40px' });
+      return;
+    }
+
+    const table = document.createElement('table');
+    setStyles(table, { width: '100%', borderCollapse: 'collapse' });
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    setStyles(headRow, { borderBottom: '2px solid #e5e7eb' });
+    [
+      ['#', { textAlign: 'center', width: '50px' }],
+      ['客户', { textAlign: 'left' }],
+      ['积分', { textAlign: 'right' }],
+      ['VIP', { textAlign: 'center' }],
+      ['本月消费', { textAlign: 'right' }],
+      ['累计消费', { textAlign: 'right' }],
+      ['订单数', { textAlign: 'center' }],
+      ['最后下单', { textAlign: 'center' }],
+      ['操作', { textAlign: 'center' }],
+    ].forEach(([label, extra]) => {
+      const th = document.createElement('th');
+      th.textContent = label;
+      setStyles(th, { padding: '12px 8px', color: '#374151', fontWeight: '600', ...extra });
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+
+    const tbody = document.createElement('tbody');
+    customers.forEach((c, idx) => {
+      const tr = document.createElement('tr');
+      setStyles(tr, { borderBottom: '1px solid #f3f4f6' });
+      tr.appendChild(textCell(idx + 1, { padding: '12px 8px', textAlign: 'center', color: '#6b7280', fontWeight: '600' }));
+
+      const customerCell = document.createElement('td');
+      setStyles(customerCell, { padding: '12px 8px' });
+      const phone = document.createElement('div');
+      setStyles(phone, { fontWeight: '600', color: '#1f2937' });
+      phone.textContent = c.user_phone;
+      const name = document.createElement('div');
+      setStyles(name, { fontSize: '12px', color: '#6b7280' });
+      name.textContent = c.user_name || '-';
+      customerCell.append(phone, name);
+      tr.appendChild(customerCell);
+
+      tr.appendChild(textCell(c.points_balance || 0, { padding: '12px 8px', textAlign: 'right', color: '#059669', fontWeight: '600' }));
+
+      const vipCell = document.createElement('td');
+      setStyles(vipCell, { padding: '12px 8px', textAlign: 'center' });
+      const vipBadge = document.createElement('span');
+      if (c.is_vip) {
+        vipBadge.textContent = `VIP (${c.vip_discount_percent || 100}%)`;
+        setStyles(vipBadge, { background: '#fef3c7', color: '#b45309', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' });
+      } else {
+        vipBadge.textContent = '-';
+        vipBadge.style.color = '#9ca3af';
+      }
+      vipCell.appendChild(vipBadge);
+      tr.appendChild(vipCell);
+
+      tr.appendChild(textCell(`${c.month_spend_rsd || 0} RSD`, { padding: '12px 8px', textAlign: 'right', color: '#7c3aed', fontWeight: '600' }));
+      tr.appendChild(textCell(`${c.total_spend_rsd} RSD`, { padding: '12px 8px', textAlign: 'right', color: '#1f2937', fontWeight: '600' }));
+      tr.appendChild(textCell(c.order_count || 0, { padding: '12px 8px', textAlign: 'center', color: '#4b5563' }));
+      tr.appendChild(textCell(c.last_order_at ? new Date(c.last_order_at).toLocaleDateString('zh-CN') : '-', { padding: '12px 8px', textAlign: 'center', color: '#6b7280', fontSize: '12px' }));
+
+      const actionCell = document.createElement('td');
+      setStyles(actionCell, { padding: '12px 8px', textAlign: 'center' });
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = c.is_vip ? '取消VIP' : '设为VIP';
+      setStyles(button, {
+        padding: '4px 8px',
+        fontSize: '11px',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        ...(c.is_vip
+          ? { background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }
+          : { background: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d' }),
+      });
+      button.addEventListener('click', () => toggleCustomerVIP(c.user_phone, c.is_vip ? 0 : 1));
+      actionCell.appendChild(button);
+      tr.appendChild(actionCell);
+      tbody.appendChild(tr);
+    });
+
+    table.append(thead, tbody);
+    clearChildren(container);
+    container.appendChild(table);
+  }
+
+  window.filterCustomers = function(query) {
+    query = query.toLowerCase().trim();
+    if (!query) {
+      renderCustomers(customersData);
+      return;
+    }
+    const filtered = customersData.filter(c => c.user_phone.includes(query));
+    renderCustomers(filtered);
+  };
+
+  window.exportCustomers = function() {
+    window.location.href = '/api/admin/customers/export';
+  };
+
+  window.openAddCustomerModal = function() {
+    document.getElementById('add-customer-form').reset();
+    document.getElementById('add-customer-modal').style.display = 'flex';
+  };
+
+  window.closeAddCustomerModal = function() {
+    document.getElementById('add-customer-modal').style.display = 'none';
+  };
+
+  document.getElementById('add-customer-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const phone = document.getElementById('new-customer-phone').value.trim();
+    const points = parseInt(document.getElementById('new-customer-points').value) || 0;
+    const isVIP = document.getElementById('new-customer-vip').checked;
+    
+    if (!phone) {
+      alert('请输入手机号');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_phone: phone, points_balance: points, is_vip: isVIP })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('客户添加成功');
+        closeAddCustomerModal();
+        loadCustomers();
+      } else {
+        alert('添加失败: ' + (data.error || '未知错误'));
+      }
+    } catch (e) {
+      alert('网络错误');
+    }
+  });
+
+  window.giftPoints = async function() {
+    const phone = document.getElementById('gift-points-phone').value.trim();
+    const points = parseInt(document.getElementById('gift-points-amount').value) || 0;
+    
+    if (!phone || points <= 0) {
+      alert('请输入正确的手机号和积分数量');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/customers/points', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_phone: phone, points: points, action: 'add' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('积分赠送成功');
+        document.getElementById('gift-points-phone').value = '';
+        document.getElementById('gift-points-amount').value = '';
+        loadCustomers();
+      } else {
+        alert('操作失败: ' + (data.error || '未知错误'));
+      }
+    } catch (e) {
+      alert('网络错误');
+    }
+  };
+
+  window.setCustomerVIP = async function() {
+    const phone = document.getElementById('set-vip-phone').value.trim();
+    const discount = parseFloat(document.getElementById('set-vip-discount').value) || 95;
+    
+    if (!phone) {
+      alert('请输入手机号');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/customers/vip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_phone: phone, is_vip: true, vip_discount_percent: discount })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('VIP设置成功');
+        document.getElementById('set-vip-phone').value = '';
+        loadCustomers();
+      } else {
+        alert('操作失败: ' + (data.error || '未知错误'));
+      }
+    } catch (e) {
+      alert('网络错误');
+    }
+  };
+
+  window.toggleCustomerVIP = async function(phone, enable) {
+    if (!confirm(enable ? `确定要将 ${phone} 设为VIP吗？` : `确定要取消 ${phone} 的VIP资格吗？`)) {
+      return;
+    }
+    
+    try {
+      const res = await fetch('/api/admin/customers/vip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_phone: phone, is_vip: enable, vip_discount_percent: enable ? 95 : 100 })
+      });
+      const data = await res.json();
+      if (data.success) {
+        loadCustomers();
+      } else {
+        alert('操作失败: ' + (data.error || '未知错误'));
+      }
+    } catch (e) {
+      alert('网络错误');
+    }
+  };
+
+  function renderChatCustomerList(customers) {
+    const container = document.getElementById('chat-customer-list');
+    if (!customers || customers.length === 0) {
+      renderEmptyState(container, '暂无客户', { padding: '10px', color: '#64748b', fontSize: '12px' });
+      return;
+    }
+    const nodes = customers.map((c) => {
+      const item = document.createElement('div');
+      setStyles(item, { padding: '10px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6' });
+      item.addEventListener('click', () => window.openChatForPhone(c.user_phone));
+      item.addEventListener('mouseover', () => {
+        item.style.background = '#f3f4f6';
+      });
+      item.addEventListener('mouseout', () => {
+        item.style.background = 'transparent';
+      });
+      const title = document.createElement('div');
+      setStyles(title, { fontWeight: '600', fontSize: '13px' });
+      title.textContent = c.user_name || c.user_phone;
+      const phone = document.createElement('div');
+      setStyles(phone, { fontSize: '11px', color: '#6b7280' });
+      phone.textContent = c.user_phone;
+      item.append(title, phone);
+      return item;
+    });
+    clearChildren(container);
+    nodes.forEach((n) => container.appendChild(n));
+  }
+
+</script>
